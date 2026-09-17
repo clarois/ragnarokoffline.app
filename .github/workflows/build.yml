@@ -200,10 +200,12 @@ jobs:
 
       # The private half. These are built in their own repos and published as
       # release assets; consuming them here keeps this workflow independent of
-      # two Rust toolchains and a kernel build.
+      # two Rust toolchains and a kernel build. All v1.x dependencies are public,
+      # so the run's own token suffices when DEPS_TOKEN is unset — it exists only
+      # to cover the day one of these repos goes private again.
       - name: Fetch engine and asset server
         env:
-          GH_TOKEN: ${{ secrets.DEPS_TOKEN }}
+          GH_TOKEN: ${{ secrets.DEPS_TOKEN || github.token }}
         run: |
           set -e
           if [ -z "$GH_TOKEN" ]; then
