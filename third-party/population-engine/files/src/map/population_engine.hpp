@@ -51,6 +51,11 @@ void population_engine_stop();
 PopulationEngineStats population_engine_get_stats();
 bool population_engine_is_running();
 bool population_engine_is_population_pc(int32_t id);
+
+/// Goal 1: snapshot a recruited companion so it survives a server restart. Called from the party.cpp recruit success branch.
+void population_engine_persist_recruited_companion(map_session_data *sd);
+/// Goal 1: re-spawn an owner's persisted companions after login restores membership. Returns count recalled.
+int population_engine_recall_companions(map_session_data *owner);
 /// True while this real player's party has fewer than four recruited companions.
 bool population_engine_can_recruit_companion(const map_session_data *owner);
 /// Return the real player who should receive a recruited companion's loot.

@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000002
+Subject: [PATCH] Goal 1: permanent companions - persist on recruit + recall on login
+
+Wires population_engine_persist_recruited_companion() into the party_member_added success branch so every newly recruited companion shell is snapshotted to cp_companion_persistence (owner derived from the party leader for Cases A/B, existing owner field for Case C). Also calls population_engine_recall_companions(sd) in pc_loadpot right after party membership is restored on login, re-spawning all persisted companions beside their owner.
+
+--- --a/src/map/party.cpp
+
++++ +++b/src/map/party.cpp
+
+@@ -709,6 +709,9 @@
+
+ 		return 0;
+ 	}
+ 
++	// RAGNAROKMAC (Goal 1): persist a freshly recruited companion shell now that it has joined.
++	if (population_engine_is_population_pc(sd->id))
++		population_engine_persist_recruited_companion(sd);
+ 	sd->status.party_id = party_id;
+ 
+ 	clif_party_member_info( *p, *sd );
+
+--- --a/src/map/pc.cpp
+
++++ +++b/src/map/pc.cpp
+
+@@ -2470,6 +2470,9 @@
+
+ 
+ 	if (sd->status.party_id > 0)
+ 		party_member_joined( *sd );
++
++	// RAGNAROKMAC (Goal 1): re-spawn this owner's persisted companions now that login has restored the char.
++	population_engine_recall_companions(sd);
+ 	if (sd->status.guild_id > 0)
+ 		guild_member_joined(sd);
+ 	if (sd->status.clan_id > 0)
