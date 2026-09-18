@@ -3389,9 +3389,9 @@ static void population_engine_persist_companion_sql(
 		" cloth_color, garment_nameid, option_, weapon_nameid, shield_nameid,"
 		" head_top_nameid, head_mid_nameid, head_bottom_nameid, armor_nameid,"
 		" shoes_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_,"
-		" luk_, map_id)"
+		" luk_, map_id, active)"
 		" VALUES(%u,%u,%d,'%c',%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
-		"%d,%d,%d,%d,%d,%d)",
+		"%d,%d,%d,%d,%d,%d,1)",
 		owner_account, index_, job_id, sex, hair_style, hair_color, cloth_color,
 		garment_nameid, option_, weapon, shield, head_top, head_mid, head_bottom,
 		armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk);
@@ -3399,30 +3399,40 @@ static void population_engine_persist_companion_sql(
 		Sql_ShowDebug(mmysql_handle);
 }
 
-void population_engine_persist_recruited_companion(map_session_data *sd)
+void population_engine_persist_recruited_companion(map_session_data *sd, map_session_data *peer)
 {
 	if (!sd || !sd->state.active) return;
 	const uint32_t char_id = sd->status.char_id;
 	if (char_id < POPULATION_ENGINE_CHAR_ID_BASE) return; // not a population shell
 
-	// Ownership: Case C already set companion_owner_account in-engine. For Cases A/B
-	// this is the single choke point — the recruiter is the first real (non-shell)
-	// party member, never another shell.
+	// Ownership: Case C already set companion_owner_account in-engine. Otherwise the
+	// recruiting player is `peer` — resolved from party_invite_account in
+	// party_member_added before that field was cleared (Cases A/C). Last resort: the
+	// first real (non-shell) member of the shell's party via map_id2sd; never scan
+	// g_population_engine_pcs, which holds only shells and can never name a real player.
 	uint32_t owner = sd->pop.companion_owner_account;
+	if (owner == 0 && peer != nullptr && peer->state.active
+	    && peer->status.account_id != 0
+	    && !population_engine_is_population_pc(peer->id))
+		owner = peer->status.account_id;
 	if (owner == 0) {
 		struct party_data *p = party_search(sd->status.party_id);
 		if (p != nullptr)
 			for (int j = 0; j < MAX_PARTY && owner == 0; ++j) {
-				const struct party_member &mbr = p->party.member[j];
-				if (!mbr.leader || mbr.account_id == 0)
+				const uint32_t mbr_account = p->party.member[j].account_id;
+				if (mbr_account == 0)
 					continue;
-				for (map_session_data *cand : g_population_engine_pcs) {
-					if (cand != nullptr && cand->status.account_id == mbr.account_id
-					    && !population_engine_is_population_pc(cand->id))
-						owner = cand->status.account_id;
-				}
+				map_session_data *cand = map_id2sd(mbr_account);
+				if (cand != nullptr && cand->status.account_id == mbr_account
+					&& !population_engine_is_population_pc(cand->id))
+					owner = mbr_account;
 			}
-	}	if (owner == 0) return;
+	}
+	if (owner == 0) {
+		ShowWarning("population_engine: persist companion (char_id %u, party %d): no owner resolved\n",
+			char_id, sd->status.party_id);
+		return;
+	}
 
 	const uint32_t index_ = char_id - POPULATION_ENGINE_CHAR_ID_BASE;
 

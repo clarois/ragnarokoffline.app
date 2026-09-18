@@ -52,8 +52,8 @@ PopulationEngineStats population_engine_get_stats();
 bool population_engine_is_running();
 bool population_engine_is_population_pc(int32_t id);
 
-/// Goal 1: snapshot a recruited companion so it survives a server restart. Called from the party.cpp recruit success branch.
-void population_engine_persist_recruited_companion(map_session_data *sd);
+/// Goal 1: snapshot a recruited companion so it survives a server restart. Called from the party.cpp recruit success branch (after the shell's party_id is set). `peer` is the inviting/invited peer resolved before party_invite_account was cleared — normally the recruiting player.
+void population_engine_persist_recruited_companion(map_session_data *sd, map_session_data *peer = nullptr);
 /// Goal 1: re-spawn an owner's persisted companions after login restores membership. Returns count recalled.
 int population_engine_recall_companions(map_session_data *owner);
 /// True while this real player's party has fewer than four recruited companions.

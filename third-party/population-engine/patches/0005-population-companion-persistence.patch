@@ -1,30 +1,24 @@
 From 0000000000000000000000000000000000000002
 Subject: [PATCH] Goal 1: permanent companions - persist on recruit + recall on login
 
-Wires population_engine_persist_recruited_companion() into the party_member_added success branch so every newly recruited companion shell is snapshotted to cp_companion_persistence (owner derived from the party leader for Cases A/B, existing owner field for Case C). Also calls population_engine_recall_companions(sd) in pc_loadpot right after party membership is restored on login, re-spawning all persisted companions beside their owner.
+Wires population_engine_persist_recruited_companion() into the party_member_added success branch, AFTER sd->status.party_id is set and passing sd2 (the recruiter session captured from party_invite_account before it was cleared). The owner is resolved in-engine from that peer first, then via map_id2sd over real party members — never by scanning g_population_engine_pcs, which only ever holds shells. Also calls population_engine_recall_companions(sd) in pc_loadpot right after party membership is restored on login, re-spawning all persisted companions beside their owner.
 
---- --a/src/map/party.cpp
-
-+++ +++b/src/map/party.cpp
-
-@@ -709,6 +709,9 @@
-
- 		return 0;
+--- a/src/map/party.cpp
++++ b/src/map/party.cpp
+@@ -671,7 +671,10 @@ int32 party_member_added(int32 party_id,uint32 account_id,uint32 char_id, int32 flag)
  	}
  
-+	// RAGNAROKMAC (Goal 1): persist a freshly recruited companion shell now that it has joined.
-+	if (population_engine_is_population_pc(sd->id))
-+		population_engine_persist_recruited_companion(sd);
  	sd->status.party_id = party_id;
  
++	// RAGNAROKMAC (Goal 1): persist the freshly recruited companion shell. sd2 is the recruiter (captured from party_invite_account before it was cleared); runs after party_id is set so in-engine owner lookup also works.
++	if (population_engine_is_population_pc(sd->id))
++		population_engine_persist_recruited_companion(sd, sd2);
  	clif_party_member_info( *p, *sd );
-
---- --a/src/map/pc.cpp
-
-+++ +++b/src/map/pc.cpp
-
-@@ -2470,6 +2470,9 @@
-
+ 	clif_party_option(p,sd,0x100);
+ 	clif_party_info( *p, sd );
+--- a/src/map/pc.cpp
++++ b/src/map/pc.cpp
+@@ -2463,6 +2463,9 @@
  
  	if (sd->status.party_id > 0)
  		party_member_joined( *sd );
