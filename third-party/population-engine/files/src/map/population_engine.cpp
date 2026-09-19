@@ -3374,15 +3374,17 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 // Goal 3 (sets active=0); until then every row is recalled on the owner's login.
 
 static void population_engine_persist_companion_sql(
-	uint32_t owner_account, uint32_t index_, int16_t job_id, char sex,
+	uint32_t owner_account, uint32_t index_, int16_t job_id, int sex,
 	int hair_style, int hair_color, int cloth_color, uint32_t garment_nameid,
 	uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,
 	uint32_t head_mid, uint32_t head_bottom, uint32_t armor, uint32_t shoes,
 	int base_level, int job_level, int str, int agi, int vit, int intl,
-	int dex, int luk)
+	int dex, int luk, int16_t map_id)
 {
 	if (mmysql_handle == nullptr) return;
 	char q[2048];
+	// sex is TINYINT in the DDL (0=SEX_MALE, 1=SEX_FEMALE); writing the letters
+	// 'M'/'F' was rejected with ERROR 1366 on strict servers.
 	snprintf(q, sizeof(q),
 		"REPLACE INTO `cp_companion_persistence`"
 		"(owner_account_id, shell_index, job_id, sex, hair_style, hair_color,"
@@ -3390,13 +3392,19 @@ static void population_engine_persist_companion_sql(
 		" head_top_nameid, head_mid_nameid, head_bottom_nameid, armor_nameid,"
 		" shoes_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_,"
 		" luk_, map_id, active)"
-		" VALUES(%u,%u,%d,'%c',%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
-		"%d,%d,%d,%d,%d,%d,1)",
+		" VALUES(%u,%u,%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
+		"%d,%d,%d,%d,%d,%d,%d,1)",
 		owner_account, index_, job_id, sex, hair_style, hair_color, cloth_color,
 		garment_nameid, option_, weapon, shield, head_top, head_mid, head_bottom,
-		armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk);
-	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS)
+		armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk, map_id);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
+		ShowError("population_engine: persist companion index %u for owner %u FAILED\n",
+			index_, owner_account);
+		return;
+	}
+	ShowInfo("population_engine: persisted companion index %u for owner %u (map id %d)\n",
+		index_, owner_account, map_id);
 }
 
 void population_engine_persist_recruited_companion(map_session_data *sd, map_session_data *peer)
@@ -3447,12 +3455,13 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 	}
 
 	population_engine_persist_companion_sql(
-		owner, index_, (int16_t)sd->status.class_, sd->status.sex == SEX_MALE ? 'M' : 'F',
+		owner, index_, (int16_t)sd->status.class_, (int)sd->status.sex,
 		(int)sd->status.hair, (int)sd->status.hair_color, (int)sd->status.clothes_color,
 		(uint32_t)sd->status.robe, sd->status.option, weapon, shield,
 		(uint32_t)sd->status.head_top, (uint32_t)sd->status.head_mid, (uint32_t)sd->status.head_bottom,
 		armor, shoes, (int)sd->status.base_level, (int)sd->status.job_level, (int)sd->status.str,
-		(int)sd->status.agi, (int)sd->status.vit, (int)sd->status.int_, (int)sd->status.dex, (int)sd->status.luk);
+		(int)sd->status.agi, (int)sd->status.vit, (int)sd->status.int_, (int)sd->status.dex, (int)sd->status.luk,
+		(int16_t)sd->m);
 }
 
 static void population_engine_recall_one_companion(map_session_data *owner, int16_t map_id, uint32_t index_,
@@ -3525,7 +3534,7 @@ int population_engine_recall_companions(map_session_data *owner)
 		int32_t col = 0;
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t index_ = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int16_t job_id = atoi(data);
-		Sql_GetData(mmysql_handle, col++, &data, nullptr); char sexv = data[0];
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int sexv = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int hair_style = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int hair_color = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int cloth_color = atoi(data);
@@ -3547,7 +3556,9 @@ int population_engine_recall_companions(map_session_data *owner)
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int dex = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int luk = atoi(data);
 		if (index_ == 0 || job_id == 0) continue;
-		population_engine_recall_one_companion(owner, map_id, index_, job_id, sexv ? sexv : 'M',
+		// DB stores sex as TINYINT (0=SEX_MALE, 1=SEX_FEMALE); the spawn path
+		// expects the 'M'/'F' letters.
+		population_engine_recall_one_companion(owner, map_id, index_, job_id, sexv == 1 ? 'F' : 'M',
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
 			head_mid, head_bottom, armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk);
 		recalled++;
