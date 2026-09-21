@@ -3479,6 +3479,31 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	}
 	if (!placed) { ShowWarning("population_engine: recall index %u: no open cell near owner (%d,%d)\n", index_, owner->x, owner->y); return; }
 
+	// RAGNAROKMAC (Goal 1): if a live shell with this index is already on the
+	// map (char-select relogin keeps the map-server, and the recruited
+	// companion, running), do NOT spawn a duplicate: the copy would reuse the
+	// same account/char id, map_addiddb would overwrite the id->shell entry,
+	// and the original would turn into an unregistered ghost that the stale
+	// sweep then releases out of the party. Re-sync the existing shell instead.
+	for (map_session_data *existing : g_population_engine_pcs) {
+		if (!existing || existing->status.char_id != POPULATION_ENGINE_CHAR_ID_BASE + index_)
+			continue;
+		if (!existing->state.active || existing->prev == nullptr || map_id2bl(existing->id) != existing)
+			continue; // dead or deregistered: a fresh spawn is safe
+		existing->pop.companion_owner_account = owner->status.account_id;
+		if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000)
+			existing->status.party_id = owner->status.party_id;
+		if (existing->m != owner->m) {
+			pc_setpos(existing, map_id, x, y, CLR_TELEPORT);
+		} else {
+			int16_t fx = existing->x, fy = existing->y;
+			if (!pop_companion_formation_cell(existing, owner, fx, fy)) { fx = existing->x; fy = existing->y; }
+			if (fx != existing->x || fy != existing->y)
+				pc_setpos(existing, map_id, fx, fy, CLR_TELEPORT);
+		}
+		return;
+	}
+
 	map_session_data *shell = population_engine_spawn_shell(
 		map_id, x, y, index_, job_id, sex,
 		(uint8_t)hair_style, (uint16_t)hair_color, weapon, shield, head_top,
