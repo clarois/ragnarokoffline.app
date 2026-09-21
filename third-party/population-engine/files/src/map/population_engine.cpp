@@ -3495,11 +3495,19 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 			existing->status.party_id = owner->status.party_id;
 		if (existing->m != owner->m) {
 			pc_setpos(existing, map_id, x, y, CLR_TELEPORT);
+			// pc_setpos removed the shell from the block grid (prev==nullptr);
+			// shells have no client LoadEndAck to re-add them, so finish the
+			// placement here or the stale sweep will reap them in <100 ms.
+			pop_shell_finish_map_placement(existing);
+			pop_shell_broadcast_map_placement(existing);
 		} else {
 			int16_t fx = existing->x, fy = existing->y;
 			if (!pop_companion_formation_cell(existing, owner, fx, fy)) { fx = existing->x; fy = existing->y; }
-			if (fx != existing->x || fy != existing->y)
+			if (fx != existing->x || fy != existing->y) {
 				pc_setpos(existing, map_id, fx, fy, CLR_TELEPORT);
+				pop_shell_finish_map_placement(existing);
+				pop_shell_broadcast_map_placement(existing);
+			}
 		}
 		return;
 	}
@@ -3538,6 +3546,11 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	int16_t fx = x, fy = y;
 	if (!pop_companion_formation_cell(shell, owner, fx, fy)) { fx = x; fy = y; }
 	pc_setpos(shell, map_id, fx, fy, CLR_TELEPORT);
+	// pc_setpos removes an on-grid shell from the block grid and only re-adds
+	// real players later via their client's LoadEndAck. Shells have no client:
+	// finish the placement explicitly, then broadcast the spawn + party dots.
+	pop_shell_finish_map_placement(shell);
+	pop_shell_broadcast_map_placement(shell);
 }
 
 int population_engine_recall_companions(map_session_data *owner)
