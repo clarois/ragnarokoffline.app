@@ -3589,8 +3589,23 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 
 	// Mark as the owner's companion and align membership with the owner.
 	shell->pop.companion_owner_account = owner->status.account_id;
-	if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000)
-		shell->status.party_id = owner->status.party_id;
+	if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000
+		&& shell->status.party_id != owner->status.party_id) {
+		// RAGNAROKMAC (Goal 1): party membership must be registered on the
+		// char server (party DB row + clif broadcasts) — a local party_id
+		// assignment alone leaves the shell invisible in the party window.
+		// Route the shell through the same accept-invite round-trip a live
+		// recruit uses: party_reply_invite → intif_party_addmember →
+		// party_member_added (which sets party_id server-side and broadcasts).
+		shell->party_joining = true;
+		shell->party_invite = owner->status.party_id;
+		shell->party_invite_account = owner->status.account_id;
+		if (!party_reply_invite(*shell, owner->status.party_id, 1)) {
+			// Fall back to local membership if the round-trip was refused.
+			shell->status.party_id = owner->status.party_id;
+			shell->party_joining = false;
+		}
+	}
 
 	int16_t fx = x, fy = y;
 	if (!pop_companion_formation_cell(shell, owner, fx, fy)) { fx = x; fy = y; }
