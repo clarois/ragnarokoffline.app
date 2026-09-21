@@ -3423,7 +3423,7 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 // Goal 3 (sets active=0); until then every row is recalled on the owner's login.
 
 static void population_engine_persist_companion_sql(
-	uint32_t owner_account, uint32_t index_, int16_t job_id, int sex,
+	uint32_t owner_account, uint32_t index_, const char* name_, int16_t job_id, int sex,
 	int hair_style, int hair_color, int cloth_color, uint32_t garment_nameid,
 	uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,
 	uint32_t head_mid, uint32_t head_bottom, uint32_t armor, uint32_t shoes,
@@ -3431,19 +3431,21 @@ static void population_engine_persist_companion_sql(
 	int dex, int luk, int16_t map_id)
 {
 	if (mmysql_handle == nullptr) return;
-	char q[2048];
+	char q[2304];
+	char esc_name[48];
+	Sql_EscapeString(mmysql_handle, esc_name, name_ != nullptr ? name_ : "");
 	// sex is TINYINT in the DDL (0=SEX_MALE, 1=SEX_FEMALE); writing the letters
 	// 'M'/'F' was rejected with ERROR 1366 on strict servers.
 	snprintf(q, sizeof(q),
 		"REPLACE INTO `cp_companion_persistence`"
-		"(owner_account_id, shell_index, job_id, sex, hair_style, hair_color,"
+		"(owner_account_id, shell_index, name, job_id, sex, hair_style, hair_color,"
 		" cloth_color, garment_nameid, option_, weapon_nameid, shield_nameid,"
 		" head_top_nameid, head_mid_nameid, head_bottom_nameid, armor_nameid,"
 		" shoes_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_,"
 		" luk_, map_id, active)"
-		" VALUES(%u,%u,%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
+		" VALUES(%u,%u,'%s',%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
 		"%d,%d,%d,%d,%d,%d,%d,1)",
-		owner_account, index_, job_id, sex, hair_style, hair_color, cloth_color,
+		owner_account, index_, esc_name, job_id, sex, hair_style, hair_color, cloth_color,
 		garment_nameid, option_, weapon, shield, head_top, head_mid, head_bottom,
 		armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk, map_id);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
@@ -3504,7 +3506,7 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 	}
 
 	population_engine_persist_companion_sql(
-		owner, index_, (int16_t)sd->status.class_, (int)sd->status.sex,
+		owner, index_, sd->status.name, (int16_t)sd->status.class_, (int)sd->status.sex,
 		(int)sd->status.hair, (int)sd->status.hair_color, (int)sd->status.clothes_color,
 		(uint32_t)sd->status.robe, sd->status.option, weapon, shield,
 		(uint32_t)sd->status.head_top, (uint32_t)sd->status.head_mid, (uint32_t)sd->status.head_bottom,
@@ -3517,7 +3519,8 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	int16_t job_id, char sex, int hair_style, int hair_color, int cloth_color,
 	uint32_t garment, uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,
 	uint32_t head_mid, uint32_t head_bottom, uint32_t armor, uint32_t shoes,
-	int base_level, int job_level, int str, int agi, int vit, int intl, int dex, int luk)
+	int base_level, int job_level, int str, int agi, int vit, int intl, int dex, int luk,
+	const char* persisted_name)
 {
 	// Deterministic spawn cell next to the owner (small ring for an open spot).
 	int16_t x = 0, y = 0; bool placed = false;
@@ -3576,6 +3579,17 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	g_population_engine_stats.total_created++;
 	g_population_engine_stats.active_units++;
 
+	// RAGNAROKMAC (Goal 1): restore the companion's persistent name. The name
+	// was rolled randomly at recruit time and snapshotted; without this the
+	// name (and so the party-window identity) re-rolls on every restart.
+	if (persisted_name != nullptr && persisted_name[0] != '\0') {
+		safestrncpy(shell->status.name, persisted_name, NAME_LENGTH);
+		// view_data carries no name of its own; clif reads status.name for PCs.
+		// Refresh the area so clients see the restored name immediately.
+		status_set_viewdata(shell, shell->status.class_);
+		clif_name_area(shell);
+	}
+
 	// Restore the exact snapshot build the companion had when recruited.
 	shell->status.base_level = cap_value(base_level, 1, MAX_LEVEL);
 	shell->status.job_level  = cap_value(job_level, 1, MAX_LEVEL);
@@ -3631,9 +3645,9 @@ int population_engine_recall_companions(map_session_data *owner)
 {
 	if (!owner || mmysql_handle == nullptr) return 0;
 	const int16_t map_id = (int16_t)owner->m;
-	char q[512];
+	char q[560];
 	snprintf(q, sizeof(q),
-		"SELECT shell_index, job_id, sex, hair_style, hair_color, cloth_color,"
+		"SELECT shell_index, name, job_id, sex, hair_style, hair_color, cloth_color,"
 		" garment_nameid, option_, weapon_nameid, shield_nameid, head_top_nameid,"
 		" head_mid_nameid, head_bottom_nameid, armor_nameid, shoes_nameid,"
 		" base_level, job_level, str_, agi_, vit_, intl_, dex_, luk_"
@@ -3645,6 +3659,8 @@ int population_engine_recall_companions(map_session_data *owner)
 	while (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
 		int32_t col = 0;
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t index_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); char namebuf[NAME_LENGTH];
+		safestrncpy(namebuf, data != nullptr ? data : "", NAME_LENGTH);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int16_t job_id = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int sexv = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int hair_style = atoi(data);
@@ -3672,7 +3688,8 @@ int population_engine_recall_companions(map_session_data *owner)
 		// expects the 'M'/'F' letters.
 		population_engine_recall_one_companion(owner, map_id, index_, job_id, sexv == 1 ? 'F' : 'M',
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
-			head_mid, head_bottom, armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk);
+			head_mid, head_bottom, armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk,
+			namebuf);
 		recalled++;
 	}
 	Sql_FreeResult(mmysql_handle);

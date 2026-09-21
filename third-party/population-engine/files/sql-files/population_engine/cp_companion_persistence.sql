@@ -1,14 +1,11 @@
--- Companion persistence table.
--- Snapshots every recruited companion shell so it survives map-server and
--- machine restarts: the engine persists a row at recruit time (party_member_added
--- hook) and recalls all active rows for an owner on login (pc_loadpot hook).
--- `shell_index` is fixed per companion forever; char/account ids derive from it,
--- which is how recall re-identifies a shell without reusing the auto-increment pool.
-
+-- Companion persistence table (v2): adds `name` — the shell's generated name
+-- is snapshotted at recruit time and restored on recall, so companions keep
+-- their identity across restarts (name/job/sex otherwise re-roll every boot).
 CREATE TABLE IF NOT EXISTS `cp_companion_persistence` (
            `id`               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
            `owner_account_id` INT UNSIGNED  NOT NULL,
            `shell_index`      INT UNSIGNED  NOT NULL,          -- spawn index_ (char/account id - BASE) -> identity survives restart
+           `name`             VARCHAR(24)   NOT NULL DEFAULT '',-- persistent display name (v2)
            `job_id`           SMALLINT      NOT NULL DEFAULT 0,
            `sex`              TINYINT       NOT NULL DEFAULT 0, -- SEX_MALE/SEX_FEMALE
            `hair_style`       TINYINT       NOT NULL DEFAULT 1,
