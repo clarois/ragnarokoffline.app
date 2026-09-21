@@ -3693,7 +3693,16 @@ int population_engine_recall_companions(map_session_data *owner)
 		recalled++;
 	}
 	Sql_FreeResult(mmysql_handle);
-	if (recalled > 0) ShowInfo("Population engine: recalled %d companion(s) for owner %u\n", recalled, owner->status.account_id);
+	if (recalled > 0) {
+		ShowInfo("Population engine: recalled %d companion(s) for owner %u\n", recalled, owner->status.account_id);
+		// RAGNAROKMAC (Goal 1): re-sync the party list after a batch recall.
+		// Join requests are async; a stray failure or a relogin race can leave
+		// the owner's client party window stale. Requesting full party info
+		// from the char server rebuilds the map-side party (with whatever
+		// shell members actually joined) and re-broadcasts clif_party_info.
+		if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000)
+			party_request_info(owner->status.party_id, owner->status.char_id);
+	}
 	return recalled;
 }
 
