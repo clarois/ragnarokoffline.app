@@ -658,6 +658,27 @@ void population_engine_shell_release(map_session_data* sd)
 	// removed it from id_db via map_deliddb; skip here to avoid double unit_free.
 	if (map_id2bl(sd->id) != nullptr)
 		map_quit(sd);
+	else {
+		// RAGNAROKMAC (Goal 1): already deregistered — map_quit would early-out
+		// or double-free. Do the minimal teardown map_quit/unit_free would have
+		// done so we never leave a dangling grid node or pending skill timers
+		// behind (both caused crashes: stale bl in map blocks → UAF; pending
+		// skill_timerskill entries → SIGSEGV in skill_timerskill after a new
+		// shell reused the same account id).
+		if (sd->prev != nullptr) {
+			map_delblock(sd);
+			clif_clearunit_area(*sd, CLR_OUTSIGHT);
+			if (map_getmapdata(sd->m)) {
+				struct map_data *md_ = map_getmapdata(sd->m);
+				if (md_ && md_->users > 0)
+					md_->users--;
+			}
+			sd->prev = nullptr;
+		}
+		skill_unit_move(sd, gettick(), 4);
+		skill_cleartimerskill(sd);
+		map_deliddb(sd);
+	}
 
 	// map_quit → unit_free_pc → unit_free handles sc_display, quest_log, bonus_script, etc.
 	// Fake PCs never reach chrif_auth_delete, so the raw C hash tables in regs must be
@@ -717,6 +738,34 @@ std::vector<map_session_data*> population_engine_collect_stale_shells()
 			&& map_id2bl(sd->id) == sd && pop_companion_owner(sd) != nullptr) {
 			++it;
 			continue;
+		}
+		// RAGNAROKMAC (Goal 1): a companion whose owner is online on the same map
+		// is never stale, no matter what transient grid/id-db state it is in —
+		// re-register and re-place it instead of releasing it. Releasing here
+		// kicked companions out of the party seconds after every relogin, and a
+		// deregistered-but-on-grid release path leaks both the grid node and the
+		// shell's pending skill_timerskill entries (SIGSEGV in skill_timerskill).
+		if (sd && pop_is_companion(sd) && sd->state.active) {
+			map_session_data *owner = pop_companion_owner(sd);
+			if (owner != nullptr && sd->m == owner->m) {
+				if (map_id2bl(sd->id) != sd) {
+					map_addiddb(sd); // restore lost id_db registration
+					ShowInfo("Population engine: re-registered companion %s in id_db.\n",
+						sd->status.name);
+				}
+				if (sd->prev == nullptr && map_addblock(sd) == 0) {
+					struct map_data *md_ = map_getmapdata(sd->m);
+					if (md_) {
+						if (md_->users++ == 0 && battle_config.dynamic_mobs)
+							map_spawnmobs(sd->m);
+						if (!pc_isinvisible(sd))
+							md_->users_pvp++;
+					}
+					sd->state.debug_remove_map = 0;
+				}
+				++it;
+				continue;
+			}
 		}
 		if (!sd || !population_engine_is_population_pc(sd->id) || !population_engine_combat_shell_ac_ok(sd)) {
 			if (sd && sd->status.party_id > 0 && sd->status.party_id < 0x70000000) {
