@@ -3599,9 +3599,11 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 		// party_member_added (which sets party_id server-side and broadcasts).
 		// spawn_shell left a FAKE party id (0x70000000|map) in status.party_id;
 		// party_reply_invite refuses anyone already in a party, so clear it
-		// first or the join is silently refused.
+		// first or the join is silently refused. NOTE: party_joining must be
+		// false here — party_reply_invite requires !party_joining to accept
+		// and sets the flag itself.
 		shell->status.party_id = 0;
-		shell->party_joining = true;
+		shell->party_joining = false;
 		shell->party_invite = owner->status.party_id;
 		shell->party_invite_account = owner->status.account_id;
 		if (!party_reply_invite(*shell, owner->status.party_id, 1)) {
