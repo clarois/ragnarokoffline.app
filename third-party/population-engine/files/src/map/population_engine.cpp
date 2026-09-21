@@ -3597,6 +3597,10 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 		// Route the shell through the same accept-invite round-trip a live
 		// recruit uses: party_reply_invite → intif_party_addmember →
 		// party_member_added (which sets party_id server-side and broadcasts).
+		// spawn_shell left a FAKE party id (0x70000000|map) in status.party_id;
+		// party_reply_invite refuses anyone already in a party, so clear it
+		// first or the join is silently refused.
+		shell->status.party_id = 0;
 		shell->party_joining = true;
 		shell->party_invite = owner->status.party_id;
 		shell->party_invite_account = owner->status.account_id;
@@ -3604,6 +3608,10 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 			// Fall back to local membership if the round-trip was refused.
 			shell->status.party_id = owner->status.party_id;
 			shell->party_joining = false;
+			ShowWarning("population_engine: recall %u: party join round-trip refused; local membership only.\n", index_);
+		} else {
+			ShowInfo("population_engine: recall %u: party join requested via char server (party %d).\n",
+				index_, owner->status.party_id);
 		}
 	}
 
