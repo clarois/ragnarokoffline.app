@@ -61,6 +61,13 @@ void population_engine_set_companion_active(uint32_t owner_account, uint32_t ind
 /// Goal 3: mark a shell's persistence row inactive when it is EXPELLED from a party
 /// (called from the party_member_withdraw map-side handler).
 void population_engine_deactivate_expelled_companion(int32_t party_id, uint32_t account_id, uint32_t char_id);
+/// Goal 3 friend list: toggle the favorite flag on a saved companion by name.
+bool population_engine_companion_set_favorite(uint32_t owner_account, const char* name_, bool favorite);
+/// Goal 3 friend list: find a saved companion by name; reports its index and active flag.
+bool population_engine_companion_find(uint32_t owner_account, const char* name_,
+	uint32_t* out_index, bool* out_active);
+/// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
+void population_engine_companion_list(uint32_t owner_account, int fd);
 /// True while this real player's party has fewer than four recruited companions.
 bool population_engine_can_recruit_companion(const map_session_data *owner);
 /// Return the real player who should receive a recruited companion's loot.

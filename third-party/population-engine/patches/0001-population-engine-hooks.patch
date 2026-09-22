@@ -224,6 +224,66 @@ index 9dd4a38..5baa8fb 100644
 +	}
 +	return 0;
 +}
++
++
++/* @companion — manage saved (Goal 1/3) companions: list / favorite / summon.
++ * Companions persist in cp_companion_persistence; expelled ones stay there
++ * inactive and can be re-summoned by name with their exact saved identity. */
++ACMD_FUNC(companion)
++{
++	nullpo_retr(-1, sd);
++	char cmd[32], param[NAME_LENGTH];
++	if (!message || !*message || sscanf(message, "%31s %23[^
+]", cmd, param) < 1) {
++		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name>");
++		return -1;
++	}
++	if (strcmpi(cmd, "list") == 0) {
++		population_engine_companion_list(sd->status.account_id, fd);
++		return 0;
++	}
++	if (strcmpi(cmd, "favorite") == 0 || strcmpi(cmd, "unfavorite") == 0) {
++		if (!param[0]) {
++			clif_displaymessage(fd, "Usage: @companion favorite <name>");
++			return -1;
++		}
++		const bool fav = (strcmpi(cmd, "favorite") == 0);
++		if (population_engine_companion_set_favorite(sd->status.account_id, param, fav)) {
++			char msg[NAME_LENGTH + 32];
++			snprintf(msg, sizeof(msg), "Companion '%s' %s.", param, fav ? "favorited" : "unfavorited");
++			clif_displaymessage(fd, msg);
++		} else {
++			char msg[NAME_LENGTH + 48];
++			snprintf(msg, sizeof(msg), "Companion '%s' not found in your saved list.", param);
++			clif_displaymessage(fd, msg);
++		}
++		return 0;
++	}
++	if (strcmpi(cmd, "summon") == 0) {
++		if (!param[0]) {
++			clif_displaymessage(fd, "Usage: @companion summon <name>");
++			return -1;
++		}
++		uint32_t index_ = 0; bool active = false;
++		if (!population_engine_companion_find(sd->status.account_id, param, &index_, &active)) {
++			char msg[NAME_LENGTH + 48];
++			snprintf(msg, sizeof(msg), "Companion '%s' not found in your saved list.", param);
++			clif_displaymessage(fd, msg);
++			return -1;
++		}
++		if (!active)
++			population_engine_set_companion_active(sd->status.account_id, index_, true);
++		// Rebind the row to this owner so a traded/gifted save still summons here,
++		// then recall just this companion beside the player.
++		const int n = population_engine_recall_companions(sd);
++		char msg[128];
++		snprintf(msg, sizeof(msg), "Summoned %d saved companion(s).", n);
++		clif_displaymessage(fd, msg);
++		return 0;
++	}
++	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name>");
++	return -1;
++}
 diff --git a/src/custom/atcommand_def.inc b/src/custom/atcommand_def.inc
 index 54d9e74..865d772 100644
 --- a/src/custom/atcommand_def.inc
@@ -234,6 +294,7 @@ index 54d9e74..865d772 100644
  //ACMD_DEF(newcommand),
 +ACMD_DEF(populate),
 +ACMD_DEF(reloadpopenginedb),
++ACMD_DEF(companion),
 diff --git a/src/custom/battle_config_init.inc b/src/custom/battle_config_init.inc
 index e47aca9..e1ef127 100644
 --- a/src/custom/battle_config_init.inc

@@ -3536,7 +3536,7 @@ void population_engine_set_companion_active(uint32_t owner_account, uint32_t ind
 		index_, owner_account, active ? 1 : 0);
 }
 
-void population_engine_deactivate_expelled_companion(int32 party_id, uint32 account_id, uint32 char_id)
+void population_engine_deactivate_expelled_companion(int32_t party_id, uint32_t account_id, uint32_t char_id)
 {
 	// Called when a population shell is withdrawn from a party by expulsion.
 	// The shell's own account id is POPULATION_ENGINE_CHAR_ID_BASE + index,
@@ -3554,6 +3554,94 @@ void population_engine_deactivate_expelled_companion(int32 party_id, uint32 acco
 		return;
 	}
 	ShowInfo("population_engine: expelled companion index %u marked inactive\n", index_);
+}
+
+// RAGNAROKMAC (Goal 3 / friend list) ---------------------------------------------
+// @companion plumbing. Companions are stored per-owner; "summon" re-activates
+// a saved companion (active=1) and recalls it next to the owner even after an
+// expulsion; "favorite" toggles the flag used to sort the list.
+
+bool population_engine_companion_set_favorite(uint32_t owner_account, const char* name_, bool favorite)
+{
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0]) return false;
+	char esc_name[48];
+	Sql_EscapeString(mmysql_handle, esc_name, name_);
+	char q[300];
+	snprintf(q, sizeof(q),
+		"UPDATE `cp_companion_persistence` SET favorite=%d WHERE owner_account_id=%u AND name='%s'",
+		favorite ? 1 : 0, owner_account, esc_name);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		return false;
+	}
+	return (Sql_NumRowsAffected(mmysql_handle) > 0);
+}
+
+/// Finds a saved companion by name for this owner. Returns true and fills
+/// `out_index` on success; `out_active` reports the current active flag.
+bool population_engine_companion_find(uint32_t owner_account, const char* name_,
+	uint32_t* out_index, bool* out_active)
+{
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0]) return false;
+	char esc_name[48];
+	Sql_EscapeString(mmysql_handle, esc_name, name_);
+	char q[300];
+	snprintf(q, sizeof(q),
+		"SELECT shell_index, active FROM `cp_companion_persistence`"
+		" WHERE owner_account_id=%u AND name='%s' LIMIT 1",
+		owner_account, esc_name);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		return false;
+	}
+	if (Sql_NextRow(mmysql_handle) != SQL_SUCCESS) {
+		Sql_FreeResult(mmysql_handle);
+		return false;
+	}
+	char* data = nullptr;
+	Sql_GetData(mmysql_handle, 0, &data, nullptr);
+	if (out_index) *out_index = data ? (uint32_t)strtoul(data, nullptr, 10) : 0;
+	Sql_GetData(mmysql_handle, 1, &data, nullptr);
+	if (out_active) *out_active = data != nullptr && atoi(data) != 0;
+	Sql_FreeResult(mmysql_handle);
+	return true;
+}
+
+/// Prints the owner's saved companions (name, job, active, favorite) to the
+/// player's chat via the @companion list command.
+void population_engine_companion_list(uint32_t owner_account, int fd)
+{
+	if (mmysql_handle == nullptr) return;
+	char q[400];
+	snprintf(q, sizeof(q),
+		"SELECT name, job_id, active, favorite FROM `cp_companion_persistence`"
+		" WHERE owner_account_id=%u ORDER BY favorite DESC, name ASC",
+		owner_account);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		clif_displaymessage(fd, "Companion list query failed (see map-server console).");
+		return;
+	}
+	clif_displaymessage(fd, "=== Saved companions (favorite first) ===");
+	int count = 0;
+	char* data = nullptr;
+	while (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+		char namebuf[NAME_LENGTH];
+		Sql_GetData(mmysql_handle, 0, &data, nullptr);
+		safestrncpy(namebuf, data != nullptr ? data : "", NAME_LENGTH);
+		Sql_GetData(mmysql_handle, 1, &data, nullptr); int job_id = atoi(data);
+		Sql_GetData(mmysql_handle, 2, &data, nullptr); bool active = atoi(data) != 0;
+		Sql_GetData(mmysql_handle, 3, &data, nullptr); bool fav = atoi(data) != 0;
+		char msg[NAME_LENGTH + 64];
+		snprintf(msg, sizeof(msg), "  %s%s — job %d — %s",
+			fav ? "* " : "  ", namebuf, job_id, active ? "in party" : "saved (expelled)");
+		clif_displaymessage(fd, msg);
+		count++;
+	}
+	Sql_FreeResult(mmysql_handle);
+	char msg[96];
+	snprintf(msg, sizeof(msg), "%d saved companion(s). Use @companion summon <name>.", count);
+	clif_displaymessage(fd, msg);
 }
 
 static void population_engine_recall_one_companion(map_session_data *owner, int16_t map_id, uint32_t index_,

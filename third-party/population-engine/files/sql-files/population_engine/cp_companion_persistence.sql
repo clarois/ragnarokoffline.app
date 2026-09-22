@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS `cp_companion_persistence` (
            `dex_`             SMALLINT      NOT NULL DEFAULT 100,
            `luk_`             SMALLINT      NOT NULL DEFAULT 100,
            `map_id`           SMALLINT      NOT NULL DEFAULT 0, -- mapindex id of owner at recruit (recall target)
-           `active`           TINYINT       NOT NULL DEFAULT 1, -- 1 = recalled on login; 0 = released (Goal 3 sets this)
+           `active`           TINYINT       NOT NULL DEFAULT 1, -- 1 = recalled on login; 0 = expelled/released (Goal 3)
+           `favorite`         TINYINT       NOT NULL DEFAULT 0, -- 1 = owner favorited (friend list sort)
            `recruited_at`     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
                           ON UPDATE CURRENT_TIMESTAMP,
            PRIMARY KEY (`id`),
