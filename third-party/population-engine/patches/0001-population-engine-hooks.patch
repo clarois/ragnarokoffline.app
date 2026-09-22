@@ -33,7 +33,7 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 index 9dd4a38..5baa8fb 100644
 --- a/src/custom/atcommand.inc
 +++ b/src/custom/atcommand.inc
-@@ -17,3 +17,190 @@
+@@ -17,3 +17,249 @@
  //	clif_specialeffect(&sd->bl, EF_HEARTCASTING, AREA);
  //	return 0;
  //}
@@ -233,8 +233,7 @@ index 9dd4a38..5baa8fb 100644
 +{
 +	nullpo_retr(-1, sd);
 +	char cmd[32], param[NAME_LENGTH];
-+	if (!message || !*message || sscanf(message, "%31s %23[^
-]", cmd, param) < 1) {
++	if (!message || !*message || sscanf(message, "%31s %23[^\n]", cmd, param) < 1) {
 +		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name>");
 +		return -1;
 +	}
@@ -288,7 +287,7 @@ diff --git a/src/custom/atcommand_def.inc b/src/custom/atcommand_def.inc
 index 54d9e74..865d772 100644
 --- a/src/custom/atcommand_def.inc
 +++ b/src/custom/atcommand_def.inc
-@@ -9,3 +9,5 @@
+@@ -9,3 +9,6 @@
   **/
  
  //ACMD_DEF(newcommand),
