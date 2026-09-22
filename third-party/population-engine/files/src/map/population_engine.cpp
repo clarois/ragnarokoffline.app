@@ -3584,10 +3584,10 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	// name (and so the party-window identity) re-rolls on every restart.
 	if (persisted_name != nullptr && persisted_name[0] != '\0') {
 		safestrncpy(shell->status.name, persisted_name, NAME_LENGTH);
-		// view_data carries no name of its own; clif reads status.name for PCs.
-		// Refresh the area so clients see the restored name immediately.
-		status_set_viewdata(shell, shell->status.class_);
-		clif_name_area(shell);
+		// NOTE: do NOT call status_set_viewdata here — it would wipe the
+		// vd.look table spawn_shell just filled (hair/colors/weapon), making
+		// the companion render with default looks (visibly a "different"
+		// character). clif reads status.name for PCs; the existing vd is fine.
 	}
 
 	// Restore the exact snapshot build the companion had when recruited.
