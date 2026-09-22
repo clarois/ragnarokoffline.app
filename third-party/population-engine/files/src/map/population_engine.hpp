@@ -56,6 +56,11 @@ bool population_engine_is_population_pc(int32_t id);
 void population_engine_persist_recruited_companion(map_session_data *sd, map_session_data *peer = nullptr);
 /// Goal 1: re-spawn an owner's persisted companions after login restores membership. Returns count recalled.
 int population_engine_recall_companions(map_session_data *owner);
+/// Goal 3: flag a companion's persistence row active(1)/inactive(0).
+void population_engine_set_companion_active(uint32_t owner_account, uint32_t index_, bool active);
+/// Goal 3: mark a shell's persistence row inactive when it is EXPELLED from a party
+/// (called from the party_member_withdraw map-side handler).
+void population_engine_deactivate_expelled_companion(int32_t party_id, uint32_t account_id, uint32_t char_id);
 /// True while this real player's party has fewer than four recruited companions.
 bool population_engine_can_recruit_companion(const map_session_data *owner);
 /// Return the real player who should receive a recruited companion's loot.

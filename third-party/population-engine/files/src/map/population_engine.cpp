@@ -3515,6 +3515,47 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 		(int16_t)sd->m);
 }
 
+// RAGNAROKMAC (Goal 3) ----------------------------------------------------------
+// Expelled/released companions: mark the persistence row inactive (active=0)
+// instead of deleting it. The snapshot (name, gear, stats) is retained so the
+// owner can re-invite the exact same companion later via @companion summon.
+void population_engine_set_companion_active(uint32_t owner_account, uint32_t index_, bool active)
+{
+	if (mmysql_handle == nullptr) return;
+	char q[256];
+	snprintf(q, sizeof(q),
+		"UPDATE `cp_companion_persistence` SET active=%d WHERE owner_account_id=%u AND shell_index=%u",
+		active ? 1 : 0, owner_account, index_);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		ShowError("population_engine: set companion %u active=%d for owner %u FAILED\n",
+			index_, active ? 1 : 0, owner_account);
+		return;
+	}
+	ShowInfo("population_engine: companion index %u for owner %u set active=%d\n",
+		index_, owner_account, active ? 1 : 0);
+}
+
+void population_engine_deactivate_expelled_companion(int32 party_id, uint32 account_id, uint32 char_id)
+{
+	// Called when a population shell is withdrawn from a party by expulsion.
+	// The shell's own account id is POPULATION_ENGINE_CHAR_ID_BASE + index,
+	// which is also its owner-independent identity key; the row's owner is
+	// whoever persisted it — look the row up by shell_index alone.
+	if (account_id < POPULATION_ENGINE_ACCOUNT_ID_BASE) return; // not a shell
+	const uint32_t index_ = account_id - POPULATION_ENGINE_ACCOUNT_ID_BASE;
+	if (mmysql_handle == nullptr) return;
+	char q[256];
+	snprintf(q, sizeof(q),
+		"UPDATE `cp_companion_persistence` SET active=0 WHERE shell_index=%u",
+		index_);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		return;
+	}
+	ShowInfo("population_engine: expelled companion index %u marked inactive\n", index_);
+}
+
 static void population_engine_recall_one_companion(map_session_data *owner, int16_t map_id, uint32_t index_,
 	int16_t job_id, char sex, int hair_style, int hair_color, int cloth_color,
 	uint32_t garment, uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,
