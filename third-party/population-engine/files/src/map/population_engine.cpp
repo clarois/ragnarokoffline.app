@@ -3558,6 +3558,51 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 	}
 }
 
+// Goal 2 (gear return): unequip every worn item on the shell and hand each
+// piece to the owner. Used by @companion gear <name> so the player can take
+// equipment back without hunting it in a trade window. Items are MOVED, not
+// duplicated: each is removed from the shell's inventory (pc_unequipitem
+// clears the equip bit, then pc_delitem removes the slot) and handed to the
+// owner via pc_additem. On inventory-full the piece is dropped at the
+// owner's feet instead of being lost.
+int population_engine_companion_return_gear(map_session_data *owner, map_session_data *shell)
+{
+	if (!owner || !shell) return -1;
+	if (!population_engine_is_population_pc(shell->id)) return -1;
+
+	int returned = 0;
+	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
+		struct item &slot = shell->inventory.u.items_inventory[i];
+		if (!slot.nameid || !slot.equip) continue; // equipped only
+		// Unequip first (flag 2 = ignore status-change blocks) so the equip
+		// bit clears and the stats/looks revert before the move.
+		if (!pc_unequipitem(shell, i, 2)) continue;
+		struct item tmp = slot;
+		tmp.equip = 0;
+		enum e_additem_result res = pc_additem(owner, &tmp, 1, LOG_TYPE_NPC, false);
+		if (res == ADDITEM_SUCCESS) {
+			pc_delitem(shell, i, 1, 0, 1, LOG_TYPE_NPC);
+			++returned;
+		} else if (res == ADDITEM_OVERWEIGHT || res == ADDITEM_OVERAMOUNT) {
+			// Owner too heavy / slot cap: drop at owner's feet instead of losing it.
+			pc_delitem(shell, i, 1, 0, 1, LOG_TYPE_NPC);
+			map_addflooritem(&tmp, 1, owner->m, owner->x, owner->y, 0, 0, 0, 0, 0);
+			++returned;
+			ShowWarning("population_engine: owner %u overweight; dropped item %u at feet\n",
+				owner->status.account_id, slot.nameid);
+		} else {
+			ShowWarning("population_engine: failed to return item %u from companion %u (res %d)\n",
+				slot.nameid, shell->status.char_id, res);
+		}
+	}
+	if (returned > 0) {
+		ShowInfo("population_engine: returned %d worn item(s) from companion %u to owner %u\n",
+			returned, shell->status.char_id, owner->status.account_id);
+		// Gear-hash poll will re-snapshot the now-empty equipment to the DB.
+	}
+	return returned;
+}
+
 // Goal 2: re-snapshot a summoned companion's current equipment + stats into its
 // persistence row. Called (debounced) whenever the shell's equipment changes, so
 // gear the owner gives the companion after recruit survives a restart too.

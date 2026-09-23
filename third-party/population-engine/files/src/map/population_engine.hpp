@@ -75,6 +75,8 @@ bool population_engine_companion_can_trade_with(const map_session_data *player, 
 /// Goal 2 trade: after items land in the companion's inventory, equip equipment
 /// and return non-equipment items to the owner (companions are not mules).
 void population_engine_companion_equip_traded(map_session_data *owner, map_session_data *shell);
+/// Goal 2: unequip every worn item on the shell and hand each piece to the owner (or drop at feet when overweight). Returns count moved, -1 on bad args.
+int population_engine_companion_return_gear(map_session_data *owner, map_session_data *shell);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
 void population_engine_companion_list(uint32_t owner_account, int fd);
 /// Goal 3 friend list: permanently delete a saved companion's row by name (irreversible).

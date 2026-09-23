@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000003
+Subject: [PATCH] Goal 2 gear return: @companion gear <name> - unequip all worn gear from a summoned companion and hand it to the owner
+
+Adds population_engine_companion_return_gear(owner, shell) (pc_unequipitem flag 2 per equipped slot, then pc_additem to the owner; drops at feet when overweight) and a gear subcommand in the @companion atcommand so players can take equipment back without a trade window (deals cannot reference equipped slots).
+
+diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
+--- a/src/custom/atcommand.inc
++++ b/src/custom/atcommand.inc
+@@ -226,7 +226,7 @@
+ 	nullpo_retr(-1, sd);
+ 	char cmd[32], param[NAME_LENGTH];
+ 	if (!message || !*message || sscanf(message, "%31s %23[^\n]", cmd, param) < 1) {
+-		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
++		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name>");
+ 		return -1;
+ 	}
+ 	if (strcmpi(cmd, "list") == 0) {
+@@ -272,6 +272,42 @@
+ 		clif_displaymessage(fd, msg);
+ 		return 0;
+ 	}
++	// RAGNAROKMAC (Goal 2): take all worn gear back from a summoned companion.
++	// Unequips every equipped slot on the shell and hands each piece to the
++	// caller's inventory (or drops at their feet when overweight).
++	if (strcmpi(cmd, "gear") == 0 || strcmpi(cmd, "unequip") == 0) {
++		if (!param[0]) {
++			clif_displaymessage(fd, "Usage: @companion gear <name>");
++			return -1;
++		}
++		uint32_t index_ = 0; bool active = false;
++		if (!population_engine_companion_find(sd->status.account_id, param, &index_, &active)) {
++			char msg[NAME_LENGTH + 48];
++			snprintf(msg, sizeof(msg), "Companion '%s' not found in your saved list.", param);
++			clif_displaymessage(fd, msg);
++			return -1;
++		}
++		if (!active) {
++			clif_displaymessage(fd, "That companion is not summoned. Use @companion summon <name> first.");
++			return -1;
++		}
++		map_session_data *live = nullptr;
++		for (map_session_data *cand : g_population_engine_pcs) {
++			if (cand && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) { live = cand; break; }
++		}
++		if (live == nullptr) {
++			clif_displaymessage(fd, "That companion is not on the map right now.");
++			return -1;
++		}
++		const int moved = population_engine_companion_return_gear(sd, live);
++		char msg[96];
++		if (moved >= 0)
++			snprintf(msg, sizeof(msg), "Returned %d item(s) from %s.", moved, param);
++		else
++			snprintf(msg, sizeof(msg), "Could not return gear from %s.", param);
++		clif_displaymessage(fd, msg);
++		return 0;
++	}
+ 	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
+ 		if (!param[0]) {
+ 			clif_displaymessage(fd, "Usage: @companion remove <name>");
+@@ -308,6 +344,6 @@
+ 		}
+ 		return 0;
+ 	}
+-	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
++	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name>");
+ 	return -1;
+ }
