@@ -254,7 +254,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          ASSET_ID=$(gh api "repos/${{ github.repository }}/releases/tags/images/assets" --jq '.assets[] | select(.name=="images-${{ matrix.arch }}.tar.gz") | .id') || {
+          ASSET_ID=$(gh api "repos/${{ github.repository }}/releases/tags/images/assets" --jq '.[] | select(.name=="images-${{ matrix.arch }}.tar.gz") | .id') || {
             echo "No server images for ${{ matrix.arch }}." >&2
             echo "Run the images workflow, which publishes them to the 'images' tag." >&2
             exit 1
@@ -275,7 +275,7 @@ jobs:
           # takes it from .ragnarokmac/sql, which locally is written by bootstrap
           # and here comes down with the images it was extracted from.
           mkdir -p .ragnarokmac/sql
-          SQL_ID=$(gh api "repos/${{ github.repository }}/releases/tags/images/assets" --jq '.assets[] | select(.name=="rathena-sql.tar.gz") | .id')
+          SQL_ID=$(gh api "repos/${{ github.repository }}/releases/tags/images/assets" --jq '.[] | select(.name=="rathena-sql.tar.gz") | .id')
           gh api "repos/${{ github.repository }}/releases/assets/$SQL_ID" \
              -H "Accept: application/octet-stream" > /tmp/rathena-sql.tar.gz
           tar xzf /tmp/rathena-sql.tar.gz -C .ragnarokmac/sql
