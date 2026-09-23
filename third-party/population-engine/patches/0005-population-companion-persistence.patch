@@ -86,3 +86,60 @@ Wires population_engine_persist_recruited_companion() into the party_member_adde
 +	}
  	// save both player to avoid crash: they always have no advantage/disadvantage between the 2 players
  	if (save_settings&CHARSAVE_TRADE) {
+diff --git a/src/map/trade.cpp b/src/map/trade.cpp
+index aa89731..0f50854 100644
+--- a/src/map/trade.cpp
++++ b/src/map/trade.cpp
+@@ -19,6 +19,7 @@
+ #include "path.hpp"
+ #include "pc.hpp"
+ #include "pc_groups.hpp"
++#include "population_engine.hpp"
+ #include "storage.hpp"
+ 
+ #define TRADE_DISTANCE 2 ///Max distance from traders to enable a trade to take place.
+@@ -32,6 +33,25 @@ void trade_traderequest(map_session_data *sd, map_session_data *target_sd)
+ {
+ 	nullpo_retv(sd);
+ 
++
++	// RAGNAROKMAC (Goal 2): trading with your OWN summoned companion is
++	// auto-accepted server-side — shells have no client socket to receive the
++	// request popup. Both trade_partner fields are set and the trade starts
++	// immediately, exactly as if the shell had accepted. The requester gets
++	// the normal accept packet so their client opens the trade window.
++	if (population_engine_companion_can_trade_with(sd, target_sd)) {
++		target_sd->trade_partner.id = sd->status.account_id;
++		target_sd->trade_partner.lv = sd->status.base_level;
++		sd->trade_partner.id = target_sd->status.account_id;
++		sd->trade_partner.lv = target_sd->status.base_level;
++		sd->state.trading = 1;
++		target_sd->state.trading = 1;
++		memset(&sd->deal, 0, sizeof(sd->deal));
++		memset(&target_sd->deal, 0, sizeof(target_sd->deal));
++		clif_traderesponse(*sd, TRADE_ACK_ACCEPT);
++		return;
++	}
++
+ 	if (map_getmapflag(sd->m, MF_NOTRADE)) {
+ 		clif_displaymessage (sd->fd, msg_txt(sd,272));
+ 		return; //Can't trade in notrade mapflag maps.
+@@ -675,6 +695,18 @@ void trade_tradecommit(map_session_data *sd)
+ 	tsd->state.trading = 0;
+ 	tsd->state.isBoundTrading = 0;
+ 
++	// RAGNAROKMAC (Goal 2): if one side of this trade was a summoned
++	// companion, equip any traded equipment immediately and hand non-equipment
++	// back to the owner. The gear-hash poll then persists the change.
++	{
++		map_session_data *shell = map_id2sd(sd->trade_partner.id);
++		if (shell && population_engine_is_population_pc(shell->id))
++			population_engine_companion_equip_traded(sd, shell);
++		shell = map_id2sd(tsd->trade_partner.id);
++		if (shell && population_engine_is_population_pc(shell->id))
++			population_engine_companion_equip_traded(tsd, shell);
++	}
++
+ 	clif_tradecompleted( *sd );
+ 	clif_tradecompleted( *tsd );
+ 
