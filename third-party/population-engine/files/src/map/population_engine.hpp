@@ -150,4 +150,4 @@ int population_engine_arena_relation(const block_list *s_bl, const block_list *t
 bool population_engine_arena_is_ally(const map_session_data *a, const map_session_data *b);
 
 #endif // POPULATION_ENGINE_HPP
-# images rebuild trigger
+// images rebuild trigger
