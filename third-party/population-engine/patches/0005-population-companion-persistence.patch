@@ -5,7 +5,7 @@ Wires population_engine_persist_recruited_companion() into the party_member_adde
 
 --- a/src/map/party.cpp
 +++ b/src/map/party.cpp
-@@ -671,7 +671,10 @@ int32 party_member_added(int32 party_id,uint32 account_id,uint32 char_id, int32 flag)
+@@ -671,7 +671,10 @@
  	}
  
  	sd->status.party_id = party_id;
@@ -16,7 +16,7 @@ Wires population_engine_persist_recruited_companion() into the party_member_adde
  	clif_party_member_info( *p, *sd );
  	clif_party_option(p,sd,0x100);
  	clif_party_info( *p, sd );
-@@ -843,6 +846,12 @@ int32 party_member_withdraw(int32 party_id, uint32 account_id, uint32 char_id, c
+@@ -843,6 +846,12 @@
  {
  	map_session_data* sd = map_charid2sd(char_id);
  	struct party_data* p = party_search(party_id);
@@ -41,3 +41,48 @@ Wires population_engine_persist_recruited_companion() into the party_member_adde
  	if (sd->status.guild_id > 0)
  		guild_member_joined(sd);
  	if (sd->status.clan_id > 0)
+--- a/src/map/trade.cpp
++++ b/src/map/trade.cpp
+@@ -33,6 +33,25 @@
+ 	nullpo_retv(sd);
+ 
++
++	// RAGNAROKMAC (Goal 2): trading with your OWN summoned companion is
++	// auto-accepted server-side — shells have no client socket to receive the
++	// request popup. Both trade_partner fields are set and the trade starts
++	// immediately, exactly as if the shell had accepted. The requester gets
++	// the normal accept packet so their client opens the trade window.
++	if (population_engine_companion_can_trade_with(sd, target_sd)) {
++		target_sd->trade_partner.id = sd->status.account_id;
++		target_sd->trade_partner.lv = sd->status.base_level;
++		sd->trade_partner.id = target_sd->status.account_id;
++		sd->trade_partner.lv = target_sd->status.base_level;
++		sd->state.trading = 1;
++		target_sd->state.trading = 1;
++		memset(&sd->deal, 0, sizeof(sd->deal));
++		memset(&target_sd->deal, 0, sizeof(target_sd->deal));
++		clif_traderesponse(*sd, TRADE_ACK_OK);
++		return;
++	}
++
+ 	if (map_getmapflag(sd->m, MF_NOTRADE)) {
+ 		clif_displaymessage (sd->fd, msg_txt(sd,272));
+ 		return; //Can't trade in notrade mapflag maps.
+ 	}
+@@ -675,4 +693,16 @@
+ 	clif_tradecompleted( *sd );
+ 	clif_tradecompleted( *tsd );
++
++	// RAGNAROKMAC (Goal 2): if one side of this trade was a summoned
++	// companion, equip any traded equipment immediately and hand non-equipment
++	// back to the owner. The gear-hash poll then persists the change.
++	{
++		map_session_data *shell = map_id2sd(sd->trade_partner.id);
++		if (shell && population_engine_is_population_pc(shell->id))
++			population_engine_companion_equip_traded(sd, shell);
++		shell = map_id2sd(tsd->trade_partner.id);
++		if (shell && population_engine_is_population_pc(shell->id))
++			population_engine_companion_equip_traded(tsd, shell);
++	}
+ 	// save both player to avoid crash: they always have no advantage/disadvantage between the 2 players
+ 	if (save_settings&CHARSAVE_TRADE) {

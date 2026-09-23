@@ -69,6 +69,12 @@ bool population_engine_companion_find(uint32_t owner_account, const char* name_,
 /// Goal 2: re-snapshot a summoned companion's current equipment + stats into its
 /// persistence row (debounced by the caller). Called on shell equipment changes.
 void population_engine_persist_companion_gear(map_session_data *sd);
+/// Goal 2 trade: true when target is a summoned companion owned by player,
+/// same map, within trade distance — eligible for auto-accepted trade.
+bool population_engine_companion_can_trade_with(const map_session_data *player, const map_session_data *target);
+/// Goal 2 trade: after items land in the companion's inventory, equip equipment
+/// and return non-equipment items to the owner (companions are not mules).
+void population_engine_companion_equip_traded(map_session_data *owner, map_session_data *shell);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
 void population_engine_companion_list(uint32_t owner_account, int fd);
 /// Goal 3 friend list: permanently delete a saved companion's row by name (irreversible).

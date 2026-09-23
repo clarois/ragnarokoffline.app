@@ -3506,6 +3506,58 @@ static void population_engine_persist_companion_sql(
 		index_, owner_account, map_id);
 }
 
+// Goal 2 (trade): returns true when `target` is a population shell that belongs
+// to `player` and is summoned — i.e. a trade request from `player` may be
+// auto-accepted on the shell's behalf. Also checks same-map + distance.
+bool population_engine_companion_can_trade_with(const map_session_data *player, const map_session_data *target)
+{
+	if (!player || !target) return false;
+	if (!population_engine_is_population_pc(target->id)) return false;
+	if (target->pop.companion_owner_account != player->status.account_id) return false;
+	if (!target->state.active || target->prev == nullptr) return false;
+	if (map_id2bl(target->id) != target) return false;
+	if (target->m != player->m) return false;
+	// Same proximity rule rathena uses for player trades.
+	if (!check_distance_bl(player, target, 2)) return false; // trade.cpp's TRADE_DISTANCE
+	return true;
+}
+
+// Goal 2 (trade): after traded equipment lands in the companion's inventory,
+// equip every equip-flagged item immediately (the owner gave it to be worn).
+// Items without equip flags (consumables etc) are returned to the owner —
+// companions are gear carriers, not mules.
+void population_engine_companion_equip_traded(map_session_data *owner, map_session_data *shell)
+{
+	if (!owner || !shell) return;
+	bool equipped_any = false;
+	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
+		struct item &slot = shell->inventory.u.items_inventory[i];
+		if (!slot.nameid || slot.equip) continue;
+		struct item_data *id = itemdb_search(slot.nameid);
+		if (!id) continue;
+		if (id->equip) {
+			// Equip it: pc_equipitem by inventory index.
+			(void)pc_equipitem(shell, i, id->equip, false);
+			equipped_any = true;
+		} else {
+			// Non-equipment: hand it back to the owner.
+			struct item tmp = slot;
+			enum e_additem_result res = pc_additem(owner, &tmp, slot.amount, LOG_TYPE_TRADE, false);
+			if (res == ADDITEM_SUCCESS) {
+				pc_delitem(shell, i, slot.amount, 0, 1, LOG_TYPE_TRADE);
+			} else {
+				ShowWarning("population_engine: companion %u inventory full; returned item %u lost slot %d\n",
+					shell->status.char_id, slot.nameid, i);
+				pc_delitem(shell, i, slot.amount, 0, 1, LOG_TYPE_TRADE);
+			}
+		}
+	}
+	if (equipped_any) {
+		// The gear-hash poll will pick up the change and re-snapshot to the DB.
+		ShowInfo("population_engine: companion %u equipped traded gear\n", shell->status.char_id);
+	}
+}
+
 // Goal 2: re-snapshot a summoned companion's current equipment + stats into its
 // persistence row. Called (debounced) whenever the shell's equipment changes, so
 // gear the owner gives the companion after recruit survives a restart too.
