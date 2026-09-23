@@ -1,4 +1,4 @@
--- Companion persistence table (v2): adds `name` — the shell's generated name
+-- Companion persistence table (v3): adds `name` and accessories — the shell's generated name
 -- is snapshotted at recruit time and restored on recall, so companions keep
 -- their identity across restarts (name/job/sex otherwise re-roll every boot).
 CREATE TABLE IF NOT EXISTS `cp_companion_persistence` (
@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS `cp_companion_persistence` (
            `head_bottom_nameid` INT UNSIGNED NOT NULL DEFAULT 0,
            `armor_nameid`     INT UNSIGNED  NOT NULL DEFAULT 0,
            `shoes_nameid`     INT UNSIGNED  NOT NULL DEFAULT 0,
+           `acc_l_nameid`     INT UNSIGNED  NOT NULL DEFAULT 0, -- accessory left (Goal 2)
+           `acc_r_nameid`     INT UNSIGNED  NOT NULL DEFAULT 0, -- accessory right (Goal 2)
            `base_level`       SMALLINT      NOT NULL DEFAULT 99,
            `job_level`        SMALLINT      NOT NULL DEFAULT 70,
            `str_`             SMALLINT      NOT NULL DEFAULT 100,

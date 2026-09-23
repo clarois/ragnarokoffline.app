@@ -66,6 +66,9 @@ bool population_engine_companion_set_favorite(uint32_t owner_account, const char
 /// Goal 3 friend list: find a saved companion by name; reports its index and active flag.
 bool population_engine_companion_find(uint32_t owner_account, const char* name_,
 	uint32_t* out_index, bool* out_active);
+/// Goal 2: re-snapshot a summoned companion's current equipment + stats into its
+/// persistence row (debounced by the caller). Called on shell equipment changes.
+void population_engine_persist_companion_gear(map_session_data *sd);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
 void population_engine_companion_list(uint32_t owner_account, int fd);
 /// Goal 3 friend list: permanently delete a saved companion's row by name (irreversible).

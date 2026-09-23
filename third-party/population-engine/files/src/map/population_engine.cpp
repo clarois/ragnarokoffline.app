@@ -60,6 +60,24 @@
 #include "population_engine/population_engine_factory.cpp"
 #include "population_engine/core/pe_perf.hpp"
 
+// Goal 2: per-shell equipment fingerprint (id -> last-snapshotted hash). A cheap
+// sum of equipped item ids; recomputed each combat tick, re-snapshot only on change.
+static std::unordered_map<int32_t, uint64_t> g_pop_companion_gear_hash;
+
+static uint64_t pop_companion_gear_hash(const map_session_data *sd)
+{
+	uint64_t hash = 0;
+	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
+		const struct item &slot = sd->inventory.u.items_inventory[i];
+		if (!slot.nameid || !slot.equip) continue;
+		hash = hash * 1000003ULL + (uint64_t)slot.nameid * 31ULL + (uint64_t)slot.equip;
+	}
+	hash = hash * 1000003ULL + (uint64_t)sd->status.base_level;
+	hash = hash * 1000003ULL + (uint64_t)sd->status.job_level;
+	return hash;
+}
+
+
 std::vector<map_session_data *> g_population_engine_pcs;
 
 // ----------------------------------------------------------------------
@@ -627,6 +645,7 @@ void population_engine_shell_release(map_session_data* sd)
 	}
 	sd->status.party_id = 0; // clear synthetic membership before teardown
 	g_pop_chat_next_tick.erase(sd->id);
+	g_pop_companion_gear_hash.erase(sd->id);
 	population_engine_path_erase_for_pc(sd->id);
 	// Cancel a pending respawn timer so it doesn't fire on a freed/reused shell.
 	if (sd->pop.respawn_timer != INVALID_TIMER) {
@@ -1942,6 +1961,34 @@ TIMER_FUNC(population_engine_global_combat_timer)
 		auto stale = population_engine_collect_stale_shells();
 		for (auto *s : stale)
 			population_engine_shell_release(s);
+	}
+
+	// Goal 2: gear re-snapshot poll — companions whose equipped items changed
+	// since last tick get their persistence row updated (debounced by the hash).
+	if (!g_population_engine_pcs.empty()) {
+		for (map_session_data *sd : g_population_engine_pcs) {
+			if (!sd || !sd->state.active || sd->prev == nullptr) continue;
+			if (sd->status.char_id < POPULATION_ENGINE_CHAR_ID_BASE) continue;
+			const uint64_t h = pop_companion_gear_hash(sd);
+			auto it = g_pop_companion_gear_hash.find(sd->id);
+			if (it == g_pop_companion_gear_hash.end()) {
+				g_pop_companion_gear_hash.emplace(sd->id, h);
+				continue; // first sighting: baseline only, don't write
+			}
+			if (it->second != h) {
+				it->second = h;
+				population_engine_persist_companion_gear(sd);
+			}
+		}
+		// prune hashes for shells that are gone
+		for (auto it = g_pop_companion_gear_hash.begin(); it != g_pop_companion_gear_hash.end();) {
+			bool found = false;
+			for (map_session_data *sd : g_population_engine_pcs) {
+				if (sd && sd->id == it->first) { found = true; break; }
+			}
+			if (!found) it = g_pop_companion_gear_hash.erase(it);
+			else ++it;
+		}
 	}
 
 	if (g_population_engine_pcs.empty())
@@ -3427,6 +3474,7 @@ static void population_engine_persist_companion_sql(
 	int hair_style, int hair_color, int cloth_color, uint32_t garment_nameid,
 	uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,
 	uint32_t head_mid, uint32_t head_bottom, uint32_t armor, uint32_t shoes,
+	uint32_t acc_l, uint32_t acc_r,
 	int base_level, int job_level, int str, int agi, int vit, int intl,
 	int dex, int luk, int16_t map_id)
 {
@@ -3441,13 +3489,13 @@ static void population_engine_persist_companion_sql(
 		"(owner_account_id, shell_index, name, job_id, sex, hair_style, hair_color,"
 		" cloth_color, garment_nameid, option_, weapon_nameid, shield_nameid,"
 		" head_top_nameid, head_mid_nameid, head_bottom_nameid, armor_nameid,"
-		" shoes_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_,"
-		" luk_, map_id, active)"
-		" VALUES(%u,%u,'%s',%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
+		" shoes_nameid, acc_l_nameid, acc_r_nameid, base_level, job_level, str_,"
+		" agi_, vit_, intl_, dex_, luk_, map_id, active)"
+		" VALUES(%u,%u,'%s',%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
 		"%d,%d,%d,%d,%d,%d,%d,1)",
 		owner_account, index_, esc_name, job_id, sex, hair_style, hair_color, cloth_color,
 		garment_nameid, option_, weapon, shield, head_top, head_mid, head_bottom,
-		armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk, map_id);
+		armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk, map_id);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
 		ShowError("population_engine: persist companion index %u for owner %u FAILED\n",
@@ -3456,6 +3504,57 @@ static void population_engine_persist_companion_sql(
 	}
 	ShowInfo("population_engine: persisted companion index %u for owner %u (map id %d)\n",
 		index_, owner_account, map_id);
+}
+
+// Goal 2: re-snapshot a summoned companion's current equipment + stats into its
+// persistence row. Called (debounced) whenever the shell's equipment changes, so
+// gear the owner gives the companion after recruit survives a restart too.
+void population_engine_persist_companion_gear(map_session_data *sd)
+{
+	if (!sd || !sd->state.active) return;
+	if (!population_engine_is_population_pc(sd->id)) return;
+	if (sd->status.char_id < POPULATION_ENGINE_CHAR_ID_BASE) return;
+
+	// The row's owner is the companion's registered owner (set at recruit).
+	const uint32_t owner = sd->pop.companion_owner_account;
+	if (owner == 0) return; // not a recruited companion
+
+	const uint32_t index_ = sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE;
+
+	uint32_t weapon=0, shield=0, armor=0, shoes=0, acc_l=0, acc_r=0;
+	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
+		const struct item &slot = sd->inventory.u.items_inventory[i];
+		if (!slot.nameid || !slot.equip) continue; // equipped only
+		if ((slot.equip & EQP_HAND_R) && !(slot.equip & EQP_SHADOW_WEAPON))  weapon  = slot.nameid;
+		else if ((slot.equip & EQP_HAND_L) && !(slot.equip & EQP_SHADOW_SHIELD)) shield  = slot.nameid;
+		else if (slot.equip & EQP_ARMOR)                                          armor  = slot.nameid;
+		else if (slot.equip & EQP_SHOES)                                          shoes  = slot.nameid;
+		else if (slot.equip & EQP_ACC_L)                                          acc_l  = slot.nameid;
+		else if (slot.equip & EQP_ACC_R)                                          acc_r  = slot.nameid;
+	}
+
+	// UPDATE only the mutable columns — identity (owner, index, name, job, sex,
+	// looks) never changes after recruit, and map_id tracks the owner anyway.
+	if (mmysql_handle == nullptr) return;
+	char q[1024];
+	snprintf(q, sizeof(q),
+		"UPDATE `cp_companion_persistence` SET weapon_nameid=%u, shield_nameid=%u,"
+		" head_top_nameid=%u, head_mid_nameid=%u, head_bottom_nameid=%u,"
+		" armor_nameid=%u, shoes_nameid=%u, acc_l_nameid=%u, acc_r_nameid=%u,"
+		" base_level=%d, job_level=%d, str_=%d, agi_=%d, vit_=%d, intl_=%d,"
+		" dex_=%d, luk_=%d"
+		" WHERE owner_account_id=%u AND shell_index=%u",
+		weapon, shield, sd->status.head_top, sd->status.head_mid, sd->status.head_bottom,
+		armor, shoes, acc_l, acc_r,
+		sd->status.base_level, sd->status.job_level, sd->status.str, sd->status.agi,
+		sd->status.vit, sd->status.int_, sd->status.dex, sd->status.luk,
+		owner, index_);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		ShowError("population_engine: gear re-snapshot for companion %u FAILED\n", index_);
+		return;
+	}
+	ShowInfo("population_engine: gear re-snapshotted for companion %u (owner %u)\n", index_, owner);
 }
 
 void population_engine_persist_recruited_companion(map_session_data *sd, map_session_data *peer)
@@ -3495,7 +3594,7 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 
 	const uint32_t index_ = char_id - POPULATION_ENGINE_CHAR_ID_BASE;
 
-	uint32_t weapon=0, shield=0, armor=0, shoes=0;
+	uint32_t weapon=0, shield=0, armor=0, shoes=0, acc_l=0, acc_r=0;
 	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
 		const struct item &slot = sd->inventory.u.items_inventory[i];
 		if (!slot.nameid || !slot.equip) continue; // equipped only
@@ -3503,6 +3602,8 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 		else if ((slot.equip & EQP_HAND_L) && !(slot.equip & EQP_SHADOW_SHIELD)) shield = slot.nameid;
 		else if (slot.equip & EQP_ARMOR)                                          armor  = slot.nameid;
 		else if (slot.equip & EQP_SHOES)                                          shoes  = slot.nameid;
+		else if (slot.equip & EQP_ACC_L)                                          acc_l  = slot.nameid; // Goal 2
+		else if (slot.equip & EQP_ACC_R)                                          acc_r  = slot.nameid; // Goal 2
 	}
 
 	population_engine_persist_companion_sql(
@@ -3510,7 +3611,7 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 		(int)sd->status.hair, (int)sd->status.hair_color, (int)sd->status.clothes_color,
 		(uint32_t)sd->status.robe, sd->status.option, weapon, shield,
 		(uint32_t)sd->status.head_top, (uint32_t)sd->status.head_mid, (uint32_t)sd->status.head_bottom,
-		armor, shoes, (int)sd->status.base_level, (int)sd->status.job_level, (int)sd->status.str,
+		armor, shoes, acc_l, acc_r, (int)sd->status.base_level, (int)sd->status.job_level, (int)sd->status.str,
 		(int)sd->status.agi, (int)sd->status.vit, (int)sd->status.int_, (int)sd->status.dex, (int)sd->status.luk,
 		(int16_t)sd->m);
 }
@@ -3667,6 +3768,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	int16_t job_id, char sex, int hair_style, int hair_color, int cloth_color,
 	uint32_t garment, uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,
 	uint32_t head_mid, uint32_t head_bottom, uint32_t armor, uint32_t shoes,
+	uint32_t acc_l, uint32_t acc_r,
 	int base_level, int job_level, int str, int agi, int vit, int intl, int dex, int luk,
 	const char* persisted_name)
 {
@@ -3747,6 +3849,9 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 
 	population_engine_shell_equip_item(shell, armor, index_, "armor");
 	population_engine_shell_equip_item(shell, shoes, index_, "shoes");
+	// Goal 2: accessories persist too
+	if (acc_l) population_engine_shell_equip_item(shell, acc_l, index_, "acc_l", EQP_ACC_L);
+	if (acc_r) population_engine_shell_equip_item(shell, acc_r, index_, "acc_r", EQP_ACC_R);
 	status_calc_pc(shell, SCO_NONE);
 
 	// Mark as the owner's companion and align membership with the owner.
@@ -3798,7 +3903,7 @@ int population_engine_recall_companions(map_session_data *owner)
 		"SELECT shell_index, name, job_id, sex, hair_style, hair_color, cloth_color,"
 		" garment_nameid, option_, weapon_nameid, shield_nameid, head_top_nameid,"
 		" head_mid_nameid, head_bottom_nameid, armor_nameid, shoes_nameid,"
-		" base_level, job_level, str_, agi_, vit_, intl_, dex_, luk_"
+		" acc_l_nameid, acc_r_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_, luk_"
 		" FROM `cp_companion_persistence` WHERE owner_account_id=%u AND active=1",
 		owner->status.account_id);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) { Sql_ShowDebug(mmysql_handle); return 0; }
@@ -3823,6 +3928,8 @@ int population_engine_recall_companions(map_session_data *owner)
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t head_bottom = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t armor = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t shoes = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t acc_l = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t acc_r = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int base_level = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int job_level = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int str = atoi(data);
@@ -3836,7 +3943,7 @@ int population_engine_recall_companions(map_session_data *owner)
 		// expects the 'M'/'F' letters.
 		population_engine_recall_one_companion(owner, map_id, index_, job_id, sexv == 1 ? 'F' : 'M',
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
-			head_mid, head_bottom, armor, shoes, base_level, job_level, str, agi, vit, intl, dex, luk,
+			head_mid, head_bottom, armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk,
 			namebuf);
 		recalled++;
 	}
