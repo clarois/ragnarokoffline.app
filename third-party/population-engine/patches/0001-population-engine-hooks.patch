@@ -33,7 +33,7 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 index 9dd4a38..5baa8fb 100644
 --- a/src/custom/atcommand.inc
 +++ b/src/custom/atcommand.inc
-@@ -17,3 +17,249 @@
+@@ -17,3 +17,285 @@
  //	clif_specialeffect(&sd->bl, EF_HEARTCASTING, AREA);
  //	return 0;
  //}
@@ -234,7 +234,7 @@ index 9dd4a38..5baa8fb 100644
 +	nullpo_retr(-1, sd);
 +	char cmd[32], param[NAME_LENGTH];
 +	if (!message || !*message || sscanf(message, "%31s %23[^\n]", cmd, param) < 1) {
-+		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name>");
++		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
 +		return -1;
 +	}
 +	if (strcmpi(cmd, "list") == 0) {
@@ -280,7 +280,43 @@ index 9dd4a38..5baa8fb 100644
 +		clif_displaymessage(fd, msg);
 +		return 0;
 +	}
-+	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name>");
++	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
++		if (!param[0]) {
++			clif_displaymessage(fd, "Usage: @companion remove <name>");
++			return -1;
++		}
++		uint32_t index_ = 0; bool active = false;
++		if (!population_engine_companion_find(sd->status.account_id, param, &index_, &active)) {
++			char msg[NAME_LENGTH + 48];
++			snprintf(msg, sizeof(msg), "Companion '%s' not found in your saved list.", param);
++			clif_displaymessage(fd, msg);
++			return -1;
++		}
++		// If the companion is currently summoned, deactivate and release the
++		// shell first — a live shell must not outlive its row.
++		map_session_data *live = nullptr;
++		for (map_session_data *cand : g_population_engine_pcs) {
++			if (cand && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
++				live = cand;
++				break;
++			}
++		}
++		if (live != nullptr) {
++			if (live->status.party_id > 0 && live->status.party_id < 0x70000000)
++				population_engine_set_companion_active(sd->status.account_id, index_, false);
++			population_engine_shell_release(live);
++		}
++		if (population_engine_companion_delete(sd->status.account_id, param)) {
++			char msg[NAME_LENGTH + 64];
++			snprintf(msg, sizeof(msg), "Companion '%s' deleted from your saved list (gone for good).", param);
++			clif_displaymessage(fd, msg);
++		} else {
++			clif_displaymessage(fd, "Delete failed (see map-server console).");
++			return -1;
++		}
++		return 0;
++	}
++	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
 +	return -1;
 +}
 diff --git a/src/custom/atcommand_def.inc b/src/custom/atcommand_def.inc
@@ -1299,26 +1335,6 @@ index c05f24b..3e5e42b 100644
 +#include "population_engine.hpp"
  #include "quest.hpp"
  #include "storage.hpp"
- 
-@@ -27859,7 +27860,7 @@ BUILDIN_FUNC(mesemotion){
- 	// Validates emotion range
- 	if (id < ET_SURPRISE || id >= ET_MAX) {
- 		ShowError("buildin_mesemotion: Emotion ID %d is invalid.\n", id);
--		st->state = END;
-+		st->state = END;
- 		return SCRIPT_CMD_FAILURE;
- 	}
- 
-@@ -27870,8 +27871,8 @@ BUILDIN_FUNC(mesemotion){
- 	return SCRIPT_CMD_SUCCESS;
- #else
- 	ShowError( "buildin_mesemotion: This command requires PACKETVER 2023-03-02 or newer.\n" );
--	st->state = END;
--	return SCRIPT_CMD_FAILURE;
-+	st->state = END;
-+	return SCRIPT_CMD_FAILURE;
- #endif
- }
  
 diff --git a/src/map/skill.cpp b/src/map/skill.cpp
 index 27c9e23..d2dfb7c 100755

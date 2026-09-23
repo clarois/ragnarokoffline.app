@@ -3607,6 +3607,25 @@ bool population_engine_companion_find(uint32_t owner_account, const char* name_,
 	return true;
 }
 
+/// Goal 3 friend list: permanently DELETE a saved companion's row by name.
+/// Irreversible — the snapshot (name, gear, stats) is gone. If the companion
+/// is currently summoned, the caller must release the shell first.
+bool population_engine_companion_delete(uint32_t owner_account, const char* name_)
+{
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0]) return false;
+	char esc_name[48];
+	Sql_EscapeString(mmysql_handle, esc_name, name_);
+	char q[300];
+	snprintf(q, sizeof(q),
+		"DELETE FROM `cp_companion_persistence` WHERE owner_account_id=%u AND name='%s'",
+		owner_account, esc_name);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		return false;
+	}
+	return (Sql_NumRowsAffected(mmysql_handle) > 0);
+}
+
 /// Prints the owner's saved companions (name, job, active, favorite) to the
 /// player's chat via the @companion list command.
 void population_engine_companion_list(uint32_t owner_account, int fd)

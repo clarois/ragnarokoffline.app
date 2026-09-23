@@ -68,6 +68,8 @@ bool population_engine_companion_find(uint32_t owner_account, const char* name_,
 	uint32_t* out_index, bool* out_active);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
 void population_engine_companion_list(uint32_t owner_account, int fd);
+/// Goal 3 friend list: permanently delete a saved companion's row by name (irreversible).
+bool population_engine_companion_delete(uint32_t owner_account, const char* name_);
 /// True while this real player's party has fewer than four recruited companions.
 bool population_engine_can_recruit_companion(const map_session_data *owner);
 /// Return the real player who should receive a recruited companion's loot.
