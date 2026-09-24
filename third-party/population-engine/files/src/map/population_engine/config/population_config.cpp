@@ -1157,6 +1157,12 @@ static void applyProfile(PopulationEngine* dst, const PopulationEngine& src)
 	dst->luk_min  = src.luk_min;  dst->luk_max  = src.luk_max;
 	dst->base_level_min = src.base_level_min; dst->base_level_max = src.base_level_max;
 	dst->job_level_min  = src.job_level_min;  dst->job_level_max  = src.job_level_max;
+	dst->pow_min  = src.pow_min;  dst->pow_max  = src.pow_max;
+	dst->sta_min  = src.sta_min;  dst->sta_max  = src.sta_max;
+	dst->wis_min  = src.wis_min;  dst->wis_max  = src.wis_max;
+	dst->spl_min  = src.spl_min;  dst->spl_max  = src.spl_max;
+	dst->con_min  = src.con_min;  dst->con_max  = src.con_max;
+	dst->crt_min  = src.crt_min;  dst->crt_max  = src.crt_max;
 	// Appearance
 	dst->sex_override    = src.sex_override;
 	dst->hair_min        = src.hair_min;        dst->hair_max        = src.hair_max;
@@ -1263,6 +1269,12 @@ uint64 PopulationEngineDatabase::parseBodyNode(const ryml::NodeRef& node)
 		this->parseOptionalIntRange(node, "Int",          prof->intl_min,       prof->intl_max,       0);
 		this->parseOptionalIntRange(node, "Dex",          prof->dex_min,        prof->dex_max,        0);
 		this->parseOptionalIntRange(node, "Luk",          prof->luk_min,        prof->luk_max,        0);
+		this->parseOptionalIntRange(node, "Pow",          prof->pow_min,        prof->pow_max,        0);
+		this->parseOptionalIntRange(node, "Sta",          prof->sta_min,        prof->sta_max,        0);
+		this->parseOptionalIntRange(node, "Wis",          prof->wis_min,        prof->wis_max,        0);
+		this->parseOptionalIntRange(node, "Spl",          prof->spl_min,        prof->spl_max,        0);
+		this->parseOptionalIntRange(node, "Con",          prof->con_min,        prof->con_max,        0);
+		this->parseOptionalIntRange(node, "Crt",          prof->crt_min,        prof->crt_max,        0);
 		this->parseOptionalIntRange(node, "BaseLevel",    prof->base_level_min, prof->base_level_max, 0);
 		this->parseOptionalIntRange(node, "JobLevel",     prof->job_level_min,  prof->job_level_max,  0);
 		this->parseOptionalIntRange(node, "Hair",         prof->hair_min,       prof->hair_max,       0);

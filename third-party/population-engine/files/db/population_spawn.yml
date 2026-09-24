@@ -695,7 +695,9 @@ Footer:
   - Path: db/import/population_spawn.yml
 
 
-  - Profile: pve_trans_melee
+
+
+  - Profile: pve_lordknight
     Towns:
       - prontera
       - morocc
@@ -716,7 +718,7 @@ Footer:
       - gonryun
       - louyang
       - ayothaya
-    TownsPopulation: 8
+    TownsPopulation: 2
     Dungeons:
       - gl_knt01
       - gl_knt02
@@ -724,9 +726,9 @@ Footer:
       - odin_tem02
       - ice_dun01
       - ice_dun02
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
 
-  - Profile: pve_trans_caster
+  - Profile: pve_paladin2
     Towns:
       - prontera
       - morocc
@@ -747,7 +749,7 @@ Footer:
       - gonryun
       - louyang
       - ayothaya
-    TownsPopulation: 8
+    TownsPopulation: 2
     Dungeons:
       - gl_knt01
       - gl_knt02
@@ -755,9 +757,9 @@ Footer:
       - odin_tem02
       - ice_dun01
       - ice_dun02
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
 
-  - Profile: pve_trans_dps
+  - Profile: pve_highpriest
     Towns:
       - prontera
       - morocc
@@ -778,7 +780,7 @@ Footer:
       - gonryun
       - louyang
       - ayothaya
-    TownsPopulation: 8
+    TownsPopulation: 2
     Dungeons:
       - gl_knt01
       - gl_knt02
@@ -786,9 +788,9 @@ Footer:
       - odin_tem02
       - ice_dun01
       - ice_dun02
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
 
-  - Profile: pve_trans_support
+  - Profile: pve_highwizard
     Towns:
       - prontera
       - morocc
@@ -809,7 +811,7 @@ Footer:
       - gonryun
       - louyang
       - ayothaya
-    TownsPopulation: 8
+    TownsPopulation: 2
     Dungeons:
       - gl_knt01
       - gl_knt02
@@ -817,15 +819,294 @@ Footer:
       - odin_tem02
       - ice_dun01
       - ice_dun02
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
 
-  - Profile: pve_3rd_melee
+  - Profile: pve_professor
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_sniper
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_assassincross
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_stalker
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_whitesmith
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_creator
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_champion
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_clown
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_gypsy
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 2
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 3
+
+  - Profile: pve_runeknight
     Towns:
       - yuno
       - lighthalzen
       - rachel
       - veins
-    TownsPopulation: 6
+    TownsPopulation: 2
     Dungeons:
       - juperos_01
       - juperos_02
@@ -835,15 +1116,15 @@ Footer:
       - lhz_dun03
       - odin_tem02
       - odin_tem03
-    DungeonsPopulation: 15
+    DungeonsPopulation: 3
 
-  - Profile: pve_3rd_caster
+  - Profile: pve_royalguard
     Towns:
       - yuno
       - lighthalzen
       - rachel
       - veins
-    TownsPopulation: 6
+    TownsPopulation: 2
     Dungeons:
       - juperos_01
       - juperos_02
@@ -853,15 +1134,15 @@ Footer:
       - lhz_dun03
       - odin_tem02
       - odin_tem03
-    DungeonsPopulation: 15
+    DungeonsPopulation: 3
 
-  - Profile: pve_3rd_dps
+  - Profile: pve_mechanic
     Towns:
       - yuno
       - lighthalzen
       - rachel
       - veins
-    TownsPopulation: 6
+    TownsPopulation: 2
     Dungeons:
       - juperos_01
       - juperos_02
@@ -871,15 +1152,15 @@ Footer:
       - lhz_dun03
       - odin_tem02
       - odin_tem03
-    DungeonsPopulation: 15
+    DungeonsPopulation: 3
 
-  - Profile: pve_3rd_support
+  - Profile: pve_warlock
     Towns:
       - yuno
       - lighthalzen
       - rachel
       - veins
-    TownsPopulation: 6
+    TownsPopulation: 2
     Dungeons:
       - juperos_01
       - juperos_02
@@ -889,13 +1170,175 @@ Footer:
       - lhz_dun03
       - odin_tem02
       - odin_tem03
-    DungeonsPopulation: 15
+    DungeonsPopulation: 3
 
-  - Profile: pve_4th_melee
+  - Profile: pve_sorcerer
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_archbishop
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_ranger
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_guillotinecross
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_shadowchaser
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_sura
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_genetic
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_minstrel
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_wanderer
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 2
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 3
+
+  - Profile: pve_dragonknight
     Towns:
       - lighthalzen
       - rachel
-    TownsPopulation: 4
+    TownsPopulation: 1
     Dungeons:
       - abyss_01
       - abyss_02
@@ -905,13 +1348,13 @@ Footer:
       - thor_v03
       - mag_dun02
       - lhz_dun03
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
 
-  - Profile: pve_4th_caster
+  - Profile: pve_imperialguard
     Towns:
       - lighthalzen
       - rachel
-    TownsPopulation: 4
+    TownsPopulation: 1
     Dungeons:
       - abyss_01
       - abyss_02
@@ -921,13 +1364,13 @@ Footer:
       - thor_v03
       - mag_dun02
       - lhz_dun03
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
 
-  - Profile: pve_4th_dps
+  - Profile: pve_meister
     Towns:
       - lighthalzen
       - rachel
-    TownsPopulation: 4
+    TownsPopulation: 1
     Dungeons:
       - abyss_01
       - abyss_02
@@ -937,13 +1380,13 @@ Footer:
       - thor_v03
       - mag_dun02
       - lhz_dun03
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
 
-  - Profile: pve_4th_support
+  - Profile: pve_inquisitor
     Towns:
       - lighthalzen
       - rachel
-    TownsPopulation: 4
+    TownsPopulation: 1
     Dungeons:
       - abyss_01
       - abyss_02
@@ -953,4 +1396,260 @@ Footer:
       - thor_v03
       - mag_dun02
       - lhz_dun03
-    DungeonsPopulation: 12
+    DungeonsPopulation: 3
+
+  - Profile: pve_shadowcross
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_abysschaser
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_nightwatch
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_archmage
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_elementalmaster
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_cardinal
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_soulascetic
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_biolo
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_troubadour
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_trouvere
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_windhawk
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_skyemperor
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_shinkiro
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_shiranui
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_hypernovice
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3
+
+  - Profile: pve_spirithandler
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 1
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 3

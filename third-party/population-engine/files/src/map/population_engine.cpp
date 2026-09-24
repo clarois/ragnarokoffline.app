@@ -2612,6 +2612,35 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 		sd->status.luk = static_cast<uint16_t>(90 + (rnd() % 20));
 	}
 
+	// RAGNAROKMAC: 4th-job trait stats (Renewal trait era). No profile default means
+	// 0 — the classic-stat fallback above is fine for base stats, but traits must not
+	// inherit the 90+ rnd%%20 fallback or every 1st/2nd job shell would be
+	// trait-boosted. Only profiles that declare Pow/Sta/Wis/Spl/Con/Crt get them.
+	if (pop_cfg != nullptr && pop_cfg->pow_min >= 0) {
+		const int16_t hi = pop_cfg->pow_max >= 0 ? pop_cfg->pow_max : pop_cfg->pow_min;
+		sd->status.pow = cap_value(static_cast<int16_t>(population_roll_closed_range(pop_cfg->pow_min, hi)), 0, 999);
+	}
+	if (pop_cfg != nullptr && pop_cfg->sta_min >= 0) {
+		const int16_t hi = pop_cfg->sta_max >= 0 ? pop_cfg->sta_max : pop_cfg->sta_min;
+		sd->status.sta = cap_value(static_cast<int16_t>(population_roll_closed_range(pop_cfg->sta_min, hi)), 0, 999);
+	}
+	if (pop_cfg != nullptr && pop_cfg->wis_min >= 0) {
+		const int16_t hi = pop_cfg->wis_max >= 0 ? pop_cfg->wis_max : pop_cfg->wis_min;
+		sd->status.wis = cap_value(static_cast<int16_t>(population_roll_closed_range(pop_cfg->wis_min, hi)), 0, 999);
+	}
+	if (pop_cfg != nullptr && pop_cfg->spl_min >= 0) {
+		const int16_t hi = pop_cfg->spl_max >= 0 ? pop_cfg->spl_max : pop_cfg->spl_min;
+		sd->status.spl = cap_value(static_cast<int16_t>(population_roll_closed_range(pop_cfg->spl_min, hi)), 0, 999);
+	}
+	if (pop_cfg != nullptr && pop_cfg->con_min >= 0) {
+		const int16_t hi = pop_cfg->con_max >= 0 ? pop_cfg->con_max : pop_cfg->con_min;
+		sd->status.con = cap_value(static_cast<int16_t>(population_roll_closed_range(pop_cfg->con_min, hi)), 0, 999);
+	}
+	if (pop_cfg != nullptr && pop_cfg->crt_min >= 0) {
+		const int16_t hi = pop_cfg->crt_max >= 0 ? pop_cfg->crt_max : pop_cfg->crt_min;
+		sd->status.crt = cap_value(static_cast<int16_t>(population_roll_closed_range(pop_cfg->crt_min, hi)), 0, 999);
+	}
+
 	// HP/SP placeholders — status_calc_pc() overwrites these from job_stats.yml (includes
 	// job_aspd.yml and job_basepoints.yml), so the exact values here don't matter.
 	sd->status.max_hp = 1;
