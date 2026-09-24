@@ -148,7 +148,7 @@ jobs:
           WANT: ${{ github.event.inputs.platforms || 'win,linux,mac' }}
         run: |
           all='[{"os":"macos-14","platform":"mac","arch":"arm64","triple":"aarch64-apple-darwin","clis":"macos-aarch64"},{"os":"ubuntu-latest","platform":"linux","arch":"x64","triple":"x64-unknown-linux","clis":"linux-x86_64"},{"os":"windows-latest","platform":"win","arch":"x64","triple":"x64-pc-windows","clis":"windows-x86_64"}]'
-          out=$(echo "$all" | jq -c --arg want "$WANT" '[.[] | select($want | contains(.platform))]')
+          out=$(echo "$all" | jq -c --arg want "$WANT" '[.[] | .platform as $p | select($want | contains($p))]')
           printf 'matrix={"include":%s}\n' "$out" >> "$GITHUB_OUTPUT"
           echo "Selected platforms: $out"
 
