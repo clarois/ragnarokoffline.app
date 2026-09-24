@@ -3948,7 +3948,8 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		" shadow_armor_nameid=%u, shadow_weapon_nameid=%u, shadow_shield_nameid=%u,"
 		" shadow_shoes_nameid=%u, shadow_acc_l_nameid=%u, shadow_acc_r_nameid=%u,"
 		" base_level=%d, job_level=%d, job_id=%d, str_=%d, agi_=%d, vit_=%d, intl_=%d,"
-		" dex_=%d, luk_=%d, pow_=%d, sta_=%d, wis_=%d, spl_=%d, con_=%d, crt_=%d"
+		" dex_=%d, luk_=%d, pow_=%d, sta_=%d, wis_=%d, spl_=%d, con_=%d, crt_=%d,"
+		" mode=%d, duty=%d, heal_at=%d, emergency_at=%d"
 		" WHERE owner_account_id=%u AND shell_index=%u",
 		weapon, shield, sd->status.head_top, sd->status.head_mid, sd->status.head_bottom,
 		armor, shoes, acc_l, acc_r,
@@ -3957,6 +3958,8 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		sd->status.base_level, sd->status.job_level, sd->status.class_, sd->status.str, sd->status.agi,
 		sd->status.vit, sd->status.int_, sd->status.dex, sd->status.luk,
 		sd->status.pow, sd->status.sta, sd->status.wis, sd->status.spl, sd->status.con, sd->status.crt,
+		(int)sd->pop.companion_mode, (int)sd->pop.role,
+		(int)sd->pop.companion_heal_at, (int)sd->pop.companion_emergency_at,
 		owner, index_);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
@@ -4186,7 +4189,8 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	uint32_t c_top, uint32_t c_mid, uint32_t c_low, uint32_t c_garment,
 	uint32_t sh_armor, uint32_t sh_weapon, uint32_t sh_shield, uint32_t sh_shoes,
 	uint32_t sh_acc_l, uint32_t sh_acc_r,
-	int pow_, int sta_, int wis_, int spl_, int con_, int crt_)
+	int pow_, int sta_, int wis_, int spl_, int con_, int crt_,
+	int mode_, int duty_, int heal_at_, int emergency_at_)
 {
 	// Deterministic spawn cell next to the owner (small ring for an open spot).
 	int16_t x = 0, y = 0; bool placed = false;
@@ -4270,6 +4274,13 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	shell->status.spl = static_cast<int16_t>(spl_);
 	shell->status.con = static_cast<int16_t>(con_);
 	shell->status.crt = static_cast<int16_t>(crt_);
+	// RAGNAROKMAC (Phase 1): restore the saved stance/duty so orders survive a relog
+	// (previously the mode reset to Defensive every login).
+	shell->pop.companion_mode = static_cast<PopulationCompanionMode>(
+		(mode_ < 0 || mode_ > 2) ? 1 : mode_);
+	shell->pop.role = static_cast<int8_t>(duty_);
+	if (heal_at_ > 0)      shell->pop.companion_heal_at      = static_cast<int16_t>(heal_at_);
+	if (emergency_at_ > 0) shell->pop.companion_emergency_at = static_cast<int16_t>(emergency_at_);
 	shell->status.job_level  = cap_value(job_level, 1, MAX_LEVEL);
 	shell->status.str = str; shell->status.agi = agi;
 	shell->status.vit = vit; shell->status.int_ = intl;
@@ -4388,7 +4399,7 @@ int population_engine_recall_companions(map_session_data *owner)
 		" garment_nameid, option_, weapon_nameid, shield_nameid, head_top_nameid,"
 		" head_mid_nameid, head_bottom_nameid, armor_nameid, shoes_nameid,"
 		" acc_l_nameid, acc_r_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_, luk_,"
-		" pow_, sta_, wis_, spl_, con_, crt_,"
+		" pow_, sta_, wis_, spl_, con_, crt_, mode, duty, heal_at, emergency_at,"
 		" costume_top_nameid, costume_mid_nameid, costume_low_nameid, costume_garment_nameid,"
 		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
 		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid"
@@ -4432,6 +4443,10 @@ int population_engine_recall_companions(map_session_data *owner)
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int spl_ = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int con_ = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int crt_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int mode_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int duty_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int heal_at_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int emergency_at_ = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_top = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_mid = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_low = atoi(data);
@@ -4449,7 +4464,7 @@ int population_engine_recall_companions(map_session_data *owner)
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
 			head_mid, head_bottom, armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk,
 			namebuf, c_top, c_mid, c_low, c_garment, sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r,
-			pow_, sta_, wis_, spl_, con_, crt_);
+			pow_, sta_, wis_, spl_, con_, crt_, mode_, duty_, heal_at_, emergency_at_);
 		recalled++;
 	}
 	Sql_FreeResult(mmysql_handle);
@@ -5397,6 +5412,7 @@ void population_engine_on_party_chat(map_session_data *from_sd, const char *mess
 				continue;
 			bot->pop.companion_mode = mode;
 			population_companion_clear_target(bot);
+			population_engine_persist_companion_gear(bot); // stance survives restart
 			changed++;
 		}
 		const char *mode_name = mode == PopulationCompanionMode::Attack ? "Attack"
@@ -5430,6 +5446,7 @@ void population_engine_on_party_chat(map_session_data *from_sd, const char *mess
 			continue;
 		bot->pop.role = static_cast<int8_t>(role);
 		population_companion_clear_target(bot);
+		population_engine_persist_companion_gear(bot); // duty survives restart
 		const char *role_name = role == PopulationRoleType::Tank ? "Tank"
 			: role == PopulationRoleType::Support ? "Support" : "Attacker";
 		char reply[CHAT_SIZE_MAX];
@@ -5441,6 +5458,59 @@ void population_engine_on_party_chat(map_session_data *from_sd, const char *mess
 		party_send_message(bot, reply, strlen(reply) + 1);
 		ShowInfo("Population engine: party leader %s set companion %s role to %s.\n",
 			from_sd->status.name, bot->status.name, role_name);
+	}
+
+	// --- Orders ---
+	// "taunt": the defender (tank-role) companion grabs the owner's current target
+	// and drags it in. "recall": teleport every summoned companion to the owner.
+	if (population_companion_has_token(tokens, "taunt") || population_companion_has_token(tokens, "pull")) {
+		unit_data *owner_ud = unit_bl2ud(from_sd);
+		uint32 target = 0;
+		if (owner_ud && owner_ud->target > 0)
+			target = static_cast<uint32>(owner_ud->target);
+		else if (owner_ud && owner_ud->skilltimer != INVALID_TIMER && owner_ud->skilltarget > 0)
+			target = static_cast<uint32>(owner_ud->skilltarget);
+		int assigned = 0;
+		if (target != 0) {
+			for (map_session_data *bot : g_population_engine_pcs) {
+				if (!pop_is_companion(bot) || bot->status.party_id != from_sd->status.party_id)
+					continue;
+				if (static_cast<PopulationRoleType>(bot->pop.role) != PopulationRoleType::Tank)
+					continue;
+				if (pc_isdead(bot)) continue;
+				bot->pop.sticky_target_id = static_cast<int>(target);
+				bot->pop.sticky_until = gettick() + 15000;
+				population_shell_target_change(bot, static_cast<int>(target));
+				assigned++;
+			}
+		}
+		char reply[CHAT_SIZE_MAX];
+		if (assigned > 0)
+			safesnprintf(reply, sizeof(reply), "Companions: defender pulling your target.");
+		else if (target == 0)
+			safesnprintf(reply, sizeof(reply), "Companions: no target — attack a monster first, then taunt.");
+		else
+			safesnprintf(reply, sizeof(reply), "Companions: no defender in the party (set one with \"<name> tank\").");
+		clif_displaymessage(from_sd->fd, reply);
+	}
+	if (population_companion_has_token(tokens, "recall")) {
+		int moved = 0;
+		for (map_session_data *bot : g_population_engine_pcs) {
+			if (!pop_is_companion(bot) || bot->status.party_id != from_sd->status.party_id)
+				continue;
+			if (pc_isdead(bot)) continue;
+			if (bot->m == from_sd->m && distance_bl(bot, from_sd) <= 3) continue;
+			int16_t tx = from_sd->x, ty = from_sd->y;
+			map_search_freecell(from_sd, from_sd->m, &tx, &ty, 2, 2, 0);
+			if (pc_setpos(bot, from_sd->m, tx, ty, CLR_TELEPORT) == SETPOS_OK) {
+				pop_shell_finish_map_placement(bot);
+				pop_shell_broadcast_map_placement(bot);
+				moved++;
+			}
+		}
+		char reply[CHAT_SIZE_MAX];
+		safesnprintf(reply, sizeof(reply), "Companions: recalled %d to your side.", moved);
+		clif_displaymessage(from_sd->fd, reply);
 	}
 }
 

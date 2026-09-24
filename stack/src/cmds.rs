@@ -1529,6 +1529,10 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
            `spl_`             SMALLINT      NOT NULL DEFAULT 0,
            `con_`             SMALLINT      NOT NULL DEFAULT 0,
            `crt_`             SMALLINT      NOT NULL DEFAULT 0,
+           `mode`             TINYINT       NOT NULL DEFAULT 1, -- companion stance: 0 passive, 1 defensive, 2 attack (v6)
+           `duty`             TINYINT       NOT NULL DEFAULT 0, -- role: 0 attacker, 1 tank, 2 support (v6)
+           `heal_at`          TINYINT       NOT NULL DEFAULT 75, -- support heal threshold HP% (v6)
+           `emergency_at`     TINYINT       NOT NULL DEFAULT 35, -- support emergency heal HP% (v6)
            `map_id`           SMALLINT      NOT NULL DEFAULT 0, -- mapindex id of owner at recruit (recall target)
            `active`           TINYINT       NOT NULL DEFAULT 1, -- 1 = recalled on login; 0 = released (Goal 3 sets this)
            `favorite`         TINYINT       NOT NULL DEFAULT 0, -- 1 = owner favorited (friend list sort)
