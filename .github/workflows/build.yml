@@ -136,31 +136,27 @@ jobs:
   # One app per platform. Only macOS signs, because it is the only one with a
   # certificate today — not because the others are less real.
   # ---------------------------------------------------------------------------
+  # Compute the platform matrix at runtime so manual builds can skip lanes
+  # (job-level if: cannot reference matrix context; GitHub rejects it at parse).
+  platforms:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          WANT: ${{ github.event.inputs.platforms || 'win,linux,mac' }}
+        run: |
+          all='[{"os":"macos-14","platform":"mac","arch":"arm64","triple":"aarch64-apple-darwin","clis":"macos-aarch64"},{"os":"ubuntu-latest","platform":"linux","arch":"x64","triple":"x64-unknown-linux","clis":"linux-x86_64"},{"os":"windows-latest","platform":"win","arch":"x64","triple":"x64-pc-windows","clis":"windows-x86_64"}]'
+          out=$(echo "$all" | jq -c --arg want "$WANT" '[.[] | select($want | contains(.platform))]')
+          printf 'matrix={"include":%s}\n' "$out" >> "$GITHUB_OUTPUT"
+          echo "Selected platforms: $out"
+
   app:
-    needs: client
+    needs: [client, platforms]
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            platform: mac
-            arch: arm64
-            triple: aarch64-apple-darwin
-            clis: macos-aarch64
-          # nebula-slim is validated on Linux and Windows, so these are real
-          # targets rather than packaging exercises. Each pulls the embed kit
-          # built for its own host triple.
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-            triple: x64-unknown-linux
-            clis: linux-x86_64
-          - os: windows-latest
-            platform: win
-            arch: x64
-            triple: x64-pc-windows
-            clis: windows-x86_64
-    if: contains(fromJSON(github.event.inputs.platforms || '"win,linux,mac"'), matrix.platform)
+      matrix: ${{ fromJSON(needs.platforms.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     # The `secrets` context is not available in a step's `if:` — only in `env:`
     # and `with:`. So the presence of each credential is resolved once here, at
