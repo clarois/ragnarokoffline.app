@@ -49,6 +49,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Platforms to build (comma-separated subset of: win,linux,mac)"
+        required: false
+        default: "win,linux,mac"
 
 # Pinned, not "whatever is latest".
 #
@@ -155,6 +160,7 @@ jobs:
             arch: x64
             triple: x64-pc-windows
             clis: windows-x86_64
+    if: contains(inputs.platforms || 'win,linux,mac', matrix.platform)
     runs-on: ${{ matrix.os }}
     # The `secrets` context is not available in a step's `if:` — only in `env:`
     # and `with:`. So the presence of each credential is resolved once here, at

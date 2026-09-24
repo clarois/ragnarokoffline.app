@@ -3489,13 +3489,20 @@ static void population_engine_persist_companion_sql(
 		"(owner_account_id, shell_index, name, job_id, sex, hair_style, hair_color,"
 		" cloth_color, garment_nameid, option_, weapon_nameid, shield_nameid,"
 		" head_top_nameid, head_mid_nameid, head_bottom_nameid, armor_nameid,"
-		" shoes_nameid, acc_l_nameid, acc_r_nameid, base_level, job_level, str_,"
+		" shoes_nameid, acc_l_nameid, acc_r_nameid, costume_top_nameid,"
+		" costume_mid_nameid, costume_low_nameid, costume_garment_nameid,"
+		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
+		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid,"
+		" base_level, job_level, str_,"
 		" agi_, vit_, intl_, dex_, luk_, map_id, active)"
-		" VALUES(%u,%u,'%s',%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
+		" VALUES(%u,%u,'%s',%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
+		"%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
 		"%d,%d,%d,%d,%d,%d,%d,1)",
 		owner_account, index_, esc_name, job_id, sex, hair_style, hair_color, cloth_color,
 		garment_nameid, option_, weapon, shield, head_top, head_mid, head_bottom,
-		armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk, map_id);
+		armor, shoes, acc_l, acc_r, 0u, 0u, 0u, 0u,
+		0u, 0u, 0u, 0u, 0u, 0u,
+		base_level, job_level, str, agi, vit, intl, dex, luk, map_id);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
 		ShowError("population_engine: persist companion index %u for owner %u FAILED\n",
@@ -3619,15 +3626,30 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 	const uint32_t index_ = sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE;
 
 	uint32_t weapon=0, shield=0, armor=0, shoes=0, acc_l=0, acc_r=0;
+	// Goal 2: also snapshot costume / shadow / garment slots so traded vanity
+	// and shadow gear survive restarts instead of vanishing on the next login.
+	uint32_t c_top=0, c_mid=0, c_low=0, c_garment=0, garment=0;
+	uint32_t sh_armor=0, sh_weapon=0, sh_shield=0, sh_shoes=0, sh_acc_l=0, sh_acc_r=0;
 	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
 		const struct item &slot = sd->inventory.u.items_inventory[i];
 		if (!slot.nameid || !slot.equip) continue; // equipped only
-		if ((slot.equip & EQP_HAND_R) && !(slot.equip & EQP_SHADOW_WEAPON))  weapon  = slot.nameid;
-		else if ((slot.equip & EQP_HAND_L) && !(slot.equip & EQP_SHADOW_SHIELD)) shield  = slot.nameid;
-		else if (slot.equip & EQP_ARMOR)                                          armor  = slot.nameid;
-		else if (slot.equip & EQP_SHOES)                                          shoes  = slot.nameid;
-		else if (slot.equip & EQP_ACC_L)                                          acc_l  = slot.nameid;
-		else if (slot.equip & EQP_ACC_R)                                          acc_r  = slot.nameid;
+		if (slot.equip & EQP_SHADOW_WEAPON)       sh_weapon  = slot.nameid;
+		else if (slot.equip & EQP_SHADOW_SHIELD)  sh_shield  = slot.nameid;
+		else if (slot.equip & EQP_SHADOW_ARMOR)   sh_armor   = slot.nameid;
+		else if (slot.equip & EQP_SHADOW_SHOES)   sh_shoes   = slot.nameid;
+		else if (slot.equip & EQP_SHADOW_ACC_L)   sh_acc_l   = slot.nameid;
+		else if (slot.equip & EQP_SHADOW_ACC_R)   sh_acc_r   = slot.nameid;
+		else if (slot.equip & EQP_COSTUME_HEAD_TOP) c_top    = slot.nameid;
+		else if (slot.equip & EQP_COSTUME_HEAD_MID) c_mid    = slot.nameid;
+		else if (slot.equip & EQP_COSTUME_HEAD_LOW) c_low    = slot.nameid;
+		else if (slot.equip & EQP_COSTUME_GARMENT)  c_garment= slot.nameid;
+		else if (slot.equip & EQP_GARMENT)        garment  = slot.nameid;
+		else if (slot.equip & EQP_HAND_R)         weapon   = slot.nameid;
+		else if (slot.equip & EQP_HAND_L)         shield   = slot.nameid;
+		else if (slot.equip & EQP_ARMOR)          armor    = slot.nameid;
+		else if (slot.equip & EQP_SHOES)          shoes    = slot.nameid;
+		else if (slot.equip & EQP_ACC_L)          acc_l    = slot.nameid;
+		else if (slot.equip & EQP_ACC_R)          acc_r    = slot.nameid;
 	}
 
 	// UPDATE only the mutable columns — identity (owner, index, name, job, sex,
@@ -3638,11 +3660,17 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		"UPDATE `cp_companion_persistence` SET weapon_nameid=%u, shield_nameid=%u,"
 		" head_top_nameid=%u, head_mid_nameid=%u, head_bottom_nameid=%u,"
 		" armor_nameid=%u, shoes_nameid=%u, acc_l_nameid=%u, acc_r_nameid=%u,"
+		" garment_nameid=%u, costume_top_nameid=%u, costume_mid_nameid=%u,"
+		" costume_low_nameid=%u, costume_garment_nameid=%u,"
+		" shadow_armor_nameid=%u, shadow_weapon_nameid=%u, shadow_shield_nameid=%u,"
+		" shadow_shoes_nameid=%u, shadow_acc_l_nameid=%u, shadow_acc_r_nameid=%u,"
 		" base_level=%d, job_level=%d, str_=%d, agi_=%d, vit_=%d, intl_=%d,"
 		" dex_=%d, luk_=%d"
 		" WHERE owner_account_id=%u AND shell_index=%u",
 		weapon, shield, sd->status.head_top, sd->status.head_mid, sd->status.head_bottom,
 		armor, shoes, acc_l, acc_r,
+		garment, c_top, c_mid, c_low, c_garment,
+		sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r,
 		sd->status.base_level, sd->status.job_level, sd->status.str, sd->status.agi,
 		sd->status.vit, sd->status.int_, sd->status.dex, sd->status.luk,
 		owner, index_);
@@ -3831,7 +3859,7 @@ void population_engine_companion_list(uint32_t owner_account, int fd)
 	if (mmysql_handle == nullptr) return;
 	char q[400];
 	snprintf(q, sizeof(q),
-		"SELECT name, job_id, active, favorite FROM `cp_companion_persistence`"
+		"SELECT name, job_id, active, favorite, base_level FROM `cp_companion_persistence`"
 		" WHERE owner_account_id=%u ORDER BY favorite DESC, name ASC",
 		owner_account);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
@@ -3849,9 +3877,11 @@ void population_engine_companion_list(uint32_t owner_account, int fd)
 		Sql_GetData(mmysql_handle, 1, &data, nullptr); int job_id = atoi(data);
 		Sql_GetData(mmysql_handle, 2, &data, nullptr); bool active = atoi(data) != 0;
 		Sql_GetData(mmysql_handle, 3, &data, nullptr); bool fav = atoi(data) != 0;
-		char msg[NAME_LENGTH + 64];
-		snprintf(msg, sizeof(msg), "  %s%s — job %d — %s",
-			fav ? "* " : "  ", namebuf, job_id, active ? "in party" : "saved (expelled)");
+		Sql_GetData(mmysql_handle, 4, &data, nullptr); int base_lv = atoi(data);
+		char msg[NAME_LENGTH + 80];
+		snprintf(msg, sizeof(msg), "  %s%s — %s Lv.%d — %s",
+			fav ? "* " : "  ", namebuf, job_name(job_id), base_lv,
+			active ? "in party" : "saved (expelled)");
 		clif_displaymessage(fd, msg);
 		count++;
 	}
@@ -3867,7 +3897,10 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	uint32_t head_mid, uint32_t head_bottom, uint32_t armor, uint32_t shoes,
 	uint32_t acc_l, uint32_t acc_r,
 	int base_level, int job_level, int str, int agi, int vit, int intl, int dex, int luk,
-	const char* persisted_name)
+	const char* persisted_name,
+	uint32_t c_top, uint32_t c_mid, uint32_t c_low, uint32_t c_garment,
+	uint32_t sh_armor, uint32_t sh_weapon, uint32_t sh_shield, uint32_t sh_shoes,
+	uint32_t sh_acc_l, uint32_t sh_acc_r)
 {
 	// Deterministic spawn cell next to the owner (small ring for an open spot).
 	int16_t x = 0, y = 0; bool placed = false;
@@ -3949,6 +3982,17 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	// Goal 2: accessories persist too
 	if (acc_l) population_engine_shell_equip_item(shell, acc_l, index_, "acc_l", EQP_ACC_L);
 	if (acc_r) population_engine_shell_equip_item(shell, acc_r, index_, "acc_r", EQP_ACC_R);
+	// v4: costume + shadow + garment gear persists too (traded vanity/shadow items)
+	if (c_top)      population_engine_shell_equip_item(shell, c_top, index_, "costume_top", EQP_COSTUME_HEAD_TOP);
+	if (c_mid)      population_engine_shell_equip_item(shell, c_mid, index_, "costume_mid", EQP_COSTUME_HEAD_MID);
+	if (c_low)      population_engine_shell_equip_item(shell, c_low, index_, "costume_low", EQP_COSTUME_HEAD_LOW);
+	if (c_garment)  population_engine_shell_equip_item(shell, c_garment, index_, "costume_garment", EQP_COSTUME_GARMENT);
+	if (sh_armor)   population_engine_shell_equip_item(shell, sh_armor, index_, "shadow_armor", EQP_SHADOW_ARMOR);
+	if (sh_weapon)  population_engine_shell_equip_item(shell, sh_weapon, index_, "shadow_weapon", EQP_SHADOW_WEAPON);
+	if (sh_shield)  population_engine_shell_equip_item(shell, sh_shield, index_, "shadow_shield", EQP_SHADOW_SHIELD);
+	if (sh_shoes)   population_engine_shell_equip_item(shell, sh_shoes, index_, "shadow_shoes", EQP_SHADOW_SHOES);
+	if (sh_acc_l)   population_engine_shell_equip_item(shell, sh_acc_l, index_, "shadow_acc_l", EQP_SHADOW_ACC_L);
+	if (sh_acc_r)   population_engine_shell_equip_item(shell, sh_acc_r, index_, "shadow_acc_r", EQP_SHADOW_ACC_R);
 	status_calc_pc(shell, SCO_NONE);
 
 	// Mark as the owner's companion and align membership with the owner.
@@ -3991,6 +4035,51 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	pop_shell_broadcast_map_placement(shell);
 }
 
+// RAGNAROKMAC (Goal 1): post-recall self-heal. The party join round-trip
+// (party_reply_invite -> intif_party_addmember -> party_member_added) is async
+// and can silently lose a shell: the reply arrives while the map is still
+// registering the owner, or a second 0x3022 lands before the first reply.
+// Two seconds after the batch, walk this owner's recalled shells and any whose
+// status.party_id is still unset/fake get the join re-requested; then the
+// owner's party window is force-resynced from char regardless.
+struct pop_recall_verify {
+	uint32_t owner_account;
+	int16_t owner_map;
+};
+static TIMER_FUNC(population_engine_recall_verify_timer)
+{
+	struct pop_recall_verify *ctx = (struct pop_recall_verify *)data;
+	if (!ctx) return 0;
+	map_session_data *owner = map_id2sd(ctx->owner_account);
+	if (owner && owner->state.active && owner->m == ctx->owner_map) {
+		const int32 party = owner->status.party_id;
+		if (party > 0 && party < 0x70000000) {
+			bool retried = false;
+			for (map_session_data *shell : g_population_engine_pcs) {
+				if (!shell || !shell->state.active) continue;
+				if (shell->pop.companion_owner_account != owner->status.account_id) continue;
+				// Still carrying the fake per-map party id or none at all: never joined.
+				if (shell->status.party_id == party) continue;
+				if (shell->status.party_id >= 0x70000000 || shell->status.party_id == 0) {
+					ShowInfo("population_engine: recall verify: shell %u (party %d) did not join; retrying.\n",
+						shell->status.char_id, shell->status.party_id);
+					shell->status.party_id = 0;
+					shell->party_joining = false;
+					shell->party_invite = party;
+					shell->party_invite_account = owner->status.account_id;
+					if (party_reply_invite(*shell, party, 1)) retried = true;
+				}
+			}
+			if (retried) {
+				// re-sync the party window after the retries land
+				party_request_info(party, owner->status.char_id);
+			}
+		}
+	}
+	delete ctx;
+	return 0;
+}
+
 int population_engine_recall_companions(map_session_data *owner)
 {
 	if (!owner || mmysql_handle == nullptr) return 0;
@@ -4000,7 +4089,10 @@ int population_engine_recall_companions(map_session_data *owner)
 		"SELECT shell_index, name, job_id, sex, hair_style, hair_color, cloth_color,"
 		" garment_nameid, option_, weapon_nameid, shield_nameid, head_top_nameid,"
 		" head_mid_nameid, head_bottom_nameid, armor_nameid, shoes_nameid,"
-		" acc_l_nameid, acc_r_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_, luk_"
+		" acc_l_nameid, acc_r_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_, luk_,"
+		" costume_top_nameid, costume_mid_nameid, costume_low_nameid, costume_garment_nameid,"
+		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
+		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid"
 		" FROM `cp_companion_persistence` WHERE owner_account_id=%u AND active=1",
 		owner->status.account_id);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) { Sql_ShowDebug(mmysql_handle); return 0; }
@@ -4035,13 +4127,23 @@ int population_engine_recall_companions(map_session_data *owner)
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int intl = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int dex = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int luk = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_top = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_mid = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_low = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_garment = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_armor = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_weapon = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_shield = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_shoes = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_acc_l = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_acc_r = atoi(data);
 		if (index_ == 0 || job_id == 0) continue;
 		// DB stores sex as TINYINT (0=SEX_MALE, 1=SEX_FEMALE); the spawn path
 		// expects the 'M'/'F' letters.
 		population_engine_recall_one_companion(owner, map_id, index_, job_id, sexv == 1 ? 'F' : 'M',
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
 			head_mid, head_bottom, armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk,
-			namebuf);
+			namebuf, c_top, c_mid, c_low, c_garment, sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r);
 		recalled++;
 	}
 	Sql_FreeResult(mmysql_handle);
@@ -4052,8 +4154,12 @@ int population_engine_recall_companions(map_session_data *owner)
 		// the owner's client party window stale. Requesting full party info
 		// from the char server rebuilds the map-side party (with whatever
 		// shell members actually joined) and re-broadcasts clif_party_info.
-		if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000)
+		if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000) {
 			party_request_info(owner->status.party_id, owner->status.char_id);
+			// Self-heal pass 2s later: re-drive any shell whose async join never landed.
+			struct pop_recall_verify *ctx = new pop_recall_verify{ owner->status.account_id, (int16_t)owner->m };
+			add_timer(gettick() + 2000, population_engine_recall_verify_timer, 0, (intptr_t)ctx);
+		}
 	}
 	return recalled;
 }
