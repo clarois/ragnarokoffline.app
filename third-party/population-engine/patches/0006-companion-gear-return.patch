@@ -90,11 +90,69 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
  		if (!param[0]) {
  			clif_displaymessage(fd, "Usage: @companion remove <name>");
-@@ -308,6 +376,6 @@
+@@ -308,6 +376,64 @@
  		}
  		return 0;
  	}
 -	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
-+	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name> [slots]");
++	// RAGNAROKMAC (Phase 1/2): expel a summoned companion from the party but KEEP
++	// its persistence row, so it can be summoned again later (unlike `remove`,
++	// which deletes the snapshot for good).
++	if (strcmpi(cmd, "dismiss") == 0 || strcmpi(cmd, "bench") == 0) {
++		if (!param[0]) {
++			clif_displaymessage(fd, "Usage: @companion dismiss <name>");
++			return -1;
++		}
++		uint32_t index_ = 0; bool active = false;
++		if (!population_engine_companion_find(sd->status.account_id, param, &index_, &active)) {
++			char msg[NAME_LENGTH + 48];
++			snprintf(msg, sizeof(msg), "Companion '%s' not found in your saved list.", param);
++			clif_displaymessage(fd, msg);
++			return -1;
++		}
++		map_session_data *live = nullptr;
++		for (map_session_data *cand : g_population_engine_pcs) {
++			if (cand && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
++				live = cand;
++				break;
++			}
++		}
++		if (live == nullptr) {
++			clif_displaymessage(fd, "That companion is not summoned right now.");
++			return -1;
++		}
++		// Mark the row inactive BEFORE the release so the withdrawal path cannot
++		// race the goal-3 hook; the snapshot itself is retained.
++		population_engine_set_companion_active(sd->status.account_id, index_, false);
++		population_engine_shell_release(live);
++		{
++			char msg[NAME_LENGTH + 64];
++			snprintf(msg, sizeof(msg), "Companion '%s' dismissed. Summon it again any time.", param);
++			clif_displaymessage(fd, msg);
++		}
++		return 0;
++	}
++	// RAGNAROKMAC (Phase 2): support healer thresholds for the whole party
++	// ("@companion heal <normal%> <emergency%>"). Stored per companion row via the
++	// existing persistence path; the support presets gate on these.
++	if (strcmpi(cmd, "heal") == 0) {
++		int normal = 0, emergency = 0;
++		if (sscanf(param, "%d %d", &normal, &emergency) != 2 || normal < 1 || normal > 99 ||
++			emergency < 1 || emergency > 99) {
++			clif_displaymessage(fd, "Usage: @companion heal <heal below %%%d..99> <emergency %%%d..99>");
++			return -1;
++		}
++		const int applied = population_engine_companion_set_heal_thresholds(
++			sd->status.account_id, (int16_t)normal, (int16_t)emergency);
++		char msg[128];
++		if (applied > 0)
++			snprintf(msg, sizeof(msg), "Companions: heal below %d%%, emergency below %d%% (on %d companion(s)).",
++				normal, emergency, applied);
++		else
++			snprintf(msg, sizeof(msg), "Companions: thresholds saved; no companion is summoned right now.");
++		clif_displaymessage(fd, msg);
++		return 0;
++	}
++	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | dismiss <name> | gear <name> [slots] | heal <normal%> <emergency%>");
  	return -1;
  }

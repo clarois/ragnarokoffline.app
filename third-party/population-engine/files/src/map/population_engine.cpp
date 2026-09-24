@@ -2193,6 +2193,28 @@ static void pop_companion_try_job_advance(map_session_data *sd)
 	population_engine_persist_companion_gear(sd);
 }
 
+/// RAGNAROKMAC (Phase 2): set the support healer thresholds for every summoned
+/// companion belonging to `owner_account`, persisting each row. Returns how many
+/// live companions were updated (0 is still a success to the caller: the values
+/// are saved for the next summon).
+int population_engine_companion_set_heal_thresholds(uint32_t owner_account, int16_t heal_at, int16_t emergency_at)
+{
+	if (heal_at < 1 || heal_at > 99 || emergency_at < 1 || emergency_at > 99)
+		return -1;
+	int applied = 0;
+	for (map_session_data *sd : g_population_engine_pcs) {
+		if (!sd || !pop_is_companion(sd))
+			continue;
+		if (sd->pop.companion_owner_account != owner_account)
+			continue;
+		sd->pop.companion_heal_at = heal_at;
+		sd->pop.companion_emergency_at = emergency_at;
+		population_engine_persist_companion_gear(sd);
+		++applied;
+	}
+	return applied;
+}
+
 /// Global combat timer: proximity-driven (mirrors mob_ai_hard).
 /// Only bots within view of a real PC tick. Bots on empty maps cost ~zero,
 /// so the engine scales by real-player count, not by total bot count.

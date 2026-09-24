@@ -1,0 +1,26 @@
+{
+  "name": "companion-panel",
+  "version": "1.0.0",
+  "author": "Ragnarok Offline",
+  "description": "Companion command panel: summon and bench saved companions, set duties (attacker/tank/support), issue stance orders, manage healer priority and save party squads for one-click recall.",
+  "requires": {
+    "app": ">=1.0.9",
+    "era": "any"
+  },
+  "settings": [
+    {
+      "key": "show_button",
+      "type": "boolean",
+      "default": true,
+      "label": "Show the Companions button",
+      "description": "Adds a Companions button to the party window that opens this panel. Turn it off to keep the hotkey only."
+    },
+    {
+      "key": "hotkey_enabled",
+      "type": "boolean",
+      "default": true,
+      "label": "Open with Ctrl+Shift+C",
+      "description": "Toggles the panel while in game. Ignored while typing in chat or a dialog."
+    }
+  ]
+}
