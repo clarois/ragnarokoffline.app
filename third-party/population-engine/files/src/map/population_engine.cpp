@@ -4084,7 +4084,7 @@ int population_engine_recall_companions(map_session_data *owner)
 {
 	if (!owner || mmysql_handle == nullptr) return 0;
 	const int16_t map_id = (int16_t)owner->m;
-	char q[560];
+	char q[1024]; // must fit the full v4 recall SELECT (~590 bytes with account id)
 	snprintf(q, sizeof(q),
 		"SELECT shell_index, name, job_id, sex, hair_style, hair_color, cloth_color,"
 		" garment_nameid, option_, weapon_nameid, shield_nameid, head_top_nameid,"

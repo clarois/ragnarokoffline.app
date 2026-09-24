@@ -29,6 +29,21 @@ diff --git a/src/map/party.cpp b/src/map/party.cpp
  	if( p ) {
  		map_session_data* party_sd = party_getavailablesd( p );
  
+@@ -909,6 +918,14 @@
+ 		}
+ 	}
+ 
++	// RAGNAROKMAC (Goal 3): a DISBANDED party releases its companions too — mark
++	// each population member's persistence row inactive so it is not recalled on
++	// the owner's next login. The snapshot is retained for re-invite.
++	for( i = 0; i < MAX_PARTY; i++ ) {
++		if( p->party.member[i].account_id != 0 && IS_POPULATION_ENGINE_ACCOUNT_ID(p->party.member[i].account_id) )
++			population_engine_deactivate_expelled_companion(party_id, p->party.member[i].account_id, p->party.member[i].char_id);
++	}
++
+ 	idb_remove(party_db,party_id);
+ 
+ 	return 1;
 diff --git a/src/map/pc.cpp b/src/map/pc.cpp
 --- a/src/map/pc.cpp
 +++ b/src/map/pc.cpp
