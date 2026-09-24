@@ -273,6 +273,20 @@ static const std::unordered_map<std::string, uint16_t> kJobNameMap = {
 	// Taekwon / SL / extended
 	{ "Taekwon",         4046 }, { "StarGladiator",   4047 }, { "StarGladiatorUnion", 4048 },
 	{ "SoulLinker",      4049 },
+	// 3rd jobs (4054-4072; _T variants omitted from spawn names - base only)
+	{ "RuneKnight",      4054 }, { "Warlock",         4055 }, { "Ranger",          4056 },
+	{ "ArchBishop",      4057 }, { "Mechanic",        4058 }, { "GuillotineCross", 4059 },
+	{ "RoyalGuard",      4066 }, { "Sorcerer",        4067 }, { "Minstrel",        4068 },
+	{ "Wanderer",        4069 }, { "Sura",            4070 }, { "Genetic",         4071 },
+	{ "ShadowChaser",    4072 },
+	// 4th jobs (4252-4264 main line, 4302-4308 extended)
+	{ "DragonKnight",    4252 }, { "Meister",         4253 }, { "ShadowCross",     4254 },
+	{ "ArchMage",        4255 }, { "Cardinal",        4256 }, { "Windhawk",        4257 },
+	{ "ImperialGuard",   4258 }, { "Biolo",           4259 }, { "AbyssChaser",     4260 },
+	{ "ElementalMaster", 4261 }, { "Inquisitor",      4262 }, { "Troubadour",      4263 },
+	{ "Trouvere",        4264 }, { "SkyEmperor",      4302 }, { "SoulAscetic",     4303 },
+	{ "Shinkiro",        4304 }, { "Shiranui",        4305 }, { "NightWatch",      4306 },
+	{ "HyperNovice",     4307 }, { "SpiritHandler",   4308 },
 };
 
 PopulationNamesDatabase g_population_names_db;

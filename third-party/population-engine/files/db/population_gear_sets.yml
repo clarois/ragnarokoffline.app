@@ -546,3 +546,1311 @@ Body:
       - Sandals
     AccL: 0
     AccR: 0
+
+
+  - GearSetName: eden_trans_knight
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Slayer3
+      - P_Saber3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_priest
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Mace3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_wizard
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Staff3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_smith
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Two_Handed_Axe1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_hunter
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Bow3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_assassin
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Katar1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_crusader
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Sphere1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_monk
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Knuckle1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_sage
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Dic1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_rogue
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Dagger3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_alch
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Two_Handed_Axe1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_bard
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_String_Inst1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden_trans_dancer
+    HeadTop:
+      - Para_Team_Hat2
+      - Sahkkat
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor
+    Weapon:
+      - P_Tail1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau2
+    Shoes:
+      - Para_Team_Boots4
+    AccL:
+      - Ring_
+      - Ring_
+    AccR:
+      - Ring_
+      - Ring_
+
+  - GearSetName: eden3_runeknight
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Slayer3
+      - P_Saber3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_warlock
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Staff3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_ranger
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Bow3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_archbishop
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Mace3
+      - P_Dic1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_mechanic
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Two_Handed_Axe1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_guillotine
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Katar1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_royalguard
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Sphere1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_sorcerer
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Staff3
+      - P_Dic1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_minstrel
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_String_Inst1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_wanderer
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Tail1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_sura
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Knuckle1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_genetic
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Two_Handed_Axe1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden3_shadowchaser
+    HeadTop:
+      - Para_Team_Hat100
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor145
+      - Para_Team_Armor130
+    Weapon:
+      - P_Dagger3
+      - P_Bow3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau100
+      - Fairy_Of_Eden
+    Shoes:
+      - Para_Team_Boots145
+      - Para_Team_Boots130
+    AccL:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+    AccR:
+      - Para_Team_Ring145A
+      - Para_Team_Necklace145A
+
+  - GearSetName: eden4_dragonknight
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Slayer3
+      - P_Saber3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_meister
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Two_Handed_Axe1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_shadowcross
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Katar1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_archmage
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Staff3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_cardinal
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Mace3
+      - P_Dic1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_windhawk
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Bow3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_imperialguard
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Sphere1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_biolo
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Dagger3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_abysschaser
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Dagger3
+      - P_Bow3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_elementalmaster
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Staff3
+      - P_Dic1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_inquisitor
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Knuckle1
+      - P_Mace3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_troubadour
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_String_Inst1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_trouvere
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Tail1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_skyemperor
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Knuckle1
+      - P_Dic1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_soulascetic
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Foxtail3
+      - P_Mace3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_shinkiro
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Huuma_Shuriken1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_shiranui
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Huuma_Shuriken1
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_nightwatch
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Revolver3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_hypernovice
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Dagger3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+
+  - GearSetName: eden4_spirithandler
+    HeadTop:
+      - Para_Team_Hat160
+      - Garden_Of_Eden
+    HeadMid:
+      - Fin_Helm
+      - Elven_Ears
+    HeadBottom:
+      - Centimental_Flower
+      - Cigar
+    Armor:
+      - Para_Team_Armor160
+      - Para_Team_Armor145
+    Weapon:
+      - P_Foxtail3
+    Shield: 0
+    Garment:
+      - Para_Team_Manteau160
+      - Para_Team_Manteau130
+    Shoes:
+      - Para_Team_Boots160
+      - Para_Team_Boots145
+    AccL:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A
+    AccR:
+      - Para_Team_Ring160A
+      - Para_Team_Necklace160A

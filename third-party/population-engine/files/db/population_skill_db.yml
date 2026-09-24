@@ -2196,3 +2196,153 @@ Body:
       - { SkillId: SC_INVISIBILITY,    Level: 5,  Rate: 5000, Target: self }
       - { SkillId: SC_INVISIBILITY,    Level: 5,  Rate: 8000, Target: self, Condition: self_targeted }
       - { SkillId: SC_ESCAPE,          Level: 5,  Rate: 5000, Target: self, Condition: hp_below, CondValue: 25 }
+
+  # ==== 4th jobs (4302 extended line) ====
+
+  - JobId: 4252
+    Skills:
+      - { SkillId: DK_SERVANTWEAPON, Level: 10, Rate: 10000 }
+      - { SkillId: DK_CHARGINGPIERCE, Level: 10, Rate: 7000, Condition: distance_above, CondValue: 3 }
+      - { SkillId: DK_HACKANDSLASHER, Level: 10, Rate: 9000 }
+      - { SkillId: DK_DRAGONIC_BREATH, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: DK_DRAGONIC_AURA, Level: 10, Rate: 9000 }
+
+  - JobId: 4253
+    Skills:
+      - { SkillId: MT_AXE_STOMP, Level: 10, Rate: 9000 }
+      - { SkillId: MT_RUSH_QUAKE, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: MT_TWOAXEDEF, Level: 10, Rate: 10000 }
+      - { SkillId: MT_M_MACHINE, Level: 5, Rate: 6000 }
+
+  - JobId: 4254
+    Skills:
+      - { SkillId: SHC_SHADOW_EXCEED, Level: 10, Rate: 9000 }
+      - { SkillId: SHC_SAVAGE_IMPACT, Level: 10, Rate: 9000 }
+      - { SkillId: SHC_ETERNAL_SLASH, Level: 10, Rate: 8000 }
+      - { SkillId: SHC_DANCING_KNIFE, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: SHC_POTENT_VENOM, Level: 10, Rate: 10000 }
+
+  - JobId: 4255
+    Skills:
+      - { SkillId: AG_SOUL_VC_STRIKE, Level: 10, Rate: 9000 }
+      - { SkillId: AG_TORNADO_STORM, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 3 }
+      - { SkillId: AG_VIOLENT_QUAKE, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AG_DESTRUCTIVE_HURRICANE, Level: 10, Rate: 6000, Condition: enemy_count_nearby, CondValue: 4 }
+      - { SkillId: AG_DEADLY_PROJECTION, Level: 10, Rate: 9000 }
+
+  - JobId: 4256
+    Skills:
+      - { SkillId: CD_ARBITRIUM, Level: 10, Rate: 9000 }
+      - { SkillId: CD_FRAMEN, Level: 10, Rate: 8000 }
+      - { SkillId: CD_DILECTIO_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: CD_REPARATIO, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 40 }
+      - { SkillId: CD_ARGUTUS_VITA, Level: 10, Rate: 10000, Target: ally }
+
+  - JobId: 4257
+    Skills:
+      - { SkillId: WH_CRESCIVE_BOLT, Level: 10, Rate: 10000 }
+      - { SkillId: WH_GALESTORM, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 3 }
+      - { SkillId: WH_HAWKBOOMERANG, Level: 10, Rate: 8000 }
+      - { SkillId: WH_CALAMITYGALE, Level: 10, Rate: 6000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: WH_WIND_SIGN, Level: 1, Rate: 10000 }
+
+  - JobId: 4258
+    Skills:
+      - { SkillId: IG_ATTACK_STANCE, Level: 10, Rate: 10000 }
+      - { SkillId: IG_GRAND_JUDGEMENT, Level: 10, Rate: 9000 }
+      - { SkillId: IG_REBOUND_SHIELD, Level: 10, Rate: 8000 }
+      - { SkillId: IG_HOLY_SHIELD, Level: 10, Rate: 7000, Condition: melee_attacked, CondValue: 1 }
+      - { SkillId: IG_SPEAR_SWORD_M, Level: 10, Rate: 10000 }
+
+  - JobId: 4259
+    Skills:
+      - { SkillId: BO_ACIDIFIED_ZONE_FIRE, Level: 10, Rate: 8000 }
+      - { SkillId: BO_ACIDIFIED_ZONE_WATER, Level: 10, Rate: 8000 }
+      - { SkillId: BO_THE_WHOLE_PROTECTION, Level: 5, Rate: 10000, Target: ally }
+      - { SkillId: BO_ADVANCE_PROTECTION, Level: 5, Rate: 10000, Target: ally }
+
+  - JobId: 4260
+    Skills:
+      - { SkillId: ABC_ABYSS_DAGGER, Level: 10, Rate: 9000 }
+      - { SkillId: ABC_ABYSS_SLAYER, Level: 10, Rate: 8000 }
+      - { SkillId: ABC_UNLUCKY_RUSH, Level: 10, Rate: 7000 }
+      - { SkillId: ABC_FROM_THE_ABYSS, Level: 10, Rate: 8000 }
+
+  - JobId: 4261
+    Skills:
+      - { SkillId: EM_DIAMOND_STORM, Level: 10, Rate: 8000 }
+      - { SkillId: EM_LIGHTNING_LAND, Level: 10, Rate: 8000 }
+      - { SkillId: EM_CONFLAGRATION, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: EM_VENOM_SWAMP, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: EM_SPELL_ENCHANTING, Level: 1, Rate: 10000 }
+
+  - JobId: 4262
+    Skills:
+      - { SkillId: IQ_EXPOSION_BLASTER, Level: 10, Rate: 9000 }
+      - { SkillId: IQ_MASSIVE_F_BLASTER, Level: 10, Rate: 8000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: IQ_OLEUM_SANCTUM, Level: 10, Rate: 10000 }
+      - { SkillId: IQ_WILL_OF_FAITH, Level: 10, Rate: 10000 }
+
+  - JobId: 4263
+    Skills:
+      - { SkillId: TR_METALIC_FURY, Level: 10, Rate: 9000 }
+      - { SkillId: TR_RHYTHMSHOOTING, Level: 10, Rate: 8000 }
+      - { SkillId: TR_ROSEBLOSSOM, Level: 10, Rate: 7000 }
+      - { SkillId: TR_MYSTIC_SYMPHONY, Level: 1, Rate: 10000, Target: ally }
+
+  - JobId: 4264
+    Skills:
+      - { SkillId: TR_METALIC_FURY, Level: 10, Rate: 9000 }
+      - { SkillId: TR_RHYTHMSHOOTING, Level: 10, Rate: 8000 }
+      - { SkillId: TR_ROSEBLOSSOM, Level: 10, Rate: 7000 }
+      - { SkillId: TR_MYSTIC_SYMPHONY, Level: 1, Rate: 10000, Target: ally }
+
+  - JobId: 4302
+    Skills:
+      - { SkillId: SKE_NOON_BLAST, Level: 10, Rate: 9000 }
+      - { SkillId: SKE_MIDNIGHT_KICK, Level: 10, Rate: 8000 }
+      - { SkillId: SKE_TWINKLING_GALAXY, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 3 }
+      - { SkillId: SKE_SKY_MASTERY, Level: 10, Rate: 10000 }
+      - { SkillId: SKE_ALL_IN_THE_SKY, Level: 10, Rate: 9000 }
+
+  - JobId: 4303
+    Skills:
+      - { SkillId: SOA_EXORCISM_OF_MALICIOUS_SOUL, Level: 10, Rate: 9000 }
+      - { SkillId: SOA_TALISMAN_OF_WARRIOR, Level: 5, Rate: 10000 }
+      - { SkillId: SOA_SOUL_GATHERING, Level: 1, Rate: 10000, Condition: sp_below, CondValue: 50 }
+
+  - JobId: 4304
+    Skills:
+      - { SkillId: SS_FUUMASHOUAKU, Level: 10, Rate: 9000 }
+      - { SkillId: SS_KUNAIKAITEN, Level: 10, Rate: 8000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: SS_KAGEGARI, Level: 10, Rate: 8000 }
+      - { SkillId: SS_SHINKIROU, Level: 1, Rate: 10000 }
+
+  - JobId: 4305
+    Skills:
+      - { SkillId: SS_FUUMASHOUAKU, Level: 10, Rate: 9000 }
+      - { SkillId: SS_KUNAIKAITEN, Level: 10, Rate: 8000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: SS_KAGEGARI, Level: 10, Rate: 8000 }
+      - { SkillId: SS_SHINKIROU, Level: 1, Rate: 10000 }
+
+  - JobId: 4306
+    Skills:
+      - { SkillId: NW_THE_VIGILANTE_AT_NIGHT, Level: 10, Rate: 9000 }
+      - { SkillId: NW_GRENADE_FRAGMENT, Level: 10, Rate: 8000 }
+      - { SkillId: NW_BASIC_GRENADE, Level: 10, Rate: 8000 }
+      - { SkillId: NW_INTENSIVE_AIM, Level: 10, Rate: 10000 }
+
+  - JobId: 4307
+    Skills:
+      - { SkillId: HN_DOUBLEBOWLINGBASH, Level: 10, Rate: 9000 }
+      - { SkillId: HN_METEOR_STORM_BUSTER, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 3 }
+      - { SkillId: HN_JUPITEL_THUNDER_STORM, Level: 10, Rate: 8000 }
+      - { SkillId: HN_JACK_FROST_NOVA, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: HN_SHIELD_CHAIN_RUSH, Level: 10, Rate: 8000 }
+
+  - JobId: 4308
+    Skills:
+      - { SkillId: SH_CHUL_HO_SONIC_CLAW, Level: 10, Rate: 9000 }
+      - { SkillId: SH_HOWLING_OF_CHUL_HO, Level: 10, Rate: 8000 }
+      - { SkillId: SH_KI_SUL_WATER_SPRAYING, Level: 10, Rate: 7000 }
+      - { SkillId: SH_MYSTICAL_CREATURE_MASTERY, Level: 5, Rate: 10000 }

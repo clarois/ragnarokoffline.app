@@ -693,3 +693,264 @@ Body:
 Footer:
   Imports:
   - Path: db/import/population_spawn.yml
+
+
+  - Profile: pve_trans_melee
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 8
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 12
+
+  - Profile: pve_trans_caster
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 8
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 12
+
+  - Profile: pve_trans_dps
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 8
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 12
+
+  - Profile: pve_trans_support
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - yuno
+      - lighthalzen
+      - einbroch
+      - hugel
+      - rachel
+      - veins
+      - comodo
+      - jawaii
+      - amatsu
+      - gonryun
+      - louyang
+      - ayothaya
+    TownsPopulation: 8
+    Dungeons:
+      - gl_knt01
+      - gl_knt02
+      - odin_tem01
+      - odin_tem02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 12
+
+  - Profile: pve_3rd_melee
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 6
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 15
+
+  - Profile: pve_3rd_caster
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 6
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 15
+
+  - Profile: pve_3rd_dps
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 6
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 15
+
+  - Profile: pve_3rd_support
+    Towns:
+      - yuno
+      - lighthalzen
+      - rachel
+      - veins
+    TownsPopulation: 6
+    Dungeons:
+      - juperos_01
+      - juperos_02
+      - mag_dun01
+      - mag_dun02
+      - lhz_dun02
+      - lhz_dun03
+      - odin_tem02
+      - odin_tem03
+    DungeonsPopulation: 15
+
+  - Profile: pve_4th_melee
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 4
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 12
+
+  - Profile: pve_4th_caster
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 4
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 12
+
+  - Profile: pve_4th_dps
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 4
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 12
+
+  - Profile: pve_4th_support
+    Towns:
+      - lighthalzen
+      - rachel
+    TownsPopulation: 4
+    Dungeons:
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - mag_dun02
+      - lhz_dun03
+    DungeonsPopulation: 12
