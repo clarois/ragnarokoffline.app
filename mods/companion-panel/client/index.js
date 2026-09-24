@@ -130,10 +130,12 @@ function buildPanel(api, state) {
     </div>
     <div class="tabs">
       <button data-tab="party" class="on">Party</button>
+      <button data-tab="summon">Summon</button>
       <button data-tab="battle">Battle</button>
       <button data-tab="squads">Squads</button>
     </div>
     <div class="page" data-page="party"></div>
+    <div class="page" data-page="summon" hidden></div>
     <div class="page" data-page="battle" hidden></div>
     <div class="page" data-page="squads" hidden></div>`;
 
@@ -443,6 +445,9 @@ function renderPage(ui, api, state, toast) {
     ui.render();
   });
   s.append(save);
+
+  // ---------------- Summon (Phase 3: draft any job) ----------------
+  renderSummonPage(ui, api, toast);
 }
 
 function benchButton(api, member, toast) {
@@ -455,6 +460,61 @@ function benchButton(api, member, toast) {
     toast(`Benching ${member.name}…`);
   });
   return btn;
+}
+'use strict';
+// Part 5: the Summon tab — draft a companion of any job (Phase 3).
+// Jobs are grouped the way a player thinks of them; each button sends
+// "@companion draft <Job>" exactly as typing it would.
+
+const JOB_GROUPS = [
+  ['1st', ['Swordsman', 'Mage', 'Archer', 'Acolyte', 'Merchant', 'Thief']],
+  ['2nd', ['Knight', 'Priest', 'Wizard', 'Blacksmith', 'Hunter', 'Assassin',
+           'Crusader', 'Monk', 'Sage', 'Rogue', 'Alchemist', 'Bard', 'Dancer']],
+  ['Trans', ['LordKnight', 'HighPriest', 'HighWizard', 'Whitesmith', 'Sniper',
+             'AssassinCross', 'Paladin', 'Champion', 'Professor', 'Stalker',
+             'Creator', 'Clown', 'Gypsy']],
+  ['3rd', ['RuneKnight', 'Warlock', 'Ranger', 'ArchBishop', 'Mechanic',
+           'GuillotineCross', 'RoyalGuard', 'Sorcerer', 'Minstrel', 'Wanderer',
+           'Sura', 'Genetic', 'ShadowChaser']],
+  ['4th', ['DragonKnight', 'Meister', 'ShadowCross', 'ArchMage', 'Cardinal',
+           'Windhawk', 'ImperialGuard', 'Biolo', 'AbyssChaser', 'ElementalMaster',
+           'Inquisitor', 'Troubadour', 'Trouvere', 'SkyEmperor', 'SoulAscetic',
+           'Shinkiro', 'Shiranui', 'NightWatch', 'HyperNovice', 'SpiritHandler']],
+];
+
+function renderSummonPage(ui, api, toast) {
+  const p = ui.page('summon');
+  p.replaceChildren();
+
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'Draft a new companion of any job. It joins your party immediately.';
+  p.append(hint);
+
+  for (const [label, jobs] of JOB_GROUPS) {
+    const h = document.createElement('h4');
+    h.textContent = label;
+    p.append(h);
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    for (const job of jobs) {
+      const b = document.createElement('button');
+      b.className = 'b';
+      b.textContent = job.replace(/([a-z])([A-Z])/g, '$1 $2');
+      b.title = `Draft a ${job} companion`;
+      b.addEventListener('click', () => {
+        send(api, `@companion draft ${job}`);
+        toast(`Drafting ${job}…`);
+      });
+      grid.append(b);
+    }
+    p.append(grid);
+  }
+
+  const note = document.createElement('div');
+  note.className = 'hint';
+  note.textContent = 'Drafted companions level like any party member and change job on their own as they grow.';
+  p.append(note);
 }
 'use strict';
 // Part 4: initializer — mount, bind, clean up.

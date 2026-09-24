@@ -90,11 +90,75 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
  		if (!param[0]) {
  			clif_displaymessage(fd, "Usage: @companion remove <name>");
-@@ -308,6 +376,64 @@
+@@ -308,6 +376,128 @@
  		}
  		return 0;
  	}
 -	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
++	// RAGNAROKMAC (Phase 3): create a companion of a chosen job on the spot.
++	// Usage: @companion draft <job name|id> [name]
++	// Unlike summon (which revives a previously recruited companion), this writes
++	// a new persistence row, so a player can build a party around roles instead
++	// of hunting the world for a matching ambient character.
++	if (strcmpi(cmd, "draft") == 0 || strcmpi(cmd, "create") == 0) {
++		if (!param[0]) {
++			clif_displaymessage(fd, "Usage: @companion draft <job name or id> [name]");
++			return -1;
++		}
++		char jobtok[32] = {0}, nametok[NAME_LENGTH] = {0};
++		const int parsed = sscanf(param, "%31s %23[^\n]", jobtok, nametok);
++		if (parsed < 1) {
++			clif_displaymessage(fd, "Usage: @companion draft <job name or id> [name]");
++			return -1;
++		}
++		uint16_t job_id = 0;
++		if (sscanf(jobtok, "%hu", &job_id) != 1 || job_id == 0) {
++			// Name form: resolve through the engine's own job-name table, so the
++			// accepted spellings are exactly the ones the YAML profiles use.
++			job_id = population_engine_job_id_from_name(jobtok);
++		}
++		if (job_id == 0) {
++			char msg[NAME_LENGTH + 64];
++			snprintf(msg, sizeof(msg), "Unknown job '%s'. Try @companion jobs for the list.", jobtok);
++			clif_displaymessage(fd, msg);
++			return -1;
++		}
++		if (!population_engine_can_recruit_companion(sd)) {
++			clif_displaymessage(fd, "Your party is at the companion limit.");
++			return -1;
++		}
++		// A duplicate name would collide with the saved list, so a drafted
++		// companion gets a generated name when none was given.
++		char chosen[NAME_LENGTH] = {0};
++		if (parsed >= 2 && nametok[0]) {
++			uint32_t dup_index = 0; bool dup_active = false;
++			if (population_engine_companion_find(sd->status.account_id, nametok, &dup_index, &dup_active)) {
++				clif_displaymessage(fd, "You already have a companion by that name.");
++				return -1;
++			}
++			safestrncpy(chosen, nametok, NAME_LENGTH);
++		}
++		const uint32_t made = population_engine_companion_draft(sd, job_id, 1, chosen[0] ? chosen : nullptr);
++		char msg[128];
++		if (made != 0)
++			snprintf(msg, sizeof(msg), "Drafted a %s companion. It is in your party now.",
++				job_name(job_id));
++		else
++			snprintf(msg, sizeof(msg), "Could not draft a %s companion (see map-server console).", job_name(job_id));
++		clif_displaymessage(fd, msg);
++		return made != 0 ? 0 : -1;
++	}
++	// RAGNAROKMAC (Phase 3): list the job names @companion draft accepts.
++	if (strcmpi(cmd, "jobs") == 0) {
++		clif_displaymessage(fd, "=== Draggable companion jobs ===");
++		clif_displaymessage(fd, "1st: Novice Swordsman Mage Archer Acolyte Merchant Thief");
++		clif_displaymessage(fd, "2nd: Knight Priest Wizard Blacksmith Hunter Assassin Crusader Monk Sage Rogue Alchemist Bard Dancer");
++		clif_displaymessage(fd, "Trans: LordKnight HighPriest HighWizard Whitesmith Sniper AssassinCross Paladin Champion Professor Stalker Creator Clown Gypsy");
++		clif_displaymessage(fd, "3rd: RuneKnight Warlock Ranger ArchBishop Mechanic GuillotineCross RoyalGuard Sorcerer Minstrel Wanderer Sura Genetic ShadowChaser");
++		clif_displaymessage(fd, "4th: DragonKnight Meister ShadowCross ArchMage Cardinal Windhawk ImperialGuard Biolo AbyssChaser ElementalMaster Inquisitor Troubadour Trouvere SkyEmperor SoulAscetic Shinkiro Shiranui NightWatch HyperNovice SpiritHandler");
++		clif_displaymessage(fd, "Extended: Taekwon StarGladiator SoulLinker Gunslinger Ninja");
++		return 0;
++	}
 +	// RAGNAROKMAC (Phase 1/2): expel a summoned companion from the party but KEEP
 +	// its persistence row, so it can be summoned again later (unlike `remove`,
 +	// which deletes the snapshot for good).
@@ -153,6 +217,6 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 +		clif_displaymessage(fd, msg);
 +		return 0;
 +	}
-+	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | dismiss <name> | gear <name> [slots] | heal <normal%> <emergency%>");
++	clif_displaymessage(fd, "Usage: @companion list | summon <name> | draft <job> [name] | jobs | favorite <name> | remove <name> | dismiss <name> | gear <name> [slots] | heal <a%> <b%>");
  	return -1;
  }

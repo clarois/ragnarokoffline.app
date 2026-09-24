@@ -289,6 +289,33 @@ static const std::unordered_map<std::string, uint16_t> kJobNameMap = {
 	{ "HyperNovice",     4307 }, { "SpiritHandler",   4308 },
 };
 
+/// RAGNAROKMAC (Phase 3): resolve a job name (as written in the YAML profiles,
+/// spaces optional) to its job id, or 0 when unknown. Shared by the profile
+/// loader and the @companion draft command so both accept the same spellings.
+uint16_t population_engine_job_id_from_name(const char *name)
+{
+	if (name == nullptr || name[0] == '\0')
+		return 0;
+	std::string key(name);
+	key.erase(std::remove(key.begin(), key.end(), ' '), key.end());
+	// Case-insensitive compare: callers type these by hand.
+	for (const auto &entry : kJobNameMap) {
+		if (entry.first.size() != key.size())
+			continue;
+		bool same = true;
+		for (size_t i = 0; i < key.size(); ++i) {
+			if (std::tolower(static_cast<unsigned char>(entry.first[i])) !=
+				std::tolower(static_cast<unsigned char>(key[i]))) {
+				same = false;
+				break;
+			}
+		}
+		if (same)
+			return entry.second;
+	}
+	return 0;
+}
+
 PopulationNamesDatabase g_population_names_db;
 PopulationChatDatabase g_population_chat_db;
 // The shared template DB is constructed first so the three job DBs can be

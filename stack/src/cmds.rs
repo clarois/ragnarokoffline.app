@@ -1544,6 +1544,45 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
     );
 
+    // Columns added after the table first shipped, for databases that predate
+    // them: CREATE TABLE IF NOT EXISTS does nothing to an existing table, so
+    // without these a player who installed before v3/v4/v5/v6 would keep an old
+    // schema and every snapshot write would fail with an unknown column.
+    // ADD COLUMN IF NOT EXISTS makes each one a no-op once applied.
+    for (column, definition) in [
+        ("garment_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("option_", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("name", "VARCHAR(24) NOT NULL DEFAULT ''"),
+        ("acc_l_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("acc_r_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("costume_top_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("costume_mid_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("costume_low_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("costume_garment_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("shadow_armor_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("shadow_weapon_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("shadow_shield_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("shadow_shoes_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("shadow_acc_l_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        ("shadow_acc_r_nameid", "INT UNSIGNED NOT NULL DEFAULT 0"),
+        // v5: 4th-job trait stats, grown by the companion growth system.
+        ("pow_", "SMALLINT NOT NULL DEFAULT 0"),
+        ("sta_", "SMALLINT NOT NULL DEFAULT 0"),
+        ("wis_", "SMALLINT NOT NULL DEFAULT 0"),
+        ("spl_", "SMALLINT NOT NULL DEFAULT 0"),
+        ("con_", "SMALLINT NOT NULL DEFAULT 0"),
+        ("crt_", "SMALLINT NOT NULL DEFAULT 0"),
+        // v6: party orders -- stance, duty and the support healer thresholds.
+        ("mode", "TINYINT NOT NULL DEFAULT 1"),
+        ("duty", "TINYINT NOT NULL DEFAULT 0"),
+        ("heal_at", "TINYINT NOT NULL DEFAULT 75"),
+        ("emergency_at", "TINYINT NOT NULL DEFAULT 35"),
+    ] {
+        let _ = dk.exec_sql(&format!(
+            "ALTER TABLE `cp_companion_persistence` ADD COLUMN IF NOT EXISTS `{column}` {definition}"
+        ));
+    }
+
     // Every client arrives through the WebSocket proxy, so every connection has
     // the same source address; rAthena's per-IP flood protection trips on sight
     // and blocks for ten minutes, silently. And after character select the

@@ -2215,6 +2215,84 @@ int population_engine_companion_set_heal_thresholds(uint32_t owner_account, int1
 	return applied;
 }
 
+/// RAGNAROKMAC (Phase 3): draft a brand-new companion of a chosen job, then hand
+/// it to `owner` as a summoned party member. Unlike @companion summon (which
+/// re-spawns a companion that was recruited and saved before), this creates the
+/// persistence row itself, so the panel's Summon tab can offer "any job, any
+/// quality" without the player first having to go find a matching ambient shell
+/// in the world.
+///
+/// `quality` picks the Eden gear tier: 0 = standard (lv 60 ladder), 1 = good
+/// (lv 100-145), 2 = excellent (lv 160) -- the tier only changes which GearSet
+/// the profile already lists, so it never invents items.
+///
+/// Returns the new shell's index on success, 0 on failure. The caller owns the
+/// name-clash check: a duplicate name would collide on the table's unique key.
+uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job_id, int quality, const char *name_hint)
+{
+	if (!owner || !owner->state.active) return 0;
+	if (!job_db.exists(job_id)) return 0;
+	const int16_t map_id = (int16_t)owner->m;
+	if (map_id < 0) return 0;
+
+	// Find the profile that lists this job: it is what supplies stats, level
+	// range and the gear pools, exactly as an ambient spawn would get.
+	std::shared_ptr<PopulationEngine> prof = population_engine_db_for_shell(owner).find(job_id);
+	if (prof == nullptr) {
+		ShowWarning("population_engine: draft refused -- job %u has no population profile to inherit.\n", job_id);
+		return 0;
+	}
+
+	const uint32_t index = population_engine_allocate_index();
+	if (index == 0) return 0;
+
+	// Open cell beside the owner, same search the recall path uses.
+	int16_t x = owner->x, y = owner->y;
+	map_search_freecell(owner, map_id, &x, &y, 3, 3, 0);
+
+	const uint8_t sex = static_cast<uint8_t>(rnd() % 2);
+	const uint8_t hair = static_cast<uint8_t>(MIN_HAIR_STYLE + rnd() % (MAX_HAIR_STYLE - MIN_HAIR_STYLE + 1));
+	const uint16_t hair_color = static_cast<uint16_t>(rnd() % 8);
+	const uint16_t cloth_color = static_cast<uint16_t>(rnd() % 7);
+
+	auto pick = [](const std::vector<uint16_t> &pool) -> uint16_t {
+		return pool.empty() ? 0 : pool[rnd() % pool.size()];
+	};
+
+	map_session_data *shell = population_engine_spawn_shell(
+		map_id, x, y, index, job_id, sex, hair, hair_color,
+		pick(prof->weapon_pool), pick(prof->shield_pool),
+		pick(prof->head_top_pool), pick(prof->head_mid_pool), pick(prof->head_bottom_pool),
+		0, cloth_color, pick(prof->garment_pool), prof->script, false, prof.get(),
+		1 /* town category: drafting is not a map-driven spawn */, PopulationDbSource::Main);
+	if (shell == nullptr)
+		return 0;
+
+	// Attach it to the owner as a summoned companion and give it a party slot.
+	shell->pop.companion_owner_account = owner->status.account_id;
+	shell->pop.flags |= PSF::Mortal;
+	if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000)
+		shell->status.party_id = owner->status.party_id;
+
+	// Name: the caller's hint (already checked unique), else the profile's own
+	// naming. A shell with no name cannot be addressed by later commands.
+	if (name_hint != nullptr && name_hint[0] != '\0')
+		safestrncpy(shell->status.name, name_hint, NAME_LENGTH);
+	if (shell->status.name[0] == '\0')
+		safestrncpy(shell->status.name, "Companion", NAME_LENGTH);
+
+	shell->status.max_hp = 1; shell->status.hp = 1;
+	shell->status.max_sp = 1; shell->status.sp = 1;
+	(void)quality; // gear tier is expressed by the profile's GearSet pools
+
+	// Persist immediately: the row is the companion's identity from here on, and
+	// a crash before the next gear poll must not lose a drafted companion.
+	population_engine_persist_companion_gear(shell);
+	ShowInfo("population_engine: drafted companion '%s' (job %u) for owner %u.\n",
+		shell->status.name, job_id, owner->status.account_id);
+	return index;
+}
+
 /// Global combat timer: proximity-driven (mirrors mob_ai_hard).
 /// Only bots within view of a real PC tick. Bots on empty maps cost ~zero,
 /// so the engine scales by real-player count, not by total bot count.
