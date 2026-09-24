@@ -160,7 +160,7 @@ jobs:
             arch: x64
             triple: x64-pc-windows
             clis: windows-x86_64
-    if: contains(inputs.platforms || 'win,linux,mac', matrix.platform)
+    if: contains(fromJSON(github.event.inputs.platforms || '"win,linux,mac"'), matrix.platform)
     runs-on: ${{ matrix.os }}
     # The `secrets` context is not available in a step's `if:` — only in `env:`
     # and `with:`. So the presence of each credential is resolved once here, at
