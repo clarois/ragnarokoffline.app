@@ -36,6 +36,7 @@
 #include <common/utils.hpp>
 #include "battle.hpp"
 #include "clif.hpp"
+#include "intif.hpp"
 #include "itemdb.hpp"
 #include "log.hpp"
 #include "map.hpp"
@@ -639,7 +640,14 @@ void population_engine_shell_release(map_session_data* sd)
 	// Detach real memberships before freeing the shell: party data holds sd pointers.
 	if (sd->status.party_id > 0 && sd->status.party_id < 0x70000000) {
 		const int32 party_id = sd->status.party_id;
-		party_removemember2(sd, sd->status.char_id, party_id);
+		// RAGNAROKMAC: release a shell with PARTY_MEMBER_WITHDRAW_LEAVE, not the
+		// hardcoded EXPEL inside party_removemember2 — an EXPEL triggers the
+		// Goal-3 deactivation hook and permanently benches the companion when it
+		// was really just a death/wipe cleanup, which should re-summon on next
+		// login like any non-expelled companion. Shells never hold party-bound
+		// items, so the trade_bound_cancel inside removemember2 is a no-op here.
+		intif_party_leave(party_id, sd->status.account_id, sd->status.char_id,
+			sd->status.name, PARTY_MEMBER_WITHDRAW_LEAVE);
 		party_member_withdraw(party_id, sd->status.account_id, sd->status.char_id,
 			sd->status.name, PARTY_MEMBER_WITHDRAW_LEAVE);
 	}
@@ -736,6 +744,26 @@ std::vector<map_session_data*> population_engine_collect_stale_shells()
 			map_session_data *owner = pop_companion_owner(sd);
 			if (owner && sd->state.active && sd->prev != nullptr &&
 				map_id2bl(sd->id) == sd && sd->m == owner->m) {
+				++it;
+				continue;
+			}
+			// RAGNAROKMAC: a companion whose owner is still online (party wipe: the
+			// owner died and respawned at the save point, or the owner changed maps)
+			// must RESPAWN beside its owner and KEEP its party membership, not be
+			// released — releasing freed the shell and (via the EXPEL-typed leave)
+			// permanently benched it. If the owner is genuinely gone (logout), fall
+			// through to the normal release; the login recall re-summons it.
+			if (owner && owner->state.active) {
+				ShowInfo("Population engine: companion %s left behind; respawning beside owner %s (kept in party).\n",
+					sd->status.name, owner->status.name);
+				if (sd->pop.respawn_timer != INVALID_TIMER) {
+					const TimerData* td = get_timer(sd->pop.respawn_timer);
+					if (td && td->func == population_engine_respawn_shell_timer)
+						delete_timer(sd->pop.respawn_timer, population_engine_respawn_shell_timer);
+					sd->pop.respawn_timer = INVALID_TIMER;
+				}
+				sd->pop.respawn_timer = add_timer(gettick() + 2000,
+					population_engine_respawn_shell_timer, sd->id, 0);
 				++it;
 				continue;
 			}
