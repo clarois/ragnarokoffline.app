@@ -569,6 +569,8 @@ static size_t population_engine_count_vendors_on_map(int16_t map_id) {
 
 // Forward declaration — defined after population_engine_shell_release.
 int32 population_engine_respawn_shell_timer(int32 tid, t_tick tick, int32 id, intptr_t data);
+static bool pop_shell_finish_map_placement(map_session_data *sd);
+static void pop_shell_broadcast_map_placement(map_session_data *sd);
 
 // Tear down a partially constructed fake PC when spawn fails before map_quit runs.
 static void population_engine_destroy_failed_spawn(map_session_data* sd)
@@ -812,6 +814,26 @@ std::vector<map_session_data*> population_engine_collect_stale_shells()
 				}
 				++it;
 				continue;
+			}
+		}
+		// RAGNAROKMAC: a live companion left behind on a map the owner has left
+		// (party wipe: owner respawned at the save point; or the owner teleported
+		// mid-fight) must TELEPORT to its owner and keep party membership — the
+		// release path here kicked it from the party even though nobody expelled it.
+		if (sd && pop_is_companion(sd) && sd->state.active) {
+			map_session_data *owner = pop_companion_owner(sd);
+			if (owner != nullptr && owner->state.active && sd->m != owner->m
+				&& !pc_isdead(sd) && map_id2bl(sd->id) == sd) {
+				int16_t tx = owner->x, ty = owner->y;
+				map_search_freecell(owner, owner->m, &tx, &ty, 2, 2, 0);
+				if (pc_setpos(sd, owner->m, tx, ty, CLR_TELEPORT) == SETPOS_OK) {
+					pop_shell_finish_map_placement(sd);
+					pop_shell_broadcast_map_placement(sd);
+					ShowInfo("Population engine: companion %s followed its owner to another map.\n",
+						sd->status.name);
+					++it;
+					continue;
+				}
 			}
 		}
 		if (!sd || !population_engine_is_population_pc(sd->id) || !population_engine_combat_shell_ac_ok(sd)) {
@@ -3986,6 +4008,11 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	g_population_engine_count++;
 	g_population_engine_stats.total_created++;
 	g_population_engine_stats.active_units++;
+
+	// RAGNAROKMAC (Goal 1): recalled companions are spawned with pop_cfg=nullptr,
+	// so pop.flags misses PSF::Mortal and status_damage treats them as immortal.
+	// A companion is always mortal — it must take damage and die like a player.
+	shell->pop.flags |= PSF::Mortal;
 
 	// RAGNAROKMAC (Goal 1): restore the companion's persistent name. The name
 	// was rolled randomly at recruit time and snapshotted; without this the
