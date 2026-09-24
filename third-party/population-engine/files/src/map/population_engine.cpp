@@ -2001,6 +2001,198 @@ static int32 pop_combat_tick_per_real_pc(map_session_data *sd, va_list ap)
 	return 0;
 }
 
+// ==========================================================================
+// RAGNAROKMAC: companion growth — stat auto-allocation + job advancement.
+// Companions level via stock party exp share (pc_gainexp) and accumulate
+// status_point/trait_point (pc_checkbaselevelup) but never spend them; this
+// poll spends points toward the profile's researched target spread and walks
+// the job line at the official gates, with a 50:50 coin flip at forks.
+// ==========================================================================
+
+struct PopJobAdvance {
+	uint16_t from;
+	uint16_t to_a;
+	uint16_t to_b;   // 0 = no branch (always to_a)
+	int32_t base_lv; // base level gate
+	int32_t job_lv;  // job level gate (0 = none)
+};
+
+// 1st -> 2nd at base 40 (job_lv 0: fresh companions usually hit 40 before job 50;
+// the official quests also require job level but companions fight constantly so
+// base level is the friendlier gate), then trans/3rd/4th on the official gates.
+static const PopJobAdvance kPopJobAdvanceTable[] = {
+	// 1st -> 2nd (base 40, official job-quest level)
+	{ 1,   7,  14,  40, 0 }, // Swordsman -> Knight | Crusader
+	{ 2,   9,  16,  40, 0 }, // Mage -> Wizard | Sage
+	{ 3,  11,  19,  40, 0 }, // Archer -> Hunter | Bard/Dancer (sex-adjusted by pc_jobchange)
+	{ 4,   8,  15,  40, 0 }, // Acolyte -> Priest | Monk
+	{ 5,  10,  18,  40, 0 }, // Merchant -> Blacksmith | Alchemist
+	{ 6,  12,  17,  40, 0 }, // Thief -> Assassin | Rogue
+	// 2nd -> trans (official rebirth gate: base 99 / job 70; we advance directly,
+	// no level reset — a companion suddenly going back to 1/1 High Novice would
+	// be a terrible feel in the middle of a hunt)
+	{ 7,  4008, 0, 99, 70 }, { 14, 4015, 0, 99, 70 },
+	{ 9,  4010, 0, 99, 70 }, { 16, 4017, 0, 99, 70 },
+	{ 11, 4012, 0, 99, 70 }, { 19, 4020, 0, 99, 70 }, // Bard->Clown (Dancer->Gypsy via 4021 below)
+	{ 8,  4009, 0, 99, 70 }, { 15, 4016, 0, 99, 70 },
+	{ 10, 4011, 0, 99, 70 }, { 18, 4019, 0, 99, 70 },
+	{ 12, 4013, 0, 99, 70 }, { 17, 4018, 0, 99, 70 },
+	{ 20, 4021, 0, 99, 70 }, // Dancer -> Gypsy
+	// trans -> 3rd (official: base 99 / job 70)
+	{ 4008, 4054, 0, 99, 70 }, { 4015, 4066, 0, 99, 70 },
+	{ 4010, 4055, 0, 99, 70 }, { 4017, 4067, 0, 99, 70 },
+	{ 4012, 4056, 0, 99, 70 }, { 4020, 4068, 0, 99, 70 },
+	{ 4009, 4057, 0, 99, 70 }, { 4016, 4070, 0, 99, 70 },
+	{ 4011, 4058, 0, 99, 70 }, { 4019, 4071, 0, 99, 70 },
+	{ 4013, 4059, 0, 99, 70 }, { 4018, 4072, 0, 99, 70 },
+	{ 4021, 4069, 0, 99, 70 },
+	// trans/3rd -> 4th (official: base 200 / job 70)
+	{ 4054, 4252, 0, 200, 70 }, // RuneKnight -> DragonKnight
+	{ 4055, 4255, 0, 200, 70 }, // Warlock -> ArchMage
+	{ 4056, 4257, 0, 200, 70 }, // Ranger -> Windhawk
+	{ 4057, 4256, 0, 200, 70 }, // ArchBishop -> Cardinal
+	{ 4058, 4253, 0, 200, 70 }, // Mechanic -> Meister
+	{ 4059, 4254, 0, 200, 70 }, // GuillotineCross -> ShadowCross
+	{ 4066, 4258, 0, 200, 70 }, // RoyalGuard -> ImperialGuard
+	{ 4067, 4261, 0, 200, 70 }, // Sorcerer -> ElementalMaster
+	{ 4068, 4263, 0, 200, 70 }, // Minstrel -> Troubadour
+	{ 4069, 4264, 0, 200, 70 }, // Wanderer -> Trouvere
+	{ 4070, 4262, 0, 200, 70 }, // Sura -> Inquisitor
+	{ 4071, 4259, 0, 200, 70 }, // Genetic -> Biolo
+	{ 4072, 4260, 0, 200, 70 }, // ShadowChaser -> AbyssChaser
+	{ 4047, 4302, 0, 200, 70 }, // StarGladiator -> SkyEmperor
+	{ 4049, 4303, 0, 200, 70 }, // SoulLinker -> SoulAscetic
+	{ 4211, 4304, 0, 200, 70 }, // Kagerou -> Shinkiro
+	{ 4212, 4305, 0, 200, 70 }, // Oboro -> Shiranui
+	{ 4215, 4306, 0, 200, 70 }, // Rebellion -> NightWatch
+	{ 23,   4307, 0, 200, 70 }, // SuperNovice -> HyperNovice
+	{ 4218, 4308, 0, 200, 70 }, // Summoner -> SpiritHandler
+};
+
+// Stat spend order: profile-declared stats sorted by target size, biggest first.
+// Points go +1 at a time through pc_statusup so cost scaling is honored.
+static void pop_companion_spend_stat_points(map_session_data *sd, std::shared_ptr<PopulationEngine> prof)
+{
+	if (prof == nullptr) return;
+	struct { int32_t sp; int16_t cur; int16_t target; } base_stats[6];
+	base_stats[0] = { SP_STR, (int16_t)sd->status.str, prof->str_max };
+	base_stats[1] = { SP_AGI, (int16_t)sd->status.agi, prof->agi_max };
+	base_stats[2] = { SP_VIT, (int16_t)sd->status.vit, prof->vit_max };
+	base_stats[3] = { SP_INT, (int16_t)sd->status.int_, prof->intl_max };
+	base_stats[4] = { SP_DEX, (int16_t)sd->status.dex, prof->dex_max };
+	base_stats[5] = { SP_LUK, (int16_t)sd->status.luk, prof->luk_max };
+	// sort descending by target so the build's primary stat fills first
+	for (int i = 0; i < 5; ++i)
+		for (int j = i + 1; j < 6; ++j)
+			if (base_stats[j].target > base_stats[i].target) {
+				auto tmp = base_stats[i]; base_stats[i] = base_stats[j]; base_stats[j] = tmp;
+			}
+	int guard = 4000; // hard loop cap: a stat costs at most ~500 points to max
+	while (sd->status.status_point > 0 && guard-- > 0) {
+		bool spent_any = false;
+		for (auto &bs : base_stats) {
+			if (bs.target < 0) continue;             // stat not declared in profile
+			if (bs.cur >= bs.target) continue;       // already at target
+			if (bs.cur >= 500) continue;             // server maxparameter cap (user: 500)
+			if (!pc_statusup(sd, bs.sp, 1)) continue;
+			bs.cur++;
+			spent_any = true;
+			if (sd->status.status_point <= 0) break;
+		}
+		if (!spent_any) break;
+	}
+
+	// Trait points (4th-job era): same pattern, targets from profile trait fields.
+	struct { int32_t sp; int16_t cur; int16_t target; } trait_stats[6];
+	trait_stats[0] = { SP_POW, (int16_t)sd->status.pow, prof->pow_max };
+	trait_stats[1] = { SP_STA, (int16_t)sd->status.sta, prof->sta_max };
+	trait_stats[2] = { SP_WIS, (int16_t)sd->status.wis, prof->wis_max };
+	trait_stats[3] = { SP_SPL, (int16_t)sd->status.spl, prof->spl_max };
+	trait_stats[4] = { SP_CON, (int16_t)sd->status.con, prof->con_max };
+	trait_stats[5] = { SP_CRT, (int16_t)sd->status.crt, prof->crt_max };
+	for (int i = 0; i < 5; ++i)
+		for (int j = i + 1; j < 6; ++j)
+			if (trait_stats[j].target > trait_stats[i].target) {
+				auto tmp = trait_stats[i]; trait_stats[i] = trait_stats[j]; trait_stats[j] = tmp;
+			}
+	guard = 2000;
+	while (sd->status.trait_point > 0 && guard-- > 0) {
+		bool spent_any = false;
+		for (auto &ts : trait_stats) {
+			if (ts.target < 0) continue;
+			if (ts.cur >= ts.target) continue;
+			if (!pc_traitstatusup(sd, ts.sp, 1)) continue;
+			ts.cur++;
+			spent_any = true;
+			if (sd->status.trait_point <= 0) break;
+		}
+		if (!spent_any) break;
+	}
+}
+
+static uint16_t pop_companion_next_job(uint16_t job_id, int32_t base_lv, int32_t job_lv)
+{
+	// Novice: six-way uniform roll at base 10
+	if (job_id == 0 && base_lv >= 10)
+		return static_cast<uint16_t>(1 + rnd() % 6);
+	for (const PopJobAdvance &a : kPopJobAdvanceTable) {
+		if (a.from != job_id) continue;
+		if (base_lv < a.base_lv || job_lv < a.job_lv) continue;
+		if (a.to_b != 0)
+			return (rnd() % 2) ? a.to_a : a.to_b;
+		return a.to_a;
+	}
+	return 0;
+}
+
+static void pop_companion_try_job_advance(map_session_data *sd)
+{
+	const uint16_t next = pop_companion_next_job(sd->status.class_, sd->status.base_level, sd->status.job_level);
+	if (next == 0) return;
+	// upper flag: trans jobs (4001+) need JOBL_UPPER
+	const char upper = (next >= 4001 && next <= 4022) ? 1 : 0;
+	const char *old_name = job_name(sd->status.class_);
+	if (!pc_jobchange(sd, next, upper)) {
+		ShowWarning("Population engine: companion %s job change %hu -> %hu failed.\n",
+			sd->status.name, sd->status.class_, next);
+		return;
+	}
+	sd->status.job_level = 1;
+	sd->status.job_exp = 0;
+	ShowInfo("Population engine: companion %s advanced from %s to %s (base %d/job %d).\n",
+		sd->status.name, old_name, job_name(next), sd->status.base_level, sd->status.job_level);
+	// Re-arm the skill preset for the new job: clear per-skill cooldowns and let the
+	// combat session re-seed from population_skill_db.yml on its next tick.
+	sd->pop.skill_next_use_tick.clear();
+	// Re-equip from the new job's Eden set: unequip current gear into the shell's
+	// inventory first (nothing is destroyed), then run the same equip pass spawn uses.
+	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
+		struct item &slot = sd->inventory.u.items_inventory[i];
+		if (slot.nameid && slot.equip)
+			pc_unequipitem(sd, i, 2);
+	}
+	std::shared_ptr<PopulationEngine> equipment = population_engine_db_for_shell(sd).find(sd->status.class_);
+	if (equipment) {
+		// Re-equip from the new job's gear set (same pool picks spawn uses).
+		auto pick_pool = [](const std::vector<uint16_t> &pool) -> uint16_t {
+			return pool.empty() ? 0 : pool[rnd() % pool.size()];
+		};
+		population_engine_shell_equip_item(sd, pick_pool(equipment->weapon_pool),      sd->status.char_id, "weapon");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->shield_pool),      sd->status.char_id, "shield");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->armor_pool),       sd->status.char_id, "armor");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->shoes_pool),       sd->status.char_id, "shoes");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->garment_pool),     sd->status.char_id, "garment");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->head_top_pool),    sd->status.char_id, "head_top");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->head_mid_pool),    sd->status.char_id, "head_mid");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->head_bottom_pool), sd->status.char_id, "head_low");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->acc_l_pool),       sd->status.char_id, "acc_l");
+		population_engine_shell_equip_item(sd, pick_pool(equipment->acc_r_pool),       sd->status.char_id, "acc_r");
+	}
+	status_calc_pc(sd, SCO_FORCE);
+	// Persist the new job + reset job level right away so a crash can't roll it back.
+	population_engine_persist_companion_gear(sd);
+}
+
 /// Global combat timer: proximity-driven (mirrors mob_ai_hard).
 /// Only bots within view of a real PC tick. Bots on empty maps cost ~zero,
 /// so the engine scales by real-player count, not by total bot count.
@@ -2019,6 +2211,14 @@ TIMER_FUNC(population_engine_global_combat_timer)
 		for (map_session_data *sd : g_population_engine_pcs) {
 			if (!sd || !sd->state.active || sd->prev == nullptr) continue;
 			if (sd->status.char_id < POPULATION_ENGINE_CHAR_ID_BASE) continue;
+			// RAGNAROKMAC (growth): only recruited companions grow — ambient shells
+			// stay at their spawn build. Spend accumulated stat/trait points toward
+			// the profile target spread, then walk the job line at the gates.
+			if (pop_is_companion(sd) && sd->pop.companion_owner_account != 0) {
+				std::shared_ptr<PopulationEngine> prof = population_engine_db_for_shell(sd).find(sd->status.class_);
+				pop_companion_spend_stat_points(sd, prof);
+				pop_companion_try_job_advance(sd);
+			}
 			const uint64_t h = pop_companion_gear_hash(sd);
 			auto it = g_pop_companion_gear_hash.find(sd->id);
 			if (it == g_pop_companion_gear_hash.end()) {
@@ -3555,7 +3755,7 @@ static void population_engine_persist_companion_sql(
 	uint32_t head_mid, uint32_t head_bottom, uint32_t armor, uint32_t shoes,
 	uint32_t acc_l, uint32_t acc_r,
 	int base_level, int job_level, int str, int agi, int vit, int intl,
-	int dex, int luk, int16_t map_id)
+	int dex, int luk, int pow_, int sta_, int wis_, int spl_, int con_, int crt_, int16_t map_id)
 {
 	if (mmysql_handle == nullptr) return;
 	char q[2304];
@@ -3573,15 +3773,16 @@ static void population_engine_persist_companion_sql(
 		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
 		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid,"
 		" base_level, job_level, str_,"
-		" agi_, vit_, intl_, dex_, luk_, map_id, active)"
+		" agi_, vit_, intl_, dex_, luk_, pow_, sta_, wis_, spl_, con_, crt_, map_id, active)"
 		" VALUES(%u,%u,'%s',%d,%d,%d,%d,%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,"
 		"%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%d,"
-		"%d,%d,%d,%d,%d,%d,%d,1)",
+		"%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,1)",
 		owner_account, index_, esc_name, job_id, sex, hair_style, hair_color, cloth_color,
 		garment_nameid, option_, weapon, shield, head_top, head_mid, head_bottom,
 		armor, shoes, acc_l, acc_r, 0u, 0u, 0u, 0u,
 		0u, 0u, 0u, 0u, 0u, 0u,
-		base_level, job_level, str, agi, vit, intl, dex, luk, map_id);
+		base_level, job_level, str, agi, vit, intl, dex, luk,
+		pow_, sta_, wis_, spl_, con_, crt_, map_id);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
 		ShowError("population_engine: persist companion index %u for owner %u FAILED\n",
@@ -3651,7 +3852,7 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 // clears the equip bit, then pc_delitem removes the slot) and handed to the
 // owner via pc_additem. On inventory-full the piece is dropped at the
 // owner's feet instead of being lost.
-int population_engine_companion_return_gear(map_session_data *owner, map_session_data *shell)
+int population_engine_companion_return_gear(map_session_data *owner, map_session_data *shell, uint32_t slot_mask)
 {
 	if (!owner || !shell) return -1;
 	if (!population_engine_is_population_pc(shell->id)) return -1;
@@ -3660,6 +3861,9 @@ int population_engine_companion_return_gear(map_session_data *owner, map_session
 	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
 		struct item &slot = shell->inventory.u.items_inventory[i];
 		if (!slot.nameid || !slot.equip) continue; // equipped only
+		// RAGNAROKMAC: selective gear return — when slot_mask != 0, only items whose
+		// equip bits intersect the mask come back; everything else stays on the companion.
+		if (slot_mask != 0 && !(slot.equip & slot_mask)) continue;
 		// Unequip first (flag 2 = ignore status-change blocks) so the equip
 		// bit clears and the stats/looks revert before the move.
 		if (!pc_unequipitem(shell, i, 2)) continue;
@@ -3743,15 +3947,16 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		" costume_low_nameid=%u, costume_garment_nameid=%u,"
 		" shadow_armor_nameid=%u, shadow_weapon_nameid=%u, shadow_shield_nameid=%u,"
 		" shadow_shoes_nameid=%u, shadow_acc_l_nameid=%u, shadow_acc_r_nameid=%u,"
-		" base_level=%d, job_level=%d, str_=%d, agi_=%d, vit_=%d, intl_=%d,"
-		" dex_=%d, luk_=%d"
+		" base_level=%d, job_level=%d, job_id=%d, str_=%d, agi_=%d, vit_=%d, intl_=%d,"
+		" dex_=%d, luk_=%d, pow_=%d, sta_=%d, wis_=%d, spl_=%d, con_=%d, crt_=%d"
 		" WHERE owner_account_id=%u AND shell_index=%u",
 		weapon, shield, sd->status.head_top, sd->status.head_mid, sd->status.head_bottom,
 		armor, shoes, acc_l, acc_r,
 		garment, c_top, c_mid, c_low, c_garment,
 		sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r,
-		sd->status.base_level, sd->status.job_level, sd->status.str, sd->status.agi,
+		sd->status.base_level, sd->status.job_level, sd->status.class_, sd->status.str, sd->status.agi,
 		sd->status.vit, sd->status.int_, sd->status.dex, sd->status.luk,
+		sd->status.pow, sd->status.sta, sd->status.wis, sd->status.spl, sd->status.con, sd->status.crt,
 		owner, index_);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
@@ -3817,6 +4022,7 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 		(uint32_t)sd->status.head_top, (uint32_t)sd->status.head_mid, (uint32_t)sd->status.head_bottom,
 		armor, shoes, acc_l, acc_r, (int)sd->status.base_level, (int)sd->status.job_level, (int)sd->status.str,
 		(int)sd->status.agi, (int)sd->status.vit, (int)sd->status.int_, (int)sd->status.dex, (int)sd->status.luk,
+		(int)sd->status.pow, (int)sd->status.sta, (int)sd->status.wis, (int)sd->status.spl, (int)sd->status.con, (int)sd->status.crt,
 		(int16_t)sd->m);
 }
 
@@ -3979,7 +4185,8 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	const char* persisted_name,
 	uint32_t c_top, uint32_t c_mid, uint32_t c_low, uint32_t c_garment,
 	uint32_t sh_armor, uint32_t sh_weapon, uint32_t sh_shield, uint32_t sh_shoes,
-	uint32_t sh_acc_l, uint32_t sh_acc_r)
+	uint32_t sh_acc_l, uint32_t sh_acc_r,
+	int pow_, int sta_, int wis_, int spl_, int con_, int crt_)
 {
 	// Deterministic spawn cell next to the owner (small ring for an open spot).
 	int16_t x = 0, y = 0; bool placed = false;
@@ -4056,6 +4263,13 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 
 	// Restore the exact snapshot build the companion had when recruited.
 	shell->status.base_level = cap_value(base_level, 1, MAX_LEVEL);
+	// RAGNAROKMAC (growth): restore grown trait stats alongside the base stats.
+	shell->status.pow = static_cast<int16_t>(pow_);
+	shell->status.sta = static_cast<int16_t>(sta_);
+	shell->status.wis = static_cast<int16_t>(wis_);
+	shell->status.spl = static_cast<int16_t>(spl_);
+	shell->status.con = static_cast<int16_t>(con_);
+	shell->status.crt = static_cast<int16_t>(crt_);
 	shell->status.job_level  = cap_value(job_level, 1, MAX_LEVEL);
 	shell->status.str = str; shell->status.agi = agi;
 	shell->status.vit = vit; shell->status.int_ = intl;
@@ -4174,6 +4388,7 @@ int population_engine_recall_companions(map_session_data *owner)
 		" garment_nameid, option_, weapon_nameid, shield_nameid, head_top_nameid,"
 		" head_mid_nameid, head_bottom_nameid, armor_nameid, shoes_nameid,"
 		" acc_l_nameid, acc_r_nameid, base_level, job_level, str_, agi_, vit_, intl_, dex_, luk_,"
+		" pow_, sta_, wis_, spl_, con_, crt_,"
 		" costume_top_nameid, costume_mid_nameid, costume_low_nameid, costume_garment_nameid,"
 		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
 		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid"
@@ -4211,6 +4426,12 @@ int population_engine_recall_companions(map_session_data *owner)
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int intl = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int dex = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); int luk = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int pow_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int sta_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int wis_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int spl_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int con_ = atoi(data);
+		Sql_GetData(mmysql_handle, col++, &data, nullptr); int crt_ = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_top = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_mid = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t c_low = atoi(data);
@@ -4227,7 +4448,8 @@ int population_engine_recall_companions(map_session_data *owner)
 		population_engine_recall_one_companion(owner, map_id, index_, job_id, sexv == 1 ? 'F' : 'M',
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
 			head_mid, head_bottom, armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk,
-			namebuf, c_top, c_mid, c_low, c_garment, sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r);
+			namebuf, c_top, c_mid, c_low, c_garment, sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r,
+			pow_, sta_, wis_, spl_, con_, crt_);
 		recalled++;
 	}
 	Sql_FreeResult(mmysql_handle);

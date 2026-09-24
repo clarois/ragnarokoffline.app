@@ -11,11 +11,11 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  	char cmd[32], param[NAME_LENGTH];
  	if (!message || !*message || sscanf(message, "%31s %23[^\n]", cmd, param) < 1) {
 -		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
-+		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name>");
++		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name> [slots]");
  		return -1;
  	}
  	if (strcmpi(cmd, "list") == 0) {
-@@ -272,6 +272,42 @@
+@@ -272,6 +272,74 @@
  		clif_displaymessage(fd, msg);
  		return 0;
  	}
@@ -24,7 +24,7 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 +	// caller's inventory (or drops at their feet when overweight).
 +	if (strcmpi(cmd, "gear") == 0 || strcmpi(cmd, "unequip") == 0) {
 +		if (!param[0]) {
-+			clif_displaymessage(fd, "Usage: @companion gear <name>");
++			clif_displaymessage(fd, "Usage: @companion gear <name> [weapon] [shield] [armor] [shoes] [garment] [acc] [head] [costume] [shadow] [ammo]");
 +			return -1;
 +		}
 +		uint32_t index_ = 0; bool active = false;
@@ -46,7 +46,39 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 +			clif_displaymessage(fd, "That companion is not on the map right now.");
 +			return -1;
 +		}
-+		const int moved = population_engine_companion_return_gear(sd, live);
++		// RAGNAROKMAC: selective return — "@companion gear <name> weapon shield" hands
++		// back only those slots. Slot names map to the equip_pos bitmask (mmo.hpp);
++		// with no slot args the mask stays 0 = strip everything (original behavior).
++		uint32_t mask = 0;
++		{
++			char slots[128] = {0};
++			if (sscanf(message, "%*31s %*23s %127[^\n]", slots) == 1) {
++				for (char *tok = strtok(slots, " \t"); tok; tok = strtok(nullptr, " \t")) {
++					if (!strcmpi(tok, "weapon"))  mask |= EQP_HAND_R;
++					else if (!strcmpi(tok, "shield"))   mask |= EQP_HAND_L;
++					else if (!strcmpi(tok, "armor"))    mask |= EQP_ARMOR;
++					else if (!strcmpi(tok, "shoes"))    mask |= EQP_SHOES;
++					else if (!strcmpi(tok, "garment"))  mask |= EQP_GARMENT;
++					else if (!strcmpi(tok, "acc"))      mask |= EQP_ACC_RL;
++					else if (!strcmpi(tok, "accl"))     mask |= EQP_ACC_L;
++					else if (!strcmpi(tok, "accr"))     mask |= EQP_ACC_R;
++					else if (!strcmpi(tok, "head"))     mask |= EQP_HELM;
++					else if (!strcmpi(tok, "headtop"))  mask |= EQP_HEAD_TOP;
++					else if (!strcmpi(tok, "headmid"))  mask |= EQP_HEAD_MID;
++					else if (!strcmpi(tok, "headlow"))  mask |= EQP_HEAD_LOW;
++					else if (!strcmpi(tok, "costume"))  mask |= EQP_COSTUME;
++					else if (!strcmpi(tok, "shadow"))   mask |= EQP_SHADOW_GEAR;
++					else if (!strcmpi(tok, "ammo"))     mask |= EQP_AMMO;
++					else {
++						char msg[128];
++						snprintf(msg, sizeof(msg), "Unknown slot '%s' — use: weapon shield armor shoes garment acc accl accr head headtop headmid headlow costume shadow ammo", tok);
++						clif_displaymessage(fd, msg);
++						return -1;
++					}
++				}
++			}
++		}
++		const int moved = population_engine_companion_return_gear(sd, live, mask);
 +		char msg[96];
 +		if (moved >= 0)
 +			snprintf(msg, sizeof(msg), "Returned %d item(s) from %s.", moved, param);
@@ -58,11 +90,11 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
  		if (!param[0]) {
  			clif_displaymessage(fd, "Usage: @companion remove <name>");
-@@ -308,6 +344,6 @@
+@@ -308,6 +376,6 @@
  		}
  		return 0;
  	}
 -	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name>");
-+	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name>");
++	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name> [slots]");
  	return -1;
  }

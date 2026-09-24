@@ -1523,6 +1523,12 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
            `intl_`            SMALLINT      NOT NULL DEFAULT 100,
            `dex_`             SMALLINT      NOT NULL DEFAULT 100,
            `luk_`             SMALLINT      NOT NULL DEFAULT 100,
+           `pow_`             SMALLINT      NOT NULL DEFAULT 0, -- 4th-job traits (growth, v5)
+           `sta_`             SMALLINT      NOT NULL DEFAULT 0,
+           `wis_`             SMALLINT      NOT NULL DEFAULT 0,
+           `spl_`             SMALLINT      NOT NULL DEFAULT 0,
+           `con_`             SMALLINT      NOT NULL DEFAULT 0,
+           `crt_`             SMALLINT      NOT NULL DEFAULT 0,
            `map_id`           SMALLINT      NOT NULL DEFAULT 0, -- mapindex id of owner at recruit (recall target)
            `active`           TINYINT       NOT NULL DEFAULT 1, -- 1 = recalled on login; 0 = released (Goal 3 sets this)
            `favorite`         TINYINT       NOT NULL DEFAULT 0, -- 1 = owner favorited (friend list sort)
