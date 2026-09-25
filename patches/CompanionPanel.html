@@ -1,6 +1,11 @@
-<!-- Companion window. Chrome follows the Achievement window: the game's own
-     titlebar bitmaps, and ui-button/ui-image elements so the client loads the
-     bmp backgrounds itself rather than CSS drawing approximations. -->
+<!-- Companion window.
+     Chrome follows the Achievement window: the game's own titlebar bitmaps and
+     sidebar tab bitmaps, loaded from the GRF by the client.
+
+     Every bitmap path here was verified present in the player's client before use
+     (HTTP 200 from the running asset server). An earlier revision used invented
+     names, and ui-button with a missing bg renders nothing at all - which is what
+     made the tabs disappear. Do not add a path without checking it the same way. -->
 <div class="titlebar" data-draggable="true">
 	<div class="corner left">
 		<ui-image src="basic_interface/titlebar_left.bmp"></ui-image>
@@ -20,15 +25,29 @@
 </div>
 
 <div class="panel">
-	<div class="tabs">
-		<ui-button class="tab on" data-tab="party" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Party</ui-button>
-		<ui-button class="tab" data-tab="summon" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Summon</ui-button>
-		<ui-button class="tab" data-tab="battle" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Battle</ui-button>
-		<ui-button class="tab" data-tab="gear" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Gear</ui-button>
+	<div class="sidebar">
+		<div class="tab on" data-tab="party"
+			data-background="achievement_re/tab_out.bmp"
+			data-hover="achievement_re/tab_over.bmp"
+			data-active="achievement_re/tab_press.bmp">Party</div>
+		<div class="tab" data-tab="summon"
+			data-background="achievement_re/tab_out.bmp"
+			data-hover="achievement_re/tab_over.bmp"
+			data-active="achievement_re/tab_press.bmp">Summon</div>
+		<div class="tab" data-tab="battle"
+			data-background="achievement_re/tab_out.bmp"
+			data-hover="achievement_re/tab_over.bmp"
+			data-active="achievement_re/tab_press.bmp">Battle</div>
+		<div class="tab" data-tab="gear"
+			data-background="achievement_re/tab_out.bmp"
+			data-hover="achievement_re/tab_over.bmp"
+			data-active="achievement_re/tab_press.bmp">Gear</div>
 	</div>
 
-	<div class="page" data-page="party"></div>
-	<div class="page" data-page="summon" style="display: none"></div>
-	<div class="page" data-page="battle" style="display: none"></div>
-	<div class="page" data-page="gear" style="display: none"></div>
+	<div class="panes">
+		<div class="page" data-page="party"></div>
+		<div class="page" data-page="summon" style="display: none"></div>
+		<div class="page" data-page="battle" style="display: none"></div>
+		<div class="page" data-page="gear" style="display: none"></div>
+	</div>
 </div>
