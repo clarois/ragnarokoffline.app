@@ -19,6 +19,7 @@
 import UIManager from 'UI/UIManager.js';
 import GUIComponent from 'UI/GUIComponent.js';
 import Preferences from 'Core/Preferences.js';
+import Renderer from 'Renderer/Renderer.js';
 import ChatBox from 'UI/Components/ChatBox/ChatBox.js';
 import htmlText from './CompanionPanel.html?raw';
 import cssText from './CompanionPanel.css?raw';
@@ -124,7 +125,6 @@ function parseRosterLine(text) {
 	return true;
 }
 
-let _collecting = false;
 let _raf = 0;
 
 function _render() {
@@ -412,12 +412,25 @@ CompanionPanel.init = function init() {
 	});
 	root.querySelector('.tabs button').classList.add('on');
 
-	// Ask for the roster whenever the window is opened, and after a map change
-	// (a companion can be left behind or re-summoned across maps).
-	this.onAppend = () => {
-		_roster = [];
-		refreshRoster();
-	};
+};
+
+/**
+ * Intercept roster lines coming from the server BEFORE init runs, so the hook is
+ * in place even if the first refresh answers before the component is initialised.
+ *
+ * ChatBox.addText is the single funnel every server message passes through, so
+ * wrapping it is how the panel sees its own data without a second network path.
+ * @CP lines return false so they never reach the chat log - the raw format is
+ * machine data, not something a player should read.
+ */
+const _addText = ChatBox.addText;
+ChatBox.addText = function addText(text, ...rest) {
+	if (typeof text === 'string' && text.indexOf('@CP') >= 0) {
+		if (parseRosterLine(text)) {
+			return;
+		}
+	}
+	return _addText.call(this, text, ...rest);
 };
 
 /**
@@ -431,11 +444,17 @@ CompanionPanel.onRemove = function onRemove() {
 };
 
 /**
- * Append to html
+ * Once appended: position from the saved preference (clamped to the viewport,
+ * like every other window) and ask for the roster. A map change re-appends the
+ * component, so this is also where the list is refreshed after a warp.
  */
 CompanionPanel.onAppend = function onAppend() {
-	this._host.style.top = `${_preferences.y}px`;
-	this._host.style.left = `${_preferences.x}px`;
+	Object.assign(this._host.style, {
+		top: `${Math.min(Math.max(0, _preferences.y), Renderer.height - this._host.getBoundingClientRect().height)}px`,
+		left: `${Math.min(Math.max(0, _preferences.x), Renderer.width - this._host.getBoundingClientRect().width)}px`
+	});
+	_roster = [];
+	refreshRoster();
 };
 
 /**
@@ -445,32 +464,15 @@ CompanionPanel.clean = function clean() {
 	_preferences.save();
 };
 
-/**
- * Intercept roster lines coming from the server.
- *
- * ChatBox.addText is the single funnel every server message passes through, so
- * wrapping it is how the panel sees its own data without a second network path.
- * Returns false from the wrapper for @CP lines so they never reach the chat log
- * - the raw format is machine data, not something a player should read.
- */
-const _addText = ChatBox.addText;
-ChatBox.addText = function addText(text, ...rest) {
-	if (typeof text === 'string' && text.indexOf('@CP') >= 0) {
-		_collecting = true;
-		if (parseRosterLine(text)) {
-			return;
-		}
-	}
-	return _addText.call(this, text, ...rest);
-};
-
 CompanionPanel.toggle = function toggle() {
-	if (this._host.style.display === 'none') {
-		this._host.style.display = '';
-		this.append();
-	} else {
+	if (this._host.style.display !== 'none') {
 		this._host.style.display = 'none';
+		return;
 	}
+	// Show, then let onAppend do the positioning exactly as opening at startup
+	// would. Calling append() a second time is harmless - it re-runs the hook.
+	this._host.style.display = '';
+	this.append();
 };
 
 export default UIManager.addComponent(CompanionPanel);
