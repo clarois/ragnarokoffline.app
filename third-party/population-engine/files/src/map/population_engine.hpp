@@ -58,6 +58,7 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 /// Goal 1: re-spawn an owner's persisted companions after login restores membership. Returns count recalled.
 int population_engine_recall_companions(map_session_data *owner, uint32_t only_index = 0);
 void population_engine_reassert_companions(int32_t party_id);
+bool population_engine_persist_companion_row(map_session_data *sd, uint32_t owner_account);
 void population_engine_push_companion_list(map_session_data *owner);
 void population_engine_push_companion_list_for_shell(map_session_data *shell);
 /// Goal 3: flag a companion's persistence row active(1)/inactive(0).

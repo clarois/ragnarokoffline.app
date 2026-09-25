@@ -144,3 +144,30 @@ test('the panel replaces the list from a batch and redraws only on change', () =
 	// A manual refresh must be visible even when nothing changed.
 	assert.match(js, /_forceRedraw = true;/, 'a manual refresh needs a forced redraw');
 });
+
+test('the draft path CREATES the persistence row, not just updates it', () => {
+	// persist_companion_gear() is the recurring UPDATE. Called for a shell with no
+	// row it affects zero rows and reports no error, so the companion exists in the
+	// world and in the party but not in cp_companion_persistence - and
+	// @companion list raw reads that table, so the panel stays empty however often
+	// Refresh is pressed. A row can only come from persist_companion_sql (a REPLACE).
+	const draft = src.slice(src.indexOf('uint32_t population_engine_companion_draft'));
+	assert.ok(draft.length > 0, 'draft function not found');
+	const body = draft.slice(0, 6500);
+	assert.match(body, /population_engine_persist_companion_row\(/, 'the draft must create the row');
+	assert.ok(!/population_engine_persist_companion_gear\(shell\)/.test(body),
+		'the draft must not rely on the UPDATE-only snapshot: it cannot create a row');
+});
+
+test('both spawn paths share one row-creating function', () => {
+	// Recruit and draft must not be able to drift again - this is the third
+	// omission of the same class on this project (registry push, then party
+	// registration, now the insert).
+	assert.match(src, /bool population_engine_persist_companion_row\(map_session_data \*sd, uint32_t owner_account\)/,
+		'the shared row insert is missing');
+	const calls = (src.match(/population_engine_persist_companion_row\(/g) || []).length;
+	assert.ok(calls >= 3, `expected the helper to be declared and called from both paths, saw ${calls} mentions`);
+	const recruit = src.slice(src.indexOf('void population_engine_persist_recruited_companion'));
+	assert.match(recruit.slice(0, 7000), /population_engine_persist_companion_row\(sd, owner\)/,
+		'the recruit path must use the shared insert too');
+});

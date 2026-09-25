@@ -728,6 +728,7 @@ void population_engine_shell_release(map_session_data* sd)
 static bool pop_is_companion(const map_session_data *sd);
 static map_session_data *pop_companion_owner(map_session_data *sd);
 static void pop_companion_register_local_party(map_session_data *sd, map_session_data *owner);
+bool population_engine_persist_companion_row(map_session_data *sd, uint32_t owner_account);
 
 /// Removes stale shells from g_population_engine_pcs and returns them.
 /// Caller must call population_engine_shell_release on each returned pointer.
@@ -2319,7 +2320,11 @@ uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job
 
 	// Persist immediately: the row is the companion's identity from here on, and
 	// a crash before the next gear poll must not lose a drafted companion.
-	population_engine_persist_companion_gear(shell);
+	//
+	// persist_companion_gear() is the recurring UPDATE and would affect zero rows
+	// here (the row does not exist yet) while reporting no error - which is exactly
+	// how a drafted companion stayed invisible to @companion list. Create the row.
+	population_engine_persist_companion_row(shell, owner->status.account_id);
 	// Tell an open panel about the new companion; the roster changed.
 	population_engine_push_companion_list(owner);
 	ShowInfo("population_engine: drafted companion '%s' (job %u) for owner %u.\n",
@@ -3927,6 +3932,47 @@ static void population_engine_persist_companion_sql(
 		index_, owner_account, map_id);
 }
 
+/// Create (or refresh) this companion's persistence row: identity, appearance,
+/// current equipment, stats, traits and map.
+///
+/// This is the ONLY row-creating path. persist_companion_gear() is the recurring
+/// UPDATE that maintains an existing row, so a caller that reaches for it before
+/// the row exists silently does nothing - which is how a drafted companion ended up
+/// invisible to @companion list despite walking and fighting normally.
+///
+/// @return true when the row was written.
+bool population_engine_persist_companion_row(map_session_data *sd, uint32_t owner_account)
+{
+	if (!sd || !sd->state.active || owner_account == 0)
+		return false;
+	if (sd->status.char_id < POPULATION_ENGINE_CHAR_ID_BASE)
+		return false;
+	const uint32_t index_ = sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE;
+
+	uint32_t weapon = 0, shield = 0, armor = 0, shoes = 0, acc_l = 0, acc_r = 0;
+	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
+		const struct item &slot = sd->inventory.u.items_inventory[i];
+		if (!slot.nameid || !slot.equip) continue; // equipped only
+		if ((slot.equip & EQP_HAND_R) && !(slot.equip & EQP_SHADOW_WEAPON))  weapon  = slot.nameid;
+		else if ((slot.equip & EQP_HAND_L) && !(slot.equip & EQP_SHADOW_SHIELD)) shield = slot.nameid;
+		else if (slot.equip & EQP_ARMOR)                                          armor  = slot.nameid;
+		else if (slot.equip & EQP_SHOES)                                          shoes  = slot.nameid;
+		else if (slot.equip & EQP_ACC_L)                                          acc_l  = slot.nameid;
+		else if (slot.equip & EQP_ACC_R)                                          acc_r  = slot.nameid;
+	}
+
+	population_engine_persist_companion_sql(
+		owner_account, index_, sd->status.name, (int16_t)sd->status.class_, (int)sd->status.sex,
+		(int)sd->status.hair, (int)sd->status.hair_color, (int)sd->status.clothes_color,
+		(uint32_t)sd->status.robe, sd->status.option, weapon, shield,
+		(uint32_t)sd->status.head_top, (uint32_t)sd->status.head_mid, (uint32_t)sd->status.head_bottom,
+		armor, shoes, acc_l, acc_r, (int)sd->status.base_level, (int)sd->status.job_level, (int)sd->status.str,
+		(int)sd->status.agi, (int)sd->status.vit, (int)sd->status.int_, (int)sd->status.dex, (int)sd->status.luk,
+		(int)sd->status.pow, (int)sd->status.sta, (int)sd->status.wis, (int)sd->status.spl, (int)sd->status.con, (int)sd->status.crt,
+		(int16_t)sd->m);
+	return true;
+}
+
 // Goal 2 (trade): returns true when `target` is a population shell that belongs
 // to `player` and is summoned — i.e. a trade request from `player` may be
 // auto-accepted on the shell's behalf. Also checks same-map + distance.
@@ -4140,27 +4186,10 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 
 	const uint32_t index_ = char_id - POPULATION_ENGINE_CHAR_ID_BASE;
 
-	uint32_t weapon=0, shield=0, armor=0, shoes=0, acc_l=0, acc_r=0;
-	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
-		const struct item &slot = sd->inventory.u.items_inventory[i];
-		if (!slot.nameid || !slot.equip) continue; // equipped only
-		if ((slot.equip & EQP_HAND_R) && !(slot.equip & EQP_SHADOW_WEAPON))  weapon  = slot.nameid;
-		else if ((slot.equip & EQP_HAND_L) && !(slot.equip & EQP_SHADOW_SHIELD)) shield = slot.nameid;
-		else if (slot.equip & EQP_ARMOR)                                          armor  = slot.nameid;
-		else if (slot.equip & EQP_SHOES)                                          shoes  = slot.nameid;
-		else if (slot.equip & EQP_ACC_L)                                          acc_l  = slot.nameid; // Goal 2
-		else if (slot.equip & EQP_ACC_R)                                          acc_r  = slot.nameid; // Goal 2
-	}
-
-	population_engine_persist_companion_sql(
-		owner, index_, sd->status.name, (int16_t)sd->status.class_, (int)sd->status.sex,
-		(int)sd->status.hair, (int)sd->status.hair_color, (int)sd->status.clothes_color,
-		(uint32_t)sd->status.robe, sd->status.option, weapon, shield,
-		(uint32_t)sd->status.head_top, (uint32_t)sd->status.head_mid, (uint32_t)sd->status.head_bottom,
-		armor, shoes, acc_l, acc_r, (int)sd->status.base_level, (int)sd->status.job_level, (int)sd->status.str,
-		(int)sd->status.agi, (int)sd->status.vit, (int)sd->status.int_, (int)sd->status.dex, (int)sd->status.luk,
-		(int)sd->status.pow, (int)sd->status.sta, (int)sd->status.wis, (int)sd->status.spl, (int)sd->status.con, (int)sd->status.crt,
-		(int16_t)sd->m);
+	// Same insert the draft path uses, so a recruit and a draft cannot produce
+	// different rows (nor drift apart again as this one did).
+	population_engine_persist_companion_row(sd, owner);
+	(void)index_;
 
 	// The roster changed (a shell was recruited into the party) - tell an open panel
 	// so a right-click recruit in the world shows up without reopening the window.
