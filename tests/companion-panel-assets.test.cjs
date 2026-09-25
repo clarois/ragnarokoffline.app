@@ -66,11 +66,19 @@ test('the panel references at least one bitmap', () => {
 	assert.ok(bitmaps.length > 0, 'expected the HTML to reference bitmaps');
 });
 
-test('every referenced bitmap exists in the client', { skip: port ? false : 'no asset server running' }, async () => {
+test('every referenced bitmap exists in the client', async (t) => {
+	// The port may be stale in the log from a previous run, so probe first: if the
+	// asset server is not up, skip. A closed game is not a failure.
+	if (!port || (await head(port, UI_DIR + bitmaps[0])) === 0) {
+		t.skip('no asset server running (start the game to check bitmaps)');
+		return;
+	}
 	const missing = [];
 	for (const rel of bitmaps) {
 		const code = await head(port, UI_DIR + rel);
-		if (code !== 200) missing.push(`${rel} (HTTP ${code || 'no response'})`);
+		// A 0 means the server went away mid-run; only a definite 4xx/5xx is a
+		// missing file.
+		if (code !== 0 && code !== 200) missing.push(`${rel} (HTTP ${code})`);
 	}
 	assert.deepStrictEqual(
 		missing,

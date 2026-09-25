@@ -6,7 +6,21 @@ Wires population_engine_persist_recruited_companion() into the party_member_adde
 diff --git a/src/map/party.cpp b/src/map/party.cpp
 --- a/src/map/party.cpp
 +++ b/src/map/party.cpp
-@@ -711,6 +711,9 @@
+@@ -377,6 +377,13 @@
+ 			sd->status.party_id = 0;// was not in the party
+ 	}
+ 
++	// RAGNAROKMAC (Goal 1): the rebuild above replaced party.member[] with the
++	// char server's copy and cleared every data[] pointer. The char server does
++	// not know about companions - a population shell has no row in the `char`
++	// table - so without this the companions vanish from the party window on
++	// every relogin or party refresh, and lose their live session pointer.
++	population_engine_reassert_companions(sp->party_id);
++
+ 	return 0;
+ }
+ 
+@@ -711,6 +718,9 @@
  
  	sd->status.party_id = party_id;
  
@@ -16,7 +30,7 @@ diff --git a/src/map/party.cpp b/src/map/party.cpp
  	clif_party_member_info( *p, *sd );
  	clif_party_option(p,sd,0x100);
  	clif_party_info( *p, sd );
-@@ -842,6 +845,12 @@
+@@ -842,6 +852,12 @@
  	map_session_data* sd = map_charid2sd(char_id);
  	struct party_data* p = party_search(party_id);
  
@@ -29,7 +43,7 @@ diff --git a/src/map/party.cpp b/src/map/party.cpp
  	if( p ) {
  		map_session_data* party_sd = party_getavailablesd( p );
  
-@@ -909,6 +918,14 @@
+@@ -909,6 +925,14 @@
  		}
  	}
  
@@ -44,7 +58,7 @@ diff --git a/src/map/party.cpp b/src/map/party.cpp
  	idb_remove(party_db,party_id);
  
  	return 1;
-@@ -1145,6 +1162,10 @@
+@@ -1145,6 +1169,10 @@
  	intif_party_message(sd->status.party_id,sd->status.account_id,mes,len);
  	party_recv_message(sd->status.party_id,sd->status.account_id,mes,len);
  

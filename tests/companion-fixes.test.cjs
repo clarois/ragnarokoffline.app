@@ -70,3 +70,47 @@ test('the post-recall resync registers locally instead of asking the char server
 	assert.ok(!/party_request_info\(owner->status\.party_id/.test(body),
 		'the resync must not ask the char server: companion rows do not exist there');
 });
+
+// ── The next two, from the log after the previous round. ─────────────────────
+//
+// A drafted companion stood frozen and was absent from the companion window,
+// because the draft path never added the shell to g_population_engine_pcs - the
+// vector every driver walks (follow/combat tick, stale sweep, gear poll, and the
+// live-level lookup behind @companion list raw). Its party row existed, which is
+// why it showed in the party window but nowhere else.
+//
+// The party list "refreshed" on relogin because party_recv_info() (party.cpp)
+// memcpy's the char server's party over the map's own, then clears data[]: the
+// char server has no companion rows (a shell has no `char` row), so every rebuild
+// dropped them. The companions now have to be re-asserted after each rebuild.
+const PATCH5 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0005-population-companion-persistence.patch');
+const patch5 = fs.readFileSync(PATCH5, 'utf8');
+
+test('a drafted companion is added to the shell registry', () => {
+	const draft = src.slice(src.indexOf('uint32_t population_engine_companion_draft'));
+	assert.ok(draft.length > 0, 'draft function not found');
+	const body = draft.slice(0, 6000);
+	assert.match(body, /g_population_engine_pcs\.push_back\(shell\)/,
+		'a drafted shell must enter g_population_engine_pcs or nothing will ever drive it');
+	assert.match(body, /g_population_engine_count\+\+/, 'the live count must include drafted companions');
+});
+
+test('companion party rows are re-asserted after a party rebuild', () => {
+	// The function exists...
+	assert.match(src, /void population_engine_reassert_companions\(int32_t party_id\)/,
+		'the reassert helper is missing');
+	assert.match(hpp, /void population_engine_reassert_companions\(int32_t party_id\);/, 'it needs a declaration');
+	// ...and party_recv_info, the rebuild site, calls it.
+	// One tab of indentation in the source; assert on the statement, not the indent.
+	assert.match(patch5, /^\+\s*population_engine_reassert_companions\(sp->party_id\);/m,
+		'party_recv_info must re-assert companions after rebuilding from the char server');
+});
+
+test('the reassert helper restores both the member row and the data pointer', () => {
+	const fn = src.slice(src.indexOf('void population_engine_reassert_companions'));
+	assert.ok(fn.length > 0, 'helper not found');
+	const body = fn.slice(0, 3500);
+	assert.match(body, /p->data\[i\]\.sd = sd;/, 'the live session pointer must be restored, not just the row');
+	assert.match(body, /p->party\.count\+\+/, 'the member count must be adjusted');
+	assert.match(body, /clif_party_info/, 'the window must be told');
+});

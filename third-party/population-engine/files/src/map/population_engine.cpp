@@ -2290,6 +2290,17 @@ uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job
 	// Attach it to the owner as a summoned companion and give it a party slot.
 	shell->pop.companion_owner_account = owner->status.account_id;
 	shell->pop.flags |= PSF::Mortal;
+
+	// Register the shell BEFORE anything else touches it. Every driver - the
+	// follow/combat tick, the stale sweep, the gear poll and the live-level lookup
+	// behind @companion list raw - walks g_population_engine_pcs. A drafted shell
+	// that is not in it never moves, never appears in the companion window and is
+	// not counted, even though its party row exists.
+	g_population_engine_pcs.push_back(shell);
+	g_population_engine_count++;
+	g_population_engine_stats.total_created++;
+	g_population_engine_stats.active_units++;
+
 	// Join the owner's party the same way a recalled companion does, so a drafted
 	// companion is a real party member (party window row included) and not just a
 	// shell carrying a party id.
@@ -4367,6 +4378,67 @@ static void pop_companion_register_local_party(map_session_data *sd, map_session
 
 	p->data[i].sd = sd;
 	clif_party_info(*p, nullptr);
+}
+
+/// Re-insert every companion belonging to this party after the map-side party
+/// struct has been rebuilt from the char server.
+///
+/// Called from party_recv_info() (see patch 0005), which overwrites party.member[]
+/// with the char server's copy and clears data[] - and the char server does not
+/// know about companions, because a population shell has no row in the `char`
+/// table. Without this the companions vanish from the party window and lose their
+/// live session pointer on every relogin or party refresh.
+void population_engine_reassert_companions(int32_t party_id)
+{
+	if (party_id <= 0 || party_id >= 0x70000000)
+		return;
+
+	struct party_data *p = party_search(party_id);
+	if (p == nullptr)
+		return;
+
+	int reintroduced = 0;
+	for (map_session_data *sd : g_population_engine_pcs) {
+		if (sd == nullptr || !sd->state.active)
+			continue;
+		if (sd->pop.companion_owner_account == 0)
+			continue;
+		// Membership is by owner: a shell belongs to the party its owner is in.
+		map_session_data *owner = map_id2sd(sd->pop.companion_owner_account);
+		if (owner == nullptr || owner->status.party_id != party_id)
+			continue;
+
+		int32 i;
+		ARR_FIND(0, MAX_PARTY, i,
+			p->party.member[i].account_id == sd->status.account_id &&
+			p->party.member[i].char_id == sd->status.char_id);
+		if (i >= MAX_PARTY) {
+			ARR_FIND(0, MAX_PARTY, i, p->party.member[i].account_id == 0);
+			if (i >= MAX_PARTY)
+				continue; // party genuinely full of real players: leave it be
+			struct party_member &m = p->party.member[i];
+			memset(&m, 0, sizeof(m));
+			m.account_id = sd->status.account_id;
+			m.char_id = sd->status.char_id;
+			safestrncpy(m.name, sd->status.name, NAME_LENGTH);
+			m.class_ = sd->status.class_;
+			safestrncpy(m.map, mapindex_id2name(sd->mapindex), sizeof(m.map));
+			m.lv = sd->status.base_level;
+			m.online = 1;
+			m.leader = 0;
+			p->party.count++;
+			++reintroduced;
+		}
+		// Restore the live session pointer the memset cleared.
+		sd->status.party_id = party_id;
+		p->data[i].sd = sd;
+	}
+
+	if (reintroduced > 0) {
+		ShowInfo("population_engine: re-asserted %d companion(s) in party %d after a party rebuild.\n",
+			reintroduced, party_id);
+		clif_party_info(*p, nullptr);
+	}
 }
 
 /// RAGNAROKMAC (Phase 3): machine-readable companion list for the in-game panel.
