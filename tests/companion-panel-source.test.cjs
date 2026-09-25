@@ -79,3 +79,25 @@ test('the roster wire format matches what the server writes', () => {
 	assert.match(src, /'@CP'/, 'client no longer keys on the @CP prefix');
 	assert.match(src, /startsWith\('@CPEND'\)/, 'client no longer recognises the sentinel');
 });
+
+test('the component is prepared at startup by the engine', () => {
+	// Without this call the component has no _host, and the first button press
+	// dies inside GUIComponent.toggle with a null-_host error that names the
+	// symptom rather than the missing call.
+	const patch = fs.readFileSync(path.join(ROOT, 'scripts', 'patch-client.sh'), 'utf8');
+	assert.match(
+		patch,
+		/CompanionPanel\.prepare\(\)/,
+		'patch-client.sh must add CompanionPanel.prepare() to the engine prepare list'
+	);
+});
+
+test('toggle() does not assume a prepared host', () => {
+	const body = src.match(/CompanionPanel\.toggle = function toggle\(\) \{[\s\S]*?\n\};/);
+	assert.ok(body, 'CompanionPanel.toggle not found');
+	assert.match(
+		body[0],
+		/!this\._host/,
+		'toggle() must handle a null _host, since append() prepares on demand'
+	);
+});

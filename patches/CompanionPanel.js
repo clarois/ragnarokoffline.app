@@ -486,14 +486,18 @@ CompanionPanel.clean = function clean() {
 };
 
 CompanionPanel.toggle = function toggle() {
-	if (this._host.style.display !== 'none') {
+	// append() prepares on demand (see GUIComponent.append -> prepare), so this
+	// also covers the case where the engine never prepared this component: a
+	// button press must not be the thing that discovers _host is still null.
+	if (!this.__active || !this._host || this._host.style.display === 'none') {
+		this.append();
+		this._host.style.display = '';
+		if (typeof this._fixPositionOverflow === 'function') {
+			this._fixPositionOverflow();
+		}
+	} else {
 		this._host.style.display = 'none';
-		return;
 	}
-	// Show, then let onAppend do the positioning exactly as opening at startup
-	// would. Calling append() a second time is harmless - it re-runs the hook.
-	this._host.style.display = '';
-	this.append();
 };
 
 export default UIManager.addComponent(CompanionPanel);

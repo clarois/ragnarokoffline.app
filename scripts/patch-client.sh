@@ -103,8 +103,8 @@ def add_companion_button(path):
         f'{indent}<{tag}\n'
         f'{indent}\tid="companion"\n'
         f'{indent}\tclass="event_add_cursor"\n'
-        f'{indent}\tdata-background="menu_icon/bt_attendance.bmp"\n'
-        f'{indent}\tdata-down="menu_icon/bt_attendance_press.bmp"\n'
+        f'{indent}\tdata-background="menu_icon/bt_party.bmp"\n'
+        f'{indent}\tdata-down="menu_icon/bt_party_press.bmp"\n'
         f'{indent}>\n'
         f'{indent}\t<span class="name">Companions</span>\n'
         f'{indent}</{tag}>\n'
@@ -145,6 +145,30 @@ else:
     )
     p.write_text(s)
     print("wired the companion button into BasicInfoCommon.js")
+
+# The component must also be prepared at startup, or its _host is still null when
+# the first button press calls toggle() - and the failure surfaces as
+# "Cannot read properties of null (reading 'style')" inside GUIComponent.toggle,
+# which says nothing about the missing call. MapEngine has an explicit prepare()
+# list; ours goes beside CheckAttendance, the other button-strip window.
+p = rb / "src/Engine/MapEngine.js"
+s = p.read_text()
+if "CompanionPanel.prepare()" in s:
+    print("MapEngine.js already prepares CompanionPanel")
+else:
+    anchor_prepare = """\t\t\tif (Configs.get('enableCheckAttendance') && PACKETVER.value >= 20180307) {
+\t\t\t\tCheckAttendance.prepare();
+\t\t\t}"""
+    if anchor_prepare not in s:
+        sys.exit("MapEngine.js: no CheckAttendance prepare block to anchor on")
+    s = s.replace(
+        anchor_prepare,
+        anchor_prepare + "\n\n\t\t\t// The companion window opens from a button in the Basic Information strip.\n"
+        "\t\t\tCompanionPanel.prepare();",
+        1,
+    )
+    p.write_text(s)
+    print("wired CompanionPanel.prepare() into MapEngine.js")
 
 p = rb / "src/Network/PacketStructure.js"
 s = p.read_text()
