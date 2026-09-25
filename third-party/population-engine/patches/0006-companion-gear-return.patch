@@ -6,7 +6,7 @@ Adds population_engine_companion_return_gear(owner, shell) (pc_unequipitem flag 
 diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 --- a/src/custom/atcommand.inc
 +++ b/src/custom/atcommand.inc
-@@ -226,7 +226,7 @@
+@@ -226,10 +226,17 @@
  	nullpo_retr(-1, sd);
  	char cmd[32], param[NAME_LENGTH];
  	if (!message || !*message || sscanf(message, "%31s %23[^\n]", cmd, param) < 1) {
@@ -15,7 +15,17 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  		return -1;
  	}
  	if (strcmpi(cmd, "list") == 0) {
-@@ -272,6 +272,74 @@
++		// RAGNAROKMAC (Phase 3): "list raw" emits the machine-readable form for
++		// the in-game panel (@CP|name|job|level|active|favorite|live). The plain
++		// form stays human-formatted.
++		if (strcmpi(param, "raw") == 0) {
++			population_engine_companion_list_raw(sd->status.account_id, fd);
++			return 0;
++		}
+ 		population_engine_companion_list(sd->status.account_id, fd);
+ 		return 0;
+ 	}
+@@ -272,6 +279,74 @@
  		clif_displaymessage(fd, msg);
  		return 0;
  	}
@@ -90,7 +100,7 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
  		if (!param[0]) {
  			clif_displaymessage(fd, "Usage: @companion remove <name>");
-@@ -308,6 +376,128 @@
+@@ -308,6 +383,128 @@
  		}
  		return 0;
  	}

@@ -4279,6 +4279,75 @@ void population_engine_companion_list(uint32_t owner_account, int fd)
 	clif_displaymessage(fd, msg);
 }
 
+/// RAGNAROKMAC (Phase 3): machine-readable companion list for the in-game panel.
+///
+/// One line per companion, fixed field order, pipe-separated:
+///   @CP|name|job_name|base_level|active(0/1)|favorite(0/1)|level(current,0 if not summoned)
+/// terminated by a sentinel line:
+///   @CPEND|count
+///
+/// Deliberately NOT the display format @companion list prints: that text is
+/// localized and padded for humans, so a client parsing it would break the day
+/// a message id changes. This one has no prose in it at all - the panel shows
+/// its own labels, and only the values travel.
+void population_engine_companion_list_raw(uint32_t owner_account, int fd)
+{
+	if (mmysql_handle == nullptr) return;
+	char q[400];
+	snprintf(q, sizeof(q),
+		"SELECT name, job_id, active, favorite, base_level FROM `cp_companion_persistence`"
+		" WHERE owner_account_id=%u ORDER BY favorite DESC, name ASC",
+		owner_account);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		clif_displaymessage(fd, "@CPFAIL");
+		return;
+	}
+	int count = 0;
+	char* data = nullptr;
+	while (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+		char namebuf[NAME_LENGTH];
+		Sql_GetData(mmysql_handle, 0, &data, nullptr);
+		safestrncpy(namebuf, data != nullptr ? data : "", NAME_LENGTH);
+		Sql_GetData(mmysql_handle, 1, &data, nullptr); int job_id = atoi(data);
+		Sql_GetData(mmysql_handle, 2, &data, nullptr); int active = atoi(data) != 0 ? 1 : 0;
+		Sql_GetData(mmysql_handle, 3, &data, nullptr); int fav = atoi(data) != 0 ? 1 : 0;
+		Sql_GetData(mmysql_handle, 4, &data, nullptr); int base_lv = atoi(data);
+
+		// A null byte or a newline inside a name would break the one-line format,
+		// and a name is player-chosen, so scrub before sending.
+		for (char *c = namebuf; *c != '\0'; ++c) {
+			if (*c == '|' || *c == '\n' || *c == '\r')
+				*c = '_';
+		}
+
+		// Live level, when this companion is currently summoned: the persisted
+		// base_level is the spawn-time snapshot, which lags a companion that has
+		// been levelling in the party.
+		int live_lv = 0;
+		for (map_session_data *sd : g_population_engine_pcs) {
+			if (sd == nullptr || !pop_is_companion(sd))
+				continue;
+			if (sd->pop.companion_owner_account != owner_account)
+				continue;
+			if (strcmp(sd->status.name, namebuf) != 0)
+				continue;
+			live_lv = sd->status.base_level;
+			break;
+		}
+
+		char msg[NAME_LENGTH + 96];
+		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d",
+			namebuf, job_name(job_id), base_lv, active, fav, live_lv);
+		clif_displaymessage(fd, msg);
+		count++;
+	}
+	Sql_FreeResult(mmysql_handle);
+	char endmsg[64];
+	snprintf(endmsg, sizeof(endmsg), "@CPEND|%d", count);
+	clif_displaymessage(fd, endmsg);
+}
+
 static void population_engine_recall_one_companion(map_session_data *owner, int16_t map_id, uint32_t index_,
 	int16_t job_id, char sex, int hair_style, int hair_color, int cloth_color,
 	uint32_t garment, uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,

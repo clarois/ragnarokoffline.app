@@ -80,6 +80,7 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 int population_engine_companion_return_gear(map_session_data *owner, map_session_data *shell, uint32_t slot_mask = 0);
 int population_engine_companion_set_heal_thresholds(uint32_t owner_account, int16_t heal_at, int16_t emergency_at);
 uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job_id, int quality, const char *name_hint);
+void population_engine_companion_list_raw(uint32_t owner_account, int fd);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
 void population_engine_companion_list(uint32_t owner_account, int fd);
 /// Goal 3 friend list: permanently delete a saved companion's row by name (irreversible).
