@@ -171,3 +171,47 @@ test('both spawn paths share one row-creating function', () => {
 	assert.match(recruit.slice(0, 7000), /population_engine_persist_companion_row\(sd, owner\)/,
 		'the recruit path must use the shared insert too');
 });
+
+test('the gear command resolves a name of any word count before the slot list', () => {
+	// The atcommand header splits once: cmd = first word, param = the whole remainder.
+	// Treating that remainder as the name made `@companion gear Talivis armor` look up
+	// "Talivis armor" and report it as not in the saved list, while the slot parser
+	// separately assumed exactly two leading tokens. Longest-prefix resolution is what
+	// makes a name and a trailing argument list coexist.
+	assert.ok(patch6.includes('companion_resolve_name_and_tail'),
+		'patch 0006 must carry the name+tail resolver');
+	assert.ok(patch6.includes('for (size_t cut = len; cut > 0; --cut)'),
+		'the resolver must scan cut points from the end so the longest name wins');
+	assert.ok(patch6.includes('safestrncpy(slots, gear_tail'),
+		'the slot parser must read the resolved tail, not re-split the raw message');
+	assert.ok(!patch6.includes('sscanf(message, "%*31s %*23s'),
+		'the old two-token assumption must be gone');
+});
+
+test('removing a companion pushes the updated roster', () => {
+	assert.ok(patch6.includes('population_engine_push_companion_list(sd);'),
+		'remove must push so an open panel drops the row');
+});
+
+test('the panel offers a delete button with an in-window confirmation', () => {
+	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8');
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	assert.ok(js.includes('confirmInWindow'), 'the panel needs a confirmation path');
+	// Check for a CALL, not the string: the file explains in a comment why the blocking
+	// dialog is not used, and a naive substring test trips on its own explanation.
+	// Strip both comment forms before looking: this file explains in prose why the
+	// blocking dialog is not used, and a naive substring test trips on its own
+	// explanation (it did, twice - first on the // form, then on the * form).
+	const code = js
+		.replace(/\/\*[\s\S]*?\*\//g, '')
+		.split('\n')
+		.map(l => l.replace(/\/\/.*$/, ''))
+		.join('\n');
+	const blocking = [/window\.confirm\s*\(/, /window\.alert\s*\(/, /window\.prompt\s*\(/]
+		.filter(re => re.test(code));
+	assert.deepStrictEqual(blocking, [],
+		'a blocking browser dialog freezes the game loop; the confirmation must be drawn in-window');
+	assert.ok(js.includes('@companion remove '), 'the confirmed action must be the remove command');
+	assert.ok(css.includes('.confirm-overlay'), 'the overlay needs styling');
+	assert.ok(css.includes('button.danger'), 'the destructive button needs its own look');
+});

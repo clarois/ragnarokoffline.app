@@ -6,7 +6,63 @@ Adds population_engine_companion_return_gear(owner, shell) (pc_unequipitem flag 
 diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 --- a/src/custom/atcommand.inc
 +++ b/src/custom/atcommand.inc
-@@ -226,10 +226,17 @@
+@@ -221,15 +221,73 @@
+ /* @companion — manage saved (Goal 1/3) companions: list / favorite / summon.
+  * Companions persist in cp_companion_persistence; expelled ones stay there
+  * inactive and can be re-summoned by name with their exact saved identity. */
++/// Resolve the companion named at the START of `text`, longest match first.
++///
++/// @param account_id  owner whose saved list to search
++/// @param text        the argument remainder (may be just a name, or a name plus
++///                    further arguments joined by spaces)
++/// @param out_name    receives the matched name
++/// @param out_name_len size of out_name
++/// @param out_tail    receives the remaining text after the name (may be empty)
++/// @param out_tail_len size of out_tail
++/// @return true when a saved companion matched.
++///
++/// Longest-prefix matching is what makes `@companion gear Talivis armor` work: the
++/// name is the longest leading run of words that exists in the player's list, and
++/// everything after it is the slot list. A single whitespace split cannot do this,
++/// which is why the old form only worked for one-word names with no extra arguments.
++static bool companion_resolve_name_and_tail(uint32_t account_id, const char *text,
++	char *out_name, size_t out_name_len, char *out_tail, size_t out_tail_len)
++{
++	if (text == nullptr || out_name == nullptr || out_tail == nullptr || out_name_len == 0 || out_tail_len == 0)
++		return false;
++	out_name[0] = '\0';
++	out_tail[0] = '\0';
++
++	const size_t len = strlen(text);
++	// Walk the break points between words, from the END backwards, so the first
++	// successful lookup is the longest candidate.
++	for (size_t cut = len; cut > 0; --cut) {
++		if (cut < len && text[cut] != ' ')
++			continue; // only consider cuts at a word boundary
++		size_t end = cut;
++		while (end > 0 && text[end - 1] == ' ')
++			--end; // trim trailing spaces from the candidate
++		if (end == 0)
++			continue;
++		char candidate[NAME_LENGTH];
++		const size_t n = end < (out_name_len - 1) ? end : (out_name_len - 1);
++		safestrncpy(candidate, text, n + 1);
++		uint32_t idx = 0; bool act = false;
++		if (!population_engine_companion_find(account_id, candidate, &idx, &act))
++			continue; // not a name: try a shorter prefix
++		safestrncpy(out_name, candidate, out_name_len);
++		// Everything after the name (skipping the separating spaces) is the tail.
++		size_t tail = cut;
++		while (tail < len && text[tail] == ' ')
++			++tail;
++		safestrncpy(out_tail, text + tail, out_tail_len);
++		return true;
++	}
++	return false;
++}
++
+ ACMD_FUNC(companion)
+ {
  	nullpo_retr(-1, sd);
  	char cmd[32], param[NAME_LENGTH];
  	if (!message || !*message || sscanf(message, "%31s %23[^\n]", cmd, param) < 1) {
@@ -25,7 +81,7 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  		population_engine_companion_list(sd->status.account_id, fd);
  		return 0;
  	}
-@@ -264,14 +271,82 @@
+@@ -264,19 +322,98 @@
  		}
  		if (!active)
  			population_engine_set_companion_active(sd->status.account_id, index_, true);
@@ -40,18 +96,26 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
  		clif_displaymessage(fd, msg);
  		return 0;
  	}
+-	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
 +	// RAGNAROKMAC (Goal 2): take all worn gear back from a summoned companion.
 +	// Unequips every equipped slot on the shell and hands each piece to the
 +	// caller's inventory (or drops at their feet when overweight).
 +	if (strcmpi(cmd, "gear") == 0 || strcmpi(cmd, "unequip") == 0) {
-+		if (!param[0]) {
+ 		if (!param[0]) {
 +			clif_displaymessage(fd, "Usage: @companion gear <name> [weapon] [shield] [armor] [shoes] [garment] [acc] [head] [costume] [shadow] [ammo]");
 +			return -1;
 +		}
-+		uint32_t index_ = 0; bool active = false;
-+		if (!population_engine_companion_find(sd->status.account_id, param, &index_, &active)) {
++		char gear_name[NAME_LENGTH] = {0}, gear_tail[128] = {0};
++		if (!companion_resolve_name_and_tail(sd->status.account_id, param, gear_name, sizeof(gear_name), gear_tail, sizeof(gear_tail))) {
 +			char msg[NAME_LENGTH + 48];
 +			snprintf(msg, sizeof(msg), "Companion '%s' not found in your saved list.", param);
++			clif_displaymessage(fd, msg);
++			return -1;
++		}
++		uint32_t index_ = 0; bool active = false;
++		if (!population_engine_companion_find(sd->status.account_id, gear_name, &index_, &active)) {
++			char msg[NAME_LENGTH + 48];
++			snprintf(msg, sizeof(msg), "Companion '%s' not found in your saved list.", gear_name);
 +			clif_displaymessage(fd, msg);
 +			return -1;
 +		}
@@ -72,8 +136,10 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 +		// with no slot args the mask stays 0 = strip everything (original behavior).
 +		uint32_t mask = 0;
 +		{
++			// Slots come from the resolved tail, so a multi-word name cannot shift them.
 +			char slots[128] = {0};
-+			if (sscanf(message, "%*31s %*23s %127[^\n]", slots) == 1) {
++			safestrncpy(slots, gear_tail, sizeof(slots));
++			if (slots[0]) {
 +				for (char *tok = strtok(slots, " \t"); tok; tok = strtok(nullptr, " \t")) {
 +					if (!strcmpi(tok, "weapon"))  mask |= EQP_HAND_R;
 +					else if (!strcmpi(tok, "shield"))   mask |= EQP_HAND_L;
@@ -102,16 +168,32 @@ diff --git a/src/custom/atcommand.inc b/src/custom/atcommand.inc
 +		const int moved = population_engine_companion_return_gear(sd, live, mask);
 +		char msg[96];
 +		if (moved >= 0)
-+			snprintf(msg, sizeof(msg), "Returned %d item(s) from %s.", moved, param);
++			snprintf(msg, sizeof(msg), "Returned %d item(s) from %s.", moved, gear_name);
 +		else
-+			snprintf(msg, sizeof(msg), "Could not return gear from %s.", param);
++			snprintf(msg, sizeof(msg), "Could not return gear from %s.", gear_name);
 +		clif_displaymessage(fd, msg);
 +		return 0;
 +	}
- 	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
- 		if (!param[0]) {
++	if (strcmpi(cmd, "remove") == 0 || strcmpi(cmd, "delete") == 0) {
++		char del_name[NAME_LENGTH] = {0}, del_tail[8] = {0};
++		if (!param[0] || !companion_resolve_name_and_tail(sd->status.account_id, param, del_name, sizeof(del_name), del_tail, sizeof(del_tail))) {
  			clif_displaymessage(fd, "Usage: @companion remove <name>");
-@@ -308,6 +383,128 @@
+ 			return -1;
+ 		}
++		safestrncpy(param, del_name, sizeof(param));
+ 		uint32_t index_ = 0; bool active = false;
+ 		if (!population_engine_companion_find(sd->status.account_id, param, &index_, &active)) {
+ 			char msg[NAME_LENGTH + 48];
+@@ -299,6 +436,8 @@
+ 			population_engine_shell_release(live);
+ 		}
+ 		if (population_engine_companion_delete(sd->status.account_id, param)) {
++			// The roster changed: let an open panel drop the row immediately.
++			population_engine_push_companion_list(sd);
+ 			char msg[NAME_LENGTH + 64];
+ 			snprintf(msg, sizeof(msg), "Companion '%s' deleted from your saved list (gone for good).", param);
+ 			clif_displaymessage(fd, msg);
+@@ -308,6 +447,128 @@
  		}
  		return 0;
  	}

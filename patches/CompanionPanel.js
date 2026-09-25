@@ -284,7 +284,20 @@ function _drawParty() {
 			window.setTimeout(refreshRoster, 600);
 		}, 'Favorite (sorts first)');
 
-		page.append(_row(nm, lv, badge, duty, summon, fav));
+		// Delete is permanent - it removes the saved row, not just the party slot -
+		// so it asks first, in-window.
+		const trash = _button('🗑', 'b danger', () => {
+			confirmInWindow(
+				`Delete ${m.name} permanently?`,
+				'The saved companion, its level and its equipment are removed for good. This cannot be undone.'
+			).then(ok => {
+				if (!ok) return;
+				talk(`@companion remove ${m.name}`, false);
+				window.setTimeout(refreshRoster, 600);
+			});
+		}, 'Delete this saved companion permanently');
+
+		page.append(_row(nm, lv, badge, duty, summon, fav, trash));
 	});
 
 	page.append(_button('Refresh', 'b wide', refreshRoster));
@@ -469,6 +482,61 @@ function installChatHook() {
 		return original.call(this, text, ...rest);
 	};
 	ChatBox.__companionPanelHooked = true;
+}
+
+/**
+ * Show an in-window confirmation. Resolves to true when the player confirms.
+ *
+ * Deliberately not window.confirm(): a blocking browser dialog freezes the game
+ * loop and input until it is dismissed, inside a component that lives on the game
+ * page. This overlay is plain DOM, so the confirming click is an ordinary click on
+ * this component and nothing else stops.
+ *
+ * @param {string} question
+ * @param {string} detail
+ * @return {Promise<boolean>}
+ */
+function confirmInWindow(question, detail) {
+	return new Promise(resolve => {
+		const root = CompanionPanel.getRoot();
+		const overlay = document.createElement('div');
+		overlay.className = 'confirm-overlay';
+		overlay.innerHTML = `
+			<div class="confirm-box">
+				<div class="confirm-question"></div>
+				<div class="confirm-detail"></div>
+				<div class="confirm-buttons">
+					<button class="b" data-act="cancel">Cancel</button>
+					<button class="b danger" data-act="ok">Delete</button>
+				</div>
+			</div>`;
+		overlay.querySelector('.confirm-question').textContent = question;
+		overlay.querySelector('.confirm-detail').textContent = detail || '';
+
+		const done = answer => {
+			overlay.remove();
+			resolve(answer);
+		};
+		overlay.addEventListener('mousedown', e => e.stopImmediatePropagation());
+		overlay.querySelector('[data-act="cancel"]').addEventListener('click', e => {
+			e.stopPropagation();
+			done(false);
+		});
+		overlay.querySelector('[data-act="ok"]').addEventListener('click', e => {
+			e.stopPropagation();
+			done(true);
+		});
+		// Escape cancels, matching every other window in the client.
+		const onKey = ev => {
+			if (ev.key === 'Escape') {
+				ev.stopPropagation();
+				window.removeEventListener('keydown', onKey, true);
+				done(false);
+			}
+		};
+		window.addEventListener('keydown', onKey, true);
+		root.append(overlay);
+	});
 }
 
 /**

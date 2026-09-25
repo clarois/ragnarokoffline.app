@@ -245,3 +245,64 @@
 		linear-gradient(135deg, transparent 0 55%, #8a7a58 55% 62%, transparent 62%),
 		linear-gradient(135deg, transparent 0 72%, #8a7a58 72% 79%, transparent 79%);
 }
+
+/* ── in-window confirmation ──────────────────────────────────────────────
+   Drawn inside the panel rather than via window.confirm(), which would block
+   the game loop and input while it is up. */
+
+#CompanionPanel .confirm-overlay {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #00000055;
+	z-index: 5;
+}
+
+#CompanionPanel .confirm-box {
+	width: 86%;
+	max-width: 260px;
+	background: #f6f1e3;
+	border: 1px solid #8a7a58;
+	padding: 9px 10px;
+	box-shadow: 2px 2px 0 #00000022;
+	text-align: center;
+}
+
+#CompanionPanel .confirm-question {
+	font-size: 12px;
+	font-weight: bold;
+	color: #4a3f2c;
+	margin-bottom: 4px;
+}
+
+#CompanionPanel .confirm-detail {
+	font-size: 11px;
+	color: #6b5d42;
+	line-height: 1.35;
+	margin-bottom: 8px;
+}
+
+#CompanionPanel .confirm-buttons {
+	display: flex;
+	gap: 5px;
+	justify-content: center;
+}
+
+#CompanionPanel .confirm-buttons button {
+	min-width: 66px;
+	padding: 3px 8px;
+}
+
+/* A permanent action gets a red cast so it does not read like the other buttons. */
+#CompanionPanel button.danger {
+	color: #7a1f10;
+	border-color: #a8604f;
+	background: #f3ded8;
+}
+
+#CompanionPanel button.danger:hover { background: #faeae5; }
