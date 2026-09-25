@@ -153,6 +153,23 @@ else:
 # list; ours goes beside CheckAttendance, the other button-strip window.
 p = rb / "src/Engine/MapEngine.js"
 s = p.read_text()
+
+# The import is not optional: a bundler does not resolve bare identifiers, so a
+# call to an unimported module compiles cleanly and throws at runtime - and since
+# it throws inside MapEngine.init, everything later in that function is skipped
+# (ChatBox.onRequestTalk is assigned further down, so commands stop working; the
+# UI engines below never initialise, so their packets crash on a null host).
+NEEDS_IMPORT = "import CompanionPanel from 'UI/Components/CompanionPanel/CompanionPanel.js';"
+if NEEDS_IMPORT in s:
+    print("MapEngine.js already imports CompanionPanel")
+else:
+    anchor_import = "import Achievement from 'UI/Components/Achievement/Achievement.js';"
+    if anchor_import not in s:
+        sys.exit("MapEngine.js: no Achievement import to anchor the CompanionPanel import on")
+    s = s.replace(anchor_import, anchor_import + "\n" + NEEDS_IMPORT, 1)
+    p.write_text(s)
+    print("imported CompanionPanel into MapEngine.js")
+
 if "CompanionPanel.prepare()" in s:
     print("MapEngine.js already prepares CompanionPanel")
 else:
@@ -169,6 +186,11 @@ else:
     )
     p.write_text(s)
     print("wired CompanionPanel.prepare() into MapEngine.js")
+
+# Fail loudly if the two ever drift apart again: a prepare() call whose module
+# was never imported is a runtime crash that no build will report.
+if "CompanionPanel.prepare()" in s and NEEDS_IMPORT not in s:
+    sys.exit("MapEngine.js: CompanionPanel.prepare() is called but CompanionPanel is not imported")
 
 p = rb / "src/Network/PacketStructure.js"
 s = p.read_text()
