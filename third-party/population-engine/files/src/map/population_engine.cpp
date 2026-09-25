@@ -727,6 +727,7 @@ void population_engine_shell_release(map_session_data* sd)
 
 static bool pop_is_companion(const map_session_data *sd);
 static map_session_data *pop_companion_owner(map_session_data *sd);
+static void pop_companion_register_local_party(map_session_data *sd, map_session_data *owner);
 
 /// Removes stale shells from g_population_engine_pcs and returns them.
 /// Caller must call population_engine_shell_release on each returned pointer.
@@ -2271,8 +2272,10 @@ uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job
 	// Attach it to the owner as a summoned companion and give it a party slot.
 	shell->pop.companion_owner_account = owner->status.account_id;
 	shell->pop.flags |= PSF::Mortal;
-	if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000)
-		shell->status.party_id = owner->status.party_id;
+	// Join the owner's party the same way a recalled companion does, so a drafted
+	// companion is a real party member (party window row included) and not just a
+	// shell carrying a party id.
+	pop_companion_register_local_party(shell, owner);
 
 	// Name: the caller's hint (already checked unique), else the profile's own
 	// naming. A shell with no name cannot be addressed by later commands.
@@ -4279,6 +4282,75 @@ void population_engine_companion_list(uint32_t owner_account, int fd)
 	clif_displaymessage(fd, msg);
 }
 
+// ── RAGNAROKMAC: register a shell into the owner's map-local party.
+//
+// Why map-local and not the char server: inter_party_tosql persists membership as
+// "UPDATE char SET party_id=7 WHERE account_id=? AND char_id=?", and population
+// shells have NO row in the char table at all (only real characters do). So the
+// char-server round-trip can never durably hold a companion - the UPDATE matches
+// nothing. That is why "party join requested" appears in the log eight times while
+// "party join reply" never appears and the char log shows no member added: the
+// shell was left with status.party_id = 0, pop_is_companion() returned false, and
+// everything downstream (stance, follow, the panel's shell count) saw nothing.
+//
+// Membership therefore lives in the map's own party struct, which is what draws
+// the party window and what the engine's own checks read. Durability across a
+// restart comes from the login recall re-registering it, exactly as the
+// companions themselves are restored.
+static void pop_companion_register_local_party(map_session_data *sd, map_session_data *owner)
+{
+	if (!sd || !owner)
+		return;
+	if (owner->status.party_id <= 0 || owner->status.party_id >= 0x70000000)
+		return;
+
+	const int32 party_id = owner->status.party_id;
+	struct party_data *p = party_search(party_id);
+
+	sd->status.party_id = party_id;
+	sd->party_joining = false;
+	sd->party_invite = 0;
+	sd->party_invite_account = 0;
+
+	// The map has no struct for this party yet (the owner joined before this map
+	// loaded, or the info was never requested). Ask for it; the reply runs
+	// party_member_joined(), which finds this shell by party_id and registers it.
+	if (p == nullptr) {
+		party_request_info(party_id, owner->status.char_id);
+		return;
+	}
+
+	int32 i;
+	ARR_FIND(0, MAX_PARTY, i,
+		p->party.member[i].account_id == sd->status.account_id &&
+		p->party.member[i].char_id == sd->status.char_id);
+
+	if (i >= MAX_PARTY) {
+		ARR_FIND(0, MAX_PARTY, i, p->party.member[i].account_id == 0);
+		if (i >= MAX_PARTY) {
+			ShowWarning("population_engine: companion %s has no free row in party %d.\n",
+				sd->status.name, party_id);
+			return;
+		}
+		// Mirrors party_fill_member() (static to party.cpp) field for field, so the
+		// row is identical to one a real member would have.
+		struct party_member &m = p->party.member[i];
+		memset(&m, 0, sizeof(m));
+		m.account_id = sd->status.account_id;
+		m.char_id = sd->status.char_id;
+		safestrncpy(m.name, sd->status.name, NAME_LENGTH);
+		m.class_ = sd->status.class_;
+		safestrncpy(m.map, mapindex_id2name(sd->mapindex), sizeof(m.map));
+		m.lv = sd->status.base_level;
+		m.online = 1;
+		m.leader = 0;
+		p->party.count++;
+	}
+
+	p->data[i].sd = sd;
+	clif_party_info(*p, nullptr);
+}
+
 /// RAGNAROKMAC (Phase 3): machine-readable companion list for the in-game panel.
 ///
 /// One line per companion, fixed field order, pipe-separated:
@@ -4382,8 +4454,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 		if (!existing->state.active || existing->prev == nullptr || map_id2bl(existing->id) != existing)
 			continue; // dead or deregistered: a fresh spawn is safe
 		existing->pop.companion_owner_account = owner->status.account_id;
-		if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000)
-			existing->status.party_id = owner->status.party_id;
+		pop_companion_register_local_party(existing, owner);
 		if (existing->m != owner->m) {
 			pc_setpos(existing, map_id, x, y, CLR_TELEPORT);
 			// pc_setpos removed the shell from the block grid (prev==nullptr);
@@ -4475,32 +4546,18 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 
 	// Mark as the owner's companion and align membership with the owner.
 	shell->pop.companion_owner_account = owner->status.account_id;
-	if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000
-		&& shell->status.party_id != owner->status.party_id) {
-		// RAGNAROKMAC (Goal 1): party membership must be registered on the
-		// char server (party DB row + clif broadcasts) — a local party_id
-		// assignment alone leaves the shell invisible in the party window.
-		// Route the shell through the same accept-invite round-trip a live
-		// recruit uses: party_reply_invite → intif_party_addmember →
-		// party_member_added (which sets party_id server-side and broadcasts).
-		// spawn_shell left a FAKE party id (0x70000000|map) in status.party_id;
-		// party_reply_invite refuses anyone already in a party, so clear it
-		// first or the join is silently refused. NOTE: party_joining must be
-		// false here — party_reply_invite requires !party_joining to accept
-		// and sets the flag itself.
-		shell->status.party_id = 0;
-		shell->party_joining = false;
-		shell->party_invite = owner->status.party_id;
-		shell->party_invite_account = owner->status.account_id;
-		if (!party_reply_invite(*shell, owner->status.party_id, 1)) {
-			// Fall back to local membership if the round-trip was refused.
-			shell->status.party_id = owner->status.party_id;
-			shell->party_joining = false;
-			ShowWarning("population_engine: recall %u: party join round-trip refused; local membership only.\n", index_);
-		} else {
-			ShowInfo("population_engine: recall %u: party join requested via char server (party %d).\n",
-				index_, owner->status.party_id);
-		}
+	if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000) {
+		// RAGNAROKMAC: join the owner's party LOCALLY. The char-server round-trip
+		// this replaced could never work: the char server persists membership as
+		// "UPDATE char SET party_id=N WHERE account_id=? AND char_id=?", and a
+		// population shell has no char row, so the UPDATE matched nothing and the
+		// shell was left with party_id 0 - invisible to pop_is_companion(), to the
+		// stance commands, and to the self-heal sweep. Map-local registration is
+		// what the party window draws from and what the engine's checks read;
+		// durability comes from this same recall re-running at every login.
+		pop_companion_register_local_party(shell, owner);
+		ShowInfo("population_engine: recall %u: companion joined party %d locally.\n",
+			index_, owner->status.party_id);
 	}
 
 	int16_t fx = x, fy = y;
@@ -4535,21 +4592,18 @@ static TIMER_FUNC(population_engine_recall_verify_timer)
 			bool retried = false;
 			for (map_session_data *shell : g_population_engine_pcs) {
 				if (!shell || !shell->state.active) continue;
+				// Match on OWNERSHIP, not on pop_is_companion(): that predicate requires
+				// the party id this timer exists to repair, so filtering on it made the
+				// timer blind to exactly the case it was written for.
 				if (shell->pop.companion_owner_account != owner->status.account_id) continue;
-				// Still carrying the fake per-map party id or none at all: never joined.
 				if (shell->status.party_id == party) continue;
-				if (shell->status.party_id >= 0x70000000 || shell->status.party_id == 0) {
-					ShowInfo("population_engine: recall verify: shell %u (party %d) did not join; retrying.\n",
-						shell->status.char_id, shell->status.party_id);
-					shell->status.party_id = 0;
-					shell->party_joining = false;
-					shell->party_invite = party;
-					shell->party_invite_account = owner->status.account_id;
-					if (party_reply_invite(*shell, party, 1)) retried = true;
-				}
+				ShowInfo("population_engine: recall verify: shell %u (party %d) missing from party %d; re-registering.\n",
+					shell->status.char_id, shell->status.party_id, party);
+				pop_companion_register_local_party(shell, owner);
+				retried = true;
 			}
 			if (retried) {
-				// re-sync the party window after the retries land
+				// re-sync the party window after the repairs land
 				party_request_info(party, owner->status.char_id);
 			}
 		}

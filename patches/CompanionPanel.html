@@ -1,26 +1,34 @@
-<div id="CompanionPanel">
-	<div class="titlebar" data-background="basic_interface/titlebar_mid.bmp">
-		<div class="text">Companions</div>
-		<button
-			class="close"
-			data-background="basic_interface/sys_close_off.bmp"
-			data-hover="basic_interface/sys_close_on.bmp"
-		></button>
+<!-- Companion window. Chrome follows the Achievement window: the game's own
+     titlebar bitmaps, and ui-button/ui-image elements so the client loads the
+     bmp backgrounds itself rather than CSS drawing approximations. -->
+<div class="titlebar" data-draggable="true">
+	<div class="corner left">
+		<ui-image src="basic_interface/titlebar_left.bmp"></ui-image>
+	</div>
+	<div class="center">
+		<ui-image src="basic_interface/titlebar_mid.bmp"></ui-image>
+	</div>
+	<div class="corner right">
+		<ui-image src="basic_interface/titlebar_right.bmp"></ui-image>
+	</div>
+	<ui-text class="title">Companions</ui-text>
+	<ui-button
+		class="btn-right close"
+		bg="basic_interface/sys_close_off.bmp"
+		hover="basic_interface/sys_close_on.bmp"
+	></ui-button>
+</div>
+
+<div class="panel">
+	<div class="tabs">
+		<ui-button class="tab on" data-tab="party" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Party</ui-button>
+		<ui-button class="tab" data-tab="summon" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Summon</ui-button>
+		<ui-button class="tab" data-tab="battle" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Battle</ui-button>
+		<ui-button class="tab" data-tab="gear" bg="btn_tab_off.bmp" hover="btn_tab_over.bmp">Gear</ui-button>
 	</div>
 
-	<div class="body" data-background="basic_interface/w_basewin_bg2.bmp">
-		<div class="content">
-			<div class="tabs">
-				<button data-tab="party">Party</button>
-				<button data-tab="summon">Summon</button>
-				<button data-tab="battle">Battle</button>
-				<button data-tab="gear">Gear</button>
-			</div>
-
-			<div class="page" data-page="party"></div>
-			<div class="page" data-page="summon" style="display: none"></div>
-			<div class="page" data-page="battle" style="display: none"></div>
-			<div class="page" data-page="gear" style="display: none"></div>
-		</div>
-	</div>
+	<div class="page" data-page="party"></div>
+	<div class="page" data-page="summon" style="display: none"></div>
+	<div class="page" data-page="battle" style="display: none"></div>
+	<div class="page" data-page="gear" style="display: none"></div>
 </div>

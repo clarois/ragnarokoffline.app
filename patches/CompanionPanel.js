@@ -82,8 +82,30 @@ function talk(text, party) {
  * Ask the server for the roster in its machine-readable form.
  * Answered through onChatMessage as @CP|... lines.
  */
+/// When the last roster request went out, so a press with no answer can be told
+/// apart from a press that was never wired up.
+let _rosterRequestedAt = 0;
+let _rosterLastCount = -1;
+
 function refreshRoster() {
+	_rosterRequestedAt = Date.now();
+	_roster = [];
+	_renderStatus('asking the server…');
 	talk('@companion list raw', false);
+}
+
+/// Put a one-line status under the Party tab heading, so pressing Refresh always
+/// changes something on screen even when the list itself is unchanged.
+function _renderStatus(text) {
+	const page = _page('party');
+	if (!page) return;
+	let el = page.querySelector('.roster-status');
+	if (!el) {
+		el = document.createElement('div');
+		el.className = 'roster-status hint';
+		page.append(el);
+	}
+	el.textContent = text;
 }
 
 /**
@@ -101,11 +123,15 @@ function parseRosterLine(text) {
 	}
 	const body = text.slice(idx);
 	if (body.startsWith('@CPEND')) {
+		_rosterLastCount = _roster.length;
+		const age = _rosterRequestedAt ? Math.round((Date.now() - _rosterRequestedAt) / 1000) : 0;
+		_renderStatus(`${_roster.length} companion${_roster.length === 1 ? '' : 's'} — ${age}s ago`);
 		_render();
 		return true;
 	}
 	if (body.startsWith('@CPFAIL')) {
 		_roster = [];
+		_renderStatus('the server could not read the list (see map-server console)');
 		_render();
 		return true;
 	}
@@ -431,15 +457,25 @@ CompanionPanel.init = function init() {
 		CompanionPanel._host.style.display = 'none';
 	});
 
-	root.querySelectorAll('.tabs button').forEach(btn => {
+	// Tabs are ui-button elements now, not plain <button>, so select on the class
+	// and data attribute instead of the tag name.
+	const tabs = root.querySelectorAll('.tab[data-tab]');
+	tabs.forEach(btn => {
 		btn.addEventListener('click', () => {
-			root.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b === btn));
+			tabs.forEach(b => b.classList.toggle('on', b === btn));
 			root.querySelectorAll('.page').forEach(p => {
 				p.style.display = p.dataset.page === btn.dataset.tab ? '' : 'none';
 			});
+			// Switching to a tab re-reads the roster, so a stale list cannot sit
+			// there looking broken after companions are summoned or benched.
+			if (btn.dataset.tab === 'party' || btn.dataset.tab === 'gear') {
+				refreshRoster();
+			}
 		});
 	});
-	root.querySelector('.tabs button').classList.add('on');
+	if (tabs.length) {
+		tabs[0].classList.add('on');
+	}
 
 };
 
