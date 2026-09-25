@@ -1681,12 +1681,30 @@ static bool pop_companion_follow_owner(map_session_data *sd, map_session_data *o
 
 	// Repair the precise state observed during rapid map changes: the fake PC
 	// remains active and registered but has lost its map-block membership.
-	// Bypass the normal 400 ms throttle so stale collection cannot win the race.
+	//
+	// Only reset the throttle when the placement actually took. The old form set
+	// companion_follow_next BEFORE knowing whether warp_near_owner() succeeded, so a
+	// persistent failure re-warped on every tick - the live log showed one companion
+	// "recovered" thirteen times in a row, and a shell teleported that often cannot
+	// walk at all. On failure, back off instead of retrying immediately.
 	if (sd->prev == nullptr) {
-		sd->pop.companion_follow_next = now + 400;
-		if (warp_near_owner())
+		if (warp_near_owner()) {
+			sd->pop.companion_follow_next = now + 400;
+			sd->pop.placement_fail_streak = 0;
 			ShowInfo("Population engine: recovered off-map companion %s near %s on map %s.\n",
 				sd->status.name, owner->status.name, mapindex_id2name(owner->mapindex));
+		} else {
+			// Exponential backoff, capped so a recoverable case is retried promptly
+			// but a permanently unplaceable shell stops consuming the tick.
+			const int16_t streak = static_cast<int16_t>(sd->pop.placement_fail_streak + 1);
+			sd->pop.placement_fail_streak = streak;
+			uint32_t backoff = 400u << (streak > 5 ? 5 : streak);
+			if (backoff > 30000u) backoff = 30000u;
+			sd->pop.companion_follow_next = now + backoff;
+			if (streak == 1 || streak % 10 == 0)
+				ShowWarning("Population engine: companion %s could not be placed near %s (%d attempts); backing off %ums.\n",
+					sd->status.name, owner->status.name, streak, backoff);
+		}
 		return false;
 	}
 
@@ -4613,7 +4631,13 @@ static TIMER_FUNC(population_engine_recall_verify_timer)
 	return 0;
 }
 
-int population_engine_recall_companions(map_session_data *owner)
+/// Recall companions for `owner`.
+///
+/// @param only_index  when non-zero, recall ONLY the persisted companion with this
+///                    shell index. That is what `@companion summon <name>` needs:
+///                    the batch form re-recalls and re-places everyone, which
+///                    undoes a bench the player just made.
+int population_engine_recall_companions(map_session_data *owner, uint32_t only_index)
 {
 	if (!owner || mmysql_handle == nullptr) return 0;
 	const int16_t map_id = (int16_t)owner->m;
@@ -4627,8 +4651,14 @@ int population_engine_recall_companions(map_session_data *owner)
 		" costume_top_nameid, costume_mid_nameid, costume_low_nameid, costume_garment_nameid,"
 		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
 		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid"
-		" FROM `cp_companion_persistence` WHERE owner_account_id=%u AND active=1",
-		owner->status.account_id);
+		" FROM `cp_companion_persistence` WHERE owner_account_id=%u AND active=1%s",
+		owner->status.account_id, only_index != 0 ? " AND shell_index=" : "");
+	// The index is a number, so append it rather than parameterising the format.
+	if (only_index != 0) {
+		char tail[32];
+		snprintf(tail, sizeof(tail), "%u", only_index);
+		strncat(q, tail, sizeof(q) - strlen(q) - 1);
+	}
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) { Sql_ShowDebug(mmysql_handle); return 0; }
 
 	int recalled = 0; char *data;
@@ -4694,14 +4724,24 @@ int population_engine_recall_companions(map_session_data *owner)
 	Sql_FreeResult(mmysql_handle);
 	if (recalled > 0) {
 		ShowInfo("Population engine: recalled %d companion(s) for owner %u\n", recalled, owner->status.account_id);
-		// RAGNAROKMAC (Goal 1): re-sync the party list after a batch recall.
-		// Join requests are async; a stray failure or a relogin race can leave
-		// the owner's client party window stale. Requesting full party info
-		// from the char server rebuilds the map-side party (with whatever
-		// shell members actually joined) and re-broadcasts clif_party_info.
+		// RAGNAROKMAC: re-sync the party list after a recall, from the map's own
+		// data. party_request_info() was the old approach and cannot work here: it
+		// asks the char server to resend a party whose companion rows the char
+		// server does not have (shells have no char table row), so nothing came
+		// back and the window stayed empty until a later recall pass happened to
+		// register. Register every recalled companion locally and broadcast that.
 		if (owner->status.party_id > 0 && owner->status.party_id < 0x70000000) {
-			party_request_info(owner->status.party_id, owner->status.char_id);
-			// Self-heal pass 2s later: re-drive any shell whose async join never landed.
+			struct party_data *p = party_search(owner->status.party_id);
+			if (p != nullptr) {
+				for (map_session_data *shell : g_population_engine_pcs) {
+					if (!shell || !shell->state.active) continue;
+					if (shell->pop.companion_owner_account != owner->status.account_id) continue;
+					pop_companion_register_local_party(shell, owner);
+				}
+				clif_party_info(*p, nullptr);
+			}
+			// Self-heal pass 2s later for anything that still did not land (a second
+			// recall overlapping the first, or a shell placed after this ran).
 			struct pop_recall_verify *ctx = new pop_recall_verify{ owner->status.account_id, (int16_t)owner->m };
 			add_timer(gettick() + 2000, population_engine_recall_verify_timer, 0, (intptr_t)ctx);
 		}

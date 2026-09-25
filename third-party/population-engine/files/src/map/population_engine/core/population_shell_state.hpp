@@ -183,6 +183,10 @@ struct s_population {
 	/// Support healer thresholds, persisted with the companion row (v6). The support
 	/// skill presets gate on ally_hp_below; these are the profile defaults they use.
 	int16_t  companion_heal_at      = 75; ///< heal allies below this HP%
+	/// Consecutive failed placement attempts near the owner; drives the backoff
+	/// that replaced a per-tick re-warp loop (a shell teleported every 400 ms
+	/// cannot walk, which reads as "the companion stands still").
+	uint16_t placement_fail_streak = 0;
 	int16_t  companion_emergency_at = 35; ///< emergency/big-heal below this HP%
 	t_tick companion_follow_next = 0; ///< Rate limit for owner-follow movement decisions.
 	bool companion_formation_active = false; ///< True while walking to the shell's assigned idle formation cell.
