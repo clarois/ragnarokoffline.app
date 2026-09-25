@@ -541,28 +541,6 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_assassincross           # Assassin Cross (trans dps)
-    Jobs:
-      AssassinCross   : eden_trans_assassin
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
-    JobLevel: [40, 60]
-    Str: [120, 130]
-    Agi: [85, 90]
-    Vit: [55, 60]
-    Int: [1, 1]
-    Dex: [45, 50]
-    Luk: [15, 20]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
   - Profile: pve_stalker           # Stalker (trans dps)
     Jobs:
       Stalker         : eden_trans_rogue

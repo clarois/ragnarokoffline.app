@@ -690,13 +690,6 @@ Body:
 # the fields they actually name are touched, so a mod adds a profile or edits
 # one without restating the rest. `Header: Clear: true` in the imported file
 # replaces this table outright instead.
-Footer:
-  Imports:
-  - Path: db/import/population_spawn.yml
-
-
-
-
   - Profile: pve_lordknight
     Towns:
       - prontera
@@ -853,37 +846,6 @@ Footer:
     DungeonsPopulation: 3
 
   - Profile: pve_sniper
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_assassincross
     Towns:
       - prontera
       - morocc
@@ -1653,3 +1615,7 @@ Footer:
       - mag_dun02
       - lhz_dun03
     DungeonsPopulation: 3
+
+Footer:
+  Imports:
+  - Path: db/import/population_spawn.yml
