@@ -4570,13 +4570,14 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	pop_shell_broadcast_map_placement(shell);
 }
 
-// RAGNAROKMAC (Goal 1): post-recall self-heal. The party join round-trip
-// (party_reply_invite -> intif_party_addmember -> party_member_added) is async
-// and can silently lose a shell: the reply arrives while the map is still
-// registering the owner, or a second 0x3022 lands before the first reply.
-// Two seconds after the batch, walk this owner's recalled shells and any whose
-// status.party_id is still unset/fake get the join re-requested; then the
-// owner's party window is force-resynced from char regardless.
+// RAGNAROKMAC (Goal 1): post-recall self-heal.
+//
+// Membership is registered locally (pop_companion_register_local_party), so there
+// is no async round-trip left to lose - but a shell can still end up outside the
+// party: released by the stale sweep while its owner was briefly off-map, or a
+// fresh login whose recall ran before the map had the party struct. Two seconds
+// after the batch, re-register any of this owner's companions whose party id does
+// not match, then resync the owner's party window.
 struct pop_recall_verify {
 	uint32_t owner_account;
 	int16_t owner_map;
