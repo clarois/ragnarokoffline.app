@@ -46,6 +46,11 @@ const _preferences = Preferences.get(
 
 /// The roster as last received from the server, parsed from @companion list raw.
 let _roster = [];
+/// Rows of the batch currently arriving; swapped into _roster at @CPEND so a
+/// partial read never shows a half-built list.
+let _pending = [];
+/// Set when a redraw is wanted even if the data is unchanged (a manual Refresh).
+let _forceRedraw = false;
 /// Our own duty choices, so a row can show the badge before the server echoes.
 const _duties = {};
 
@@ -93,7 +98,9 @@ let _rosterLastCount = -1;
 
 function refreshRoster() {
 	_rosterRequestedAt = Date.now();
-	_roster = [];
+	_pending = [];
+	// A manual refresh must visibly do something even when nothing changed.
+	_forceRedraw = true;
 	_renderStatus('asking the server…');
 	talk('@companion list raw', false);
 }
@@ -127,15 +134,32 @@ function parseRosterLine(text) {
 	}
 	const body = text.slice(idx);
 	if (body.startsWith('@CPEND')) {
-		_rosterLastCount = _roster.length;
+		// The server sends these unsolicited when the roster changes, and in answer
+		// to our own request. Either way this batch is authoritative: replace what
+		// we had. Redraw only when something differs, so a push that changes
+		// nothing does not churn the DOM or reset scroll position.
+		const fresh = _pending.slice();
+		const changed = fresh.length !== _roster.length ||
+			fresh.some((m, i) => !_roster[i] ||
+				m.name !== _roster[i].name || m.job !== _roster[i].job ||
+				m.level !== _roster[i].level || m.active !== _roster[i].active ||
+				m.liveLevel !== _roster[i].liveLevel);
+		_roster = fresh;
+		_pending = [];
 		const age = _rosterRequestedAt ? Math.round((Date.now() - _rosterRequestedAt) / 1000) : 0;
-		_renderStatus(`${_roster.length} companion${_roster.length === 1 ? '' : 's'} — ${age}s ago`);
-		_render();
+		_renderStatus(`${_roster.length} companion${_roster.length === 1 ? '' : 's'}` +
+			(_rosterRequestedAt ? ` — updated ${age}s ago` : ' — pushed by the server'));
+		if (changed || _forceRedraw) {
+			_forceRedraw = false;
+			_render();
+		}
 		return true;
 	}
 	if (body.startsWith('@CPFAIL')) {
 		_roster = [];
+		_pending = [];
 		_renderStatus('the server could not read the list (see map-server console)');
+		_forceRedraw = false;
 		_render();
 		return true;
 	}
@@ -143,7 +167,7 @@ function parseRosterLine(text) {
 	if (parts[0] !== '@CP' || parts.length < 7) {
 		return false;
 	}
-	_roster.push({
+	_pending.push({
 		name: parts[1],
 		job: parts[2],
 		level: parseInt(parts[3], 10) || 0,
@@ -151,7 +175,6 @@ function parseRosterLine(text) {
 		favorite: parts[5] === '1',
 		liveLevel: parseInt(parts[6], 10) || 0
 	});
-	_render();
 	return true;
 }
 

@@ -114,3 +114,33 @@ test('the reassert helper restores both the member row and the data pointer', ()
 	assert.match(body, /p->party\.count\+\+/, 'the member count must be adjusted');
 	assert.match(body, /clif_party_info/, 'the window must be told');
 });
+
+test('roster changes are pushed to the client, not polled', () => {
+	// Polling via the atcommand would write one atcommandlog row per tick (1,200 an
+	// hour with the window open). The roster instead pushes the same @CP lines the
+	// panel already parses, from the paths that actually change it.
+	assert.match(src, /void population_engine_push_companion_list\(map_session_data \*owner\)/,
+		'the push helper is missing');
+	assert.match(hpp, /void population_engine_push_companion_list\(map_session_data \*owner\);/, 'it needs a declaration');
+	// Every roster-changing path must call it.
+	const sites = [
+		['draft', /drafted companion/, 6000],
+		['recruit', /population_engine_persist_recruited_companion/, 4000],
+	];
+	for (const [label, anchor] of sites) {
+		const i = src.search(anchor);
+		assert.ok(i > 0, `${label} path not found`);
+		const body = src.slice(i, i + 5000);
+		assert.match(body, /population_engine_push_companion_list/, `${label} must push the roster`);
+	}
+});
+
+test('the panel replaces the list from a batch and redraws only on change', () => {
+	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8');
+	// Rows accumulate into a pending batch, swapped in at the sentinel, so a
+	// half-arrived list is never shown.
+	assert.match(js, /_pending\.push\(\{/, 'rows must collect into the pending batch');
+	assert.match(js, /_roster = fresh;/, 'the batch must replace the list at the sentinel');
+	// A manual refresh must be visible even when nothing changed.
+	assert.match(js, /_forceRedraw = true;/, 'a manual refresh needs a forced redraw');
+});

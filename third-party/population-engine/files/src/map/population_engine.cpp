@@ -2320,6 +2320,8 @@ uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job
 	// Persist immediately: the row is the companion's identity from here on, and
 	// a crash before the next gear poll must not lose a drafted companion.
 	population_engine_persist_companion_gear(shell);
+	// Tell an open panel about the new companion; the roster changed.
+	population_engine_push_companion_list(owner);
 	ShowInfo("population_engine: drafted companion '%s' (job %u) for owner %u.\n",
 		shell->status.name, job_id, owner->status.account_id);
 	return index;
@@ -4159,6 +4161,11 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 		(int)sd->status.agi, (int)sd->status.vit, (int)sd->status.int_, (int)sd->status.dex, (int)sd->status.luk,
 		(int)sd->status.pow, (int)sd->status.sta, (int)sd->status.wis, (int)sd->status.spl, (int)sd->status.con, (int)sd->status.crt,
 		(int16_t)sd->m);
+
+	// The roster changed (a shell was recruited into the party) - tell an open panel
+	// so a right-click recruit in the world shows up without reopening the window.
+	if (population_engine_is_population_pc(sd->id))
+		population_engine_push_companion_list_for_shell(sd);
 }
 
 // RAGNAROKMAC (Goal 3) ----------------------------------------------------------
@@ -4178,6 +4185,11 @@ void population_engine_set_companion_active(uint32_t owner_account, uint32_t ind
 			index_, active ? 1 : 0, owner_account);
 		return;
 	}
+	// Activation is how summon and dismiss change the roster; push so an open
+	// panel reflects it. The owner may be offline (expel from a stale session), in
+	// which case there is nothing to send to.
+	if (map_session_data *owner_sd = map_id2sd(owner_account))
+		population_engine_push_companion_list(owner_sd);
 	ShowInfo("population_engine: companion index %u for owner %u set active=%d\n",
 		index_, owner_account, active ? 1 : 0);
 }
@@ -4378,6 +4390,32 @@ static void pop_companion_register_local_party(map_session_data *sd, map_session
 
 	p->data[i].sd = sd;
 	clif_party_info(*p, nullptr);
+}
+
+/// Push the owner's companion list to their client in the panel's wire format.
+///
+/// Same lines as `@companion list raw`, sent unsolicited: the in-game panel listens
+/// for them, so a roster change reaches an open window without polling. Called from
+/// the places that actually change the roster (recruit, draft, summon, dismiss,
+/// recall) rather than on a timer.
+void population_engine_push_companion_list(map_session_data *owner)
+{
+	if (!owner || !owner->state.active || owner->fd == -1)
+		return;
+	if (mmysql_handle == nullptr)
+		return;
+	population_engine_companion_list_raw(owner->status.account_id, owner->fd);
+}
+
+/// Push the list to the owner of this companion, if they are online.
+/// A convenience for the roster-changing paths, which all have the shell in hand.
+void population_engine_push_companion_list_for_shell(map_session_data *shell)
+{
+	if (!shell || shell->pop.companion_owner_account == 0)
+		return;
+	map_session_data *owner = map_id2sd(shell->pop.companion_owner_account);
+	if (owner != nullptr)
+		population_engine_push_companion_list(owner);
 }
 
 /// Re-insert every companion belonging to this party after the map-side party
@@ -4796,6 +4834,8 @@ int population_engine_recall_companions(map_session_data *owner, uint32_t only_i
 	Sql_FreeResult(mmysql_handle);
 	if (recalled > 0) {
 		ShowInfo("Population engine: recalled %d companion(s) for owner %u\n", recalled, owner->status.account_id);
+		// Roster changed: refresh any open panel without making it poll.
+		population_engine_push_companion_list(owner);
 		// RAGNAROKMAC: re-sync the party list after a recall, from the map's own
 		// data. party_request_info() was the old approach and cannot work here: it
 		// asks the char server to resend a party whose companion rows the char
