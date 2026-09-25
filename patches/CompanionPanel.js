@@ -390,10 +390,39 @@ function _drawGear() {
 	});
 }
 
+
+/**
+ * Route the roster's machine-readable lines into the parser and keep them out of
+ * the chat log.
+ *
+ * Installed from init() rather than at module scope on purpose: BasicInfo is
+ * imported after ChatBox, so importing this component at module scope closes an
+ * import cycle and the ChatBox binding is still undefined here. Reaching into it
+ * during module evaluation threw and the client failed to load entirely
+ * ("Failed to load app: Online.js"), which is exactly the bug this replaces.
+ */
+function installChatHook() {
+	if (typeof ChatBox === 'undefined' || ChatBox === null || !ChatBox.addText) {
+		return;
+	}
+	if (ChatBox.__companionPanelHooked) {
+		return;
+	}
+	const original = ChatBox.addText;
+	ChatBox.addText = function addText(text, ...rest) {
+		if (typeof text === 'string' && text.indexOf('@CP') >= 0 && parseRosterLine(text)) {
+			return;
+		}
+		return original.call(this, text, ...rest);
+	};
+	ChatBox.__companionPanelHooked = true;
+}
+
 /**
  * Initialize events
  */
 CompanionPanel.init = function init() {
+	installChatHook();
 	const root = this.getRoot();
 
 	this.draggable('.titlebar');
@@ -423,15 +452,7 @@ CompanionPanel.init = function init() {
  * @CP lines return false so they never reach the chat log - the raw format is
  * machine data, not something a player should read.
  */
-const _addText = ChatBox.addText;
-ChatBox.addText = function addText(text, ...rest) {
-	if (typeof text === 'string' && text.indexOf('@CP') >= 0) {
-		if (parseRosterLine(text)) {
-			return;
-		}
-	}
-	return _addText.call(this, text, ...rest);
-};
+
 
 /**
  * When the window is removed
