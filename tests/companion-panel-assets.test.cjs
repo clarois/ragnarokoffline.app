@@ -84,3 +84,31 @@ test('no invented bitmap families', () => {
 	const invented = bitmaps.filter(b => /(^|\/)btn_tab_/.test(b));
 	assert.deepStrictEqual(invented, [], 'btn_tab_* bitmaps do not exist in this client');
 });
+
+test('the HTML wraps its content in the component-named root div', () => {
+	// The component's CSS is injected into this component's SHADOW ROOT, while the
+	// host element carries the id. A "#CompanionPanel ..." rule therefore cannot
+	// match the host - it matches this wrapper. Without it every rule in the
+	// stylesheet is dead and the window renders unstyled and unsized, which is
+	// exactly how it shipped once. CheckAttendance.html and Bank.html wrap the same.
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	const usesId = /#CompanionPanel\b/.test(css);
+	assert.ok(usesId, 'the stylesheet is expected to root its rules at #CompanionPanel');
+	assert.match(html, /<div id="CompanionPanel">/, 'the HTML must wrap its content in <div id="CompanionPanel">');
+});
+
+test('the window is sized by its content, not a fixed pixel width', () => {
+	// A fixed width is what cropped the right-hand side when a tab's content was
+	// wider than the panel.
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	const panel = css.slice(css.indexOf('#CompanionPanel .panel'));
+	assert.match(panel.slice(0, 400), /width:\s*max-content/, 'the panel should follow its content width');
+});
+
+test('a resize grip exists in both the markup and its stylesheet', () => {
+	assert.match(html, /class="resize-grip"/, 'the markup needs the grip element');
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	assert.match(css, /#CompanionPanel .resize-grip/, 'the grip needs styling to be visible and grabbable');
+	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8');
+	assert.match(js, /resize-grip/, 'the grip needs pointer handling');
+});

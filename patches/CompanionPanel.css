@@ -3,18 +3,22 @@
  *
  * Companion window.
  *
- * Layout mirrors the Achievement window: a narrow sidebar of tabs on the left
- * (achievement_re/tab_*.bmp, the client's own tab bitmaps) and a flat white pane
- * on the right. White rather than the tiled basewin bitmap, which read as a
- * second Status window.
+ * Sizing: the window follows its content - width is max-content (clamped to a
+ * sensible range) rather than a fixed pixel width, which is what cropped the right
+ * side when the job list wrapped wider than the old 330px. The body itself is a
+ * flat white pane; the titlebar and tab bitmaps are the client's own, loaded here
+ * via ui-image and the data-* attributes in the HTML.
  *
- * The tab backgrounds are set as data-* attributes in the HTML and processed by
- * the client's GUIComponent; no bitmap name appears in this file.
+ * All selectors are rooted at #CompanionPanel, the wrapper inside the shadow root.
+ * This component's CSS is injected into the shadow while the host carries the id,
+ * so a rule written against the host matches nothing at all.
  */
 
 #CompanionPanel {
-	position: absolute;
-	width: 330px;
+	position: relative;
+	display: inline-block;
+	min-width: 300px;
+	max-width: 90vw;
 	user-select: none;
 	font-family: Arial, Helvetica, sans-serif;
 	font-size: 12px;
@@ -26,17 +30,30 @@
 #CompanionPanel .titlebar {
 	position: relative;
 	height: 17px;
+	/* the middle bitmap tiles; the corners sit on top of its ends */
+	background-repeat: repeat-x;
+	background-size: auto 100%;
 }
 
-#CompanionPanel .titlebar .corner.left { position: absolute; left: 0; top: 0; }
-#CompanionPanel .titlebar .corner.right { position: absolute; right: 0; top: 0; }
+#CompanionPanel .titlebar .corner { position: absolute; top: 0; }
+#CompanionPanel .titlebar .corner.left { left: 0; }
+#CompanionPanel .titlebar .corner.right { right: 0; }
+
 #CompanionPanel .titlebar .center {
-	position: absolute; left: 0; right: 0; top: 0; height: 17px; overflow: hidden;
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 17px;
+	overflow: hidden;
+	text-align: center;
 }
 
 #CompanionPanel .titlebar .title {
 	position: absolute;
-	left: 0; right: 0; top: 2px;
+	left: 0;
+	right: 0;
+	top: 2px;
 	text-align: center;
 	font-size: 11px;
 	font-weight: bold;
@@ -47,20 +64,26 @@
 
 #CompanionPanel .titlebar .close {
 	position: absolute;
-	right: 2px; top: 1px;
-	width: 15px; height: 15px;
-	border: 0; padding: 0;
+	right: 2px;
+	top: 1px;
+	width: 15px;
+	height: 15px;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
 }
 
-/* ── body ─────────────────────────────────────────────────────────────── */
+/* ── body: sized by its content ───────────────────────────────────────── */
 
 #CompanionPanel .panel {
+	position: relative;
 	display: flex;
+	width: max-content;
+	min-width: 296px;
+	max-width: 90vw;
 	background: #ffffff;
 	border: 1px solid #9a8b6b;
 	border-top: 0;
-	min-height: 190px;
-	max-height: 300px;
 	box-sizing: border-box;
 }
 
@@ -88,23 +111,20 @@
 	margin-bottom: 2px;
 }
 
-#CompanionPanel .sidebar .tab.on {
-	font-weight: bold;
-	color: #6b1f10;
-}
+#CompanionPanel .sidebar .tab.on { font-weight: bold; color: #6b1f10; }
 
 /* ── panes ────────────────────────────────────────────────────────────── */
 
 #CompanionPanel .panes {
-	flex: 1;
-	padding: 6px 7px;
+	flex: 1 1 auto;
+	min-width: 230px;
+	padding: 6px 7px 10px;
 	overflow: hidden;
 	box-sizing: border-box;
 }
 
 #CompanionPanel .page {
-	height: 100%;
-	max-height: 280px;
+	max-height: 300px;
 	overflow-y: auto;
 	overflow-x: hidden;
 }
@@ -132,15 +152,16 @@
 }
 
 #CompanionPanel .row .nm {
-	flex: 1;
+	flex: 1 1 auto;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-#CompanionPanel .row .lv { color: #6b5d42; font-size: 11px; }
+#CompanionPanel .row .lv { flex: none; color: #6b5d42; font-size: 11px; }
 
 #CompanionPanel .row .badge {
+	flex: none;
 	font-size: 10px;
 	padding: 0 3px;
 	border: 1px solid #b9ac8e;
@@ -156,6 +177,7 @@
 /* ── controls ─────────────────────────────────────────────────────────── */
 
 #CompanionPanel button {
+	flex: none;
 	padding: 2px 6px;
 	font-family: inherit;
 	font-size: 11px;
@@ -164,11 +186,12 @@
 	border: 1px solid #9c8c68;
 	border-radius: 0;
 	cursor: pointer;
+	white-space: nowrap;
 }
 
 #CompanionPanel button:hover { background: #fbf6e8; }
 #CompanionPanel button.on { background: #dfe9cf; font-weight: bold; }
-#CompanionPanel button.wide { flex: 1; padding: 4px 0; }
+#CompanionPanel button.wide { flex: 1 1 0; padding: 4px 0; }
 
 #CompanionPanel .grid {
 	display: flex;
@@ -207,3 +230,18 @@
 }
 
 #CompanionPanel .jobs button { padding: 2px 4px; font-size: 10px; }
+
+/* ── resize grip ──────────────────────────────────────────────────────── */
+
+#CompanionPanel .resize-grip {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	width: 14px;
+	height: 14px;
+	cursor: nwse-resize;
+	/* corner marks, drawn rather than loaded: no bitmap to get wrong */
+	background:
+		linear-gradient(135deg, transparent 0 55%, #8a7a58 55% 62%, transparent 62%),
+		linear-gradient(135deg, transparent 0 72%, #8a7a58 72% 79%, transparent 79%);
+}

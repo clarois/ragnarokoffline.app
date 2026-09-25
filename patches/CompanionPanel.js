@@ -35,6 +35,10 @@ const _preferences = Preferences.get(
 	{
 		x: 300,
 		y: 120,
+		// User-chosen size. 0 means "follow the content", which is the default:
+		// the window is as wide as the widest tab needs, so nothing is cropped.
+		width: 0,
+		height: 0,
 		squads: {}
 	},
 	1.0
@@ -453,6 +457,45 @@ CompanionPanel.init = function init() {
 
 	this.draggable('.titlebar');
 
+	// Resize grip. Dragging it sets an explicit size; the stored size wins over
+	// the content-driven default from then on. Double-click resets to auto.
+	const grip = root.querySelector('.resize-grip');
+	if (grip) {
+		const panel = root.querySelector('.panel');
+		grip.addEventListener('pointerdown', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			const startX = event.clientX;
+			const startY = event.clientY;
+			const startW = panel.offsetWidth;
+			const startH = panel.offsetHeight;
+			grip.setPointerCapture(event.pointerId);
+			const move = ev => {
+				const w = Math.max(296, startW + (ev.clientX - startX));
+				const h = Math.max(160, startH + (ev.clientY - startY));
+				panel.style.width = `${w}px`;
+				panel.style.height = `${h}px`;
+			};
+			const up = () => {
+				grip.removeEventListener('pointermove', move);
+				grip.removeEventListener('pointerup', up);
+				_preferences.width = panel.offsetWidth;
+				_preferences.height = panel.offsetHeight;
+				_preferences.save();
+			};
+			grip.addEventListener('pointermove', move);
+			grip.addEventListener('pointerup', up);
+		});
+		grip.addEventListener('dblclick', event => {
+			event.stopPropagation();
+			panel.style.width = '';
+			panel.style.height = '';
+			_preferences.width = 0;
+			_preferences.height = 0;
+			_preferences.save();
+		});
+	}
+
 	root.querySelector('.titlebar .close').addEventListener('click', () => {
 		CompanionPanel._host.style.display = 'none';
 	});
@@ -506,6 +549,13 @@ CompanionPanel.onRemove = function onRemove() {
  * component, so this is also where the list is refreshed after a warp.
  */
 CompanionPanel.onAppend = function onAppend() {
+	// A size the player chose is applied here; with none, the panel keeps its
+	// content-driven width so nothing is ever cropped by a stale fixed value.
+	const panel = this.getRoot().querySelector('.panel');
+	if (panel) {
+		panel.style.width = _preferences.width ? `${_preferences.width}px` : '';
+		panel.style.height = _preferences.height ? `${_preferences.height}px` : '';
+	}
 	Object.assign(this._host.style, {
 		top: `${Math.min(Math.max(0, _preferences.y), Renderer.height - this._host.getBoundingClientRect().height)}px`,
 		left: `${Math.min(Math.max(0, _preferences.x), Renderer.width - this._host.getBoundingClientRect().width)}px`
