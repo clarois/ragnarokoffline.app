@@ -40,7 +40,7 @@ test('the class line names the job tier', () => {
 	assert.match(js, /function _tierOf\(job\)/, 'a tier lookup must exist');
 	assert.match(js, /for \(const \[tier, jobs\] of JOB_TIERS\)/,
 		'and it must read the same table the Summon tab offers');
-	assert.match(js, /tier \? `\$\{m\.job\} · \$\{tier\} job` : m\.job/,
+	assert.match(js, /cls\.textContent = tier \? `\$\{job\} · \$\{tier\} job` : job/,
 		'the class line must append the tier when it is known');
 });
 

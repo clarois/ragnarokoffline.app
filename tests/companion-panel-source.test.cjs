@@ -67,17 +67,22 @@ test('the roster hook is installed from init(), not at module scope', () => {
 
 test('the roster wire format matches what the server writes', () => {
 	// population_engine_companion_list_raw writes:
-	//   "@CP|%s|%s|%d|%d|%d|%d"  (name, job, base_level, active, favorite, live)
+	//   "@CP|%s|%s|%d|%d|%d|%d|%s"
+	//     name, job, base_level, active, favorite, live_level, live_job
 	//   "@CPEND|%d"              (count)
 	const engine = fs.readFileSync(
 		path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp'),
 		'utf8'
 	);
-	assert.match(engine, /"@CP\|%s\|%s\|%d\|%d\|%d\|%d"/, 'server @CP format changed');
+	assert.match(engine, /"@CP\|%s\|%s\|%d\|%d\|%d\|%d\|%s"/,
+		'server @CP format changed (expected the 8-field form: the 8th is the live class)');
 	assert.match(engine, /"@CPEND\|%d"/, 'server sentinel changed');
 	// The client must consume exactly that prefix and that sentinel.
 	assert.match(src, /'@CP'/, 'client no longer keys on the @CP prefix');
 	assert.match(src, /startsWith\('@CPEND'\)/, 'client no longer recognises the sentinel');
+	// The 8th field is optional: the client's length guard must still accept a
+	// 7-field line so a client cannot break against an older map server.
+	assert.match(src, /parts\.length < 7/, 'the client must still accept a 7-field (older) line');
 });
 
 test('the component is prepared at startup by the engine', () => {
