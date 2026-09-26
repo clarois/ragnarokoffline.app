@@ -1712,6 +1712,17 @@ void population_shell_resolve_placement(const map_session_data *sd,
 	// All attempts hit walls — keep original base position.
 }
 
+/// RAGNAROKMAC (skill selector): is this skill in the shell's own selection?
+/// Returns true when no selection is active, so an unconfigured companion keeps
+/// using the whole preset list.
+static bool population_shell_skill_selected(const map_session_data *sd, uint16_t skill_id)
+{
+	if (sd == nullptr || !sd->pop.skill_override_active)
+		return true;
+	return std::find(sd->pop.skill_override.begin(), sd->pop.skill_override.end(), skill_id)
+		!= sd->pop.skill_override.end();
+}
+
 static void population_shell_recalc_max_attack_skill_range(map_session_data *sd)
 {
 	if (!sd)
@@ -1805,6 +1816,10 @@ static void population_shell_seed_attack_skills_if_empty(map_session_data *sd)
 				for (const s_pop_skill_entry &e : *db_skills) {
 					if (e.state == 2)
 						continue;
+					// RAGNAROKMAC (skill selector): a companion with its own selection
+					// uses only those skills.
+					if (!population_shell_skill_selected(sd, e.skill_id))
+						continue;
 				const size_t before = cand.size();
 					if (e.target == 1)
 						continue;
@@ -1875,6 +1890,10 @@ static void population_shell_seed_attack_skills_if_empty(map_session_data *sd)
 				if (e.target != 1)
 					continue;
 				if (e.skill_id == 0)
+					continue;
+				// RAGNAROKMAC (skill selector): same filter as the attack rotation, so
+				// a battle priest can drop the support buffs and vice versa.
+				if (!population_shell_skill_selected(sd, e.skill_id))
 					continue;
 				// YAML-authoritative: do NOT gate on pc_checkskill here.
 				// Cast-time logic (population_shell_cast_expired_self_buffs) falls back

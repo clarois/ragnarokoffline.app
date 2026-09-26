@@ -64,6 +64,18 @@ struct s_population {
 	/// skills). The job-change path sets this, and the seeders rebuild when they
 	/// see it, then clear it.
 	bool     skills_need_reseed = false;
+	/// RAGNAROKMAC (skill selector): the player's own skill selection.
+	///
+	/// `skill_override_active` distinguishes "the player never chose anything"
+	/// (fall back to the preset list for the class) from "the player chose
+	/// NOTHING on purpose" (auto-attack only). Testing the vector for emptiness
+	/// alone cannot tell those apart, and the seeders rebuild a list while it is
+	/// empty - so an empty choice would silently restore the full preset list.
+	/// An entry with no curated behaviour row in population_skill_db.yml is
+	/// dropped by the filter rather than cast blindly: those rows carry the
+	/// rate, condition and target a cast needs.
+	std::vector<uint16_t> skill_override;
+	bool     skill_override_active = false;
 	std::vector<PopulationShellBuffSkill>   buff_skills;   ///< Self-buff maintenance list (Target:1 from population_skill_db.yml).
 	t_tick   reactive_buff_cd    = 0;  ///< Independent buff cooldown — decoupled from ca.skill_cd so self-buffs and attacks can fire in the same tick.
 	t_tick   sticky_until        = 0;  ///< Tick at which the current sticky target commitment expires.

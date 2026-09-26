@@ -2277,6 +2277,313 @@ int population_engine_companion_set_heal_thresholds(uint32_t owner_account, int1
 	return applied;
 }
 
+// RAGNAROKMAC (skill selector) ---------------------------------------------------
+// Per-companion skill selection. A companion's usable skills are the class's
+// skill-tree closure (what spawn_shell grants) INTERSECTED with the entries that
+// population_skill_db.yml curates for that class, because a curated row is what
+// carries the rate / condition / target / cooldown a cast actually needs. The
+// selection therefore narrows the preset list; it cannot invent behaviour for a
+// skill that has no row, and set_skill_override() names those in its reply rather
+// than accepting them silently.
+//
+// "auto" (skill_preset IS NULL) means the class preset list, which is what every
+// companion used before this existed. An empty selection is a deliberate choice
+// and is stored as an empty string, so the two states stay distinguishable -
+// the seeders rebuild a list while it is empty, so conflating them would silently
+// undo a player's choice.
+
+/// Split a stored/typed spec into skill ids.
+///
+/// Accepts numeric ids and server skill names, separated by commas and/or
+/// whitespace, so both `@companion skills Talivis 28,12` and a stored
+/// `28,12` round-trip through the same code. Unknown tokens are reported via
+/// `out_bad` rather than dropped quietly - a typo that silently does nothing is
+/// indistinguishable from a feature that does not work.
+size_t population_engine_companion_parse_skill_override(const char* stored,
+	std::vector<uint16_t>& out)
+{
+	out.clear();
+	if (stored == nullptr || stored[0] == '\0')
+		return 0;
+
+	char buf[512];
+	safestrncpy(buf, stored, sizeof(buf));
+	for (char* tok = strtok(buf, ", \t\r\n"); tok != nullptr; tok = strtok(nullptr, ", \t\r\n")) {
+		if (tok[0] == '\0')
+			continue;
+		uint16_t sid = 0;
+		// Numeric first: a name never starts with a digit, and skill ids are
+		// within the skill_db range, so this cannot swallow a name.
+		if (tok[0] >= '0' && tok[0] <= '9') {
+			const long v = strtol(tok, nullptr, 10);
+			if (v > 0 && v < MAX_SKILL)
+				sid = static_cast<uint16_t>(v);
+		} else {
+			sid = skill_name2id(tok);
+		}
+		if (sid == 0 || skill_get_index(sid) == 0)
+			continue;
+		if (std::find(out.begin(), out.end(), sid) == out.end())
+			out.push_back(sid);
+	}
+	return out.size();
+}
+
+/// Skills this companion's class may actually use, in the order the preset list
+/// defines them (so the menu reads like the rotation, not like a hash dump).
+///
+/// @param class_   the class to resolve (the LIVE class when summoned)
+/// @param has_row  receives whether a curated behaviour row exists per emitted entry
+/// @return ids legal for the class, regardless of selection
+static std::vector<uint16_t> pop_companion_legal_skill_ids(uint16_t class_, const char* class_name)
+{
+	std::vector<uint16_t> legal;
+	std::shared_ptr<s_skill_tree> tree = skill_tree_db.find(class_);
+	if (tree == nullptr || tree->skills.empty()) {
+		ShowWarning("population_engine: skill selector: no skill tree for %s (%u)\n",
+			class_name != nullptr ? class_name : "?", class_);
+		return legal;
+	}
+	// Iterate the CURATED list, not the tree: the tree closure is 38-81 entries
+	// (most of them passives or utilities this AI never casts), while the curated
+	// rows are the skills that have a rate/condition/target to cast with.
+	const std::vector<s_pop_skill_entry>* rows = population_skill_db().find(class_);
+	if (rows == nullptr || rows->empty())
+		rows = population_skill_db().find(population_engine_job_base_class(class_));
+	if (rows == nullptr)
+		return legal;
+	for (const s_pop_skill_entry& e : *rows) {
+		if (e.skill_id == 0)
+			continue;
+		// Legal = the class's tree grants it. This is the "cannot activate
+		// Cardinal skills from a Priest" half: a row that some OTHER class's
+		// preset shares (the cross-class entries, e.g. TF_HIDING on Monk) is
+		// offered only where the tree actually grants the skill.
+		if (tree->skills.find(e.skill_id) == tree->skills.end())
+			continue;
+		if (std::find(legal.begin(), legal.end(), e.skill_id) == legal.end())
+			legal.push_back(e.skill_id);
+	}
+	return legal;
+}
+
+int population_engine_companion_set_skill_override(uint32_t owner_account, const char* name_,
+	const char* spec, char* out_msg, size_t out_msg_len)
+{
+	if (out_msg != nullptr && out_msg_len > 0)
+		out_msg[0] = '\0';
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0] || spec == nullptr)
+		return -1;
+
+	uint32_t index_ = 0; bool active = false;
+	if (!population_engine_companion_find(owner_account, name_, &index_, &active))
+		return -1;
+
+	// The class to validate against: the live shell's when it is summoned (so a
+	// companion that just advanced is judged on its NEW class), else the row's.
+	map_session_data* live = nullptr;
+	for (map_session_data* cand : g_population_engine_pcs) {
+		if (cand != nullptr && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
+			live = cand;
+			break;
+		}
+	}
+	uint16_t class_ = 0;
+	if (live != nullptr && live->status.class_ != 0) {
+		class_ = live->status.class_;
+	} else {
+		char q[256];
+		snprintf(q, sizeof(q),
+			"SELECT job_id FROM `cp_companion_persistence` WHERE owner_account_id=%u AND shell_index=%u",
+			owner_account, index_);
+		if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+			Sql_ShowDebug(mmysql_handle);
+			return -1;
+		}
+		char* data = nullptr;
+		if (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+			Sql_GetData(mmysql_handle, 0, &data, nullptr);
+			class_ = static_cast<uint16_t>(data != nullptr ? atoi(data) : 0);
+		}
+		Sql_FreeResult(mmysql_handle);
+	}
+	if (class_ == 0)
+		return -1;
+
+	// "auto" hands the companion back to its class preset list.
+	const bool want_auto = (strcmpi(spec, "auto") == 0 || strcmpi(spec, "default") == 0
+		|| strcmpi(spec, "reset") == 0);
+
+	std::vector<uint16_t> picked;
+	std::string rejected_unusable;
+	size_t asked = 0;
+	if (!want_auto) {
+		std::vector<uint16_t> requested;
+		population_engine_companion_parse_skill_override(spec, requested);
+		asked = requested.size();
+		if (requested.empty()) {
+			// An empty spec is a legitimate "use no skills at all", but only when
+			// the caller said so explicitly - not from a typo'd skill name, which
+			// would otherwise read as a successful empty selection.
+			const bool explicit_none = (strcmpi(spec, "none") == 0 || strcmpi(spec, "clear") == 0);
+			if (!explicit_none) {
+				if (out_msg != nullptr)
+					safesnprintf(out_msg, out_msg_len,
+						"None of those names or ids are real skills.");
+				return -1;
+			}
+		}
+		const std::vector<uint16_t> legal = pop_companion_legal_skill_ids(class_,
+			job_name(class_));
+		for (uint16_t sid : requested) {
+			if (std::find(legal.begin(), legal.end(), sid) == legal.end()) {
+				if (!rejected_unusable.empty())
+					rejected_unusable += ", ";
+				rejected_unusable += skill_get_name(sid);
+				continue;
+			}
+			picked.push_back(sid);
+		}
+	}
+
+	// Persist first: the row is the durable half, and a failure here must not
+	// leave the live shell running a selection that will not survive a relog.
+	{
+		char preset[512];
+		preset[0] = '\0';
+		if (!want_auto) {
+			size_t used = 0;
+			for (size_t i = 0; i < picked.size(); ++i) {
+				const int n = snprintf(preset + used, sizeof(preset) - used, "%s%u",
+					i > 0 ? "," : "", static_cast<unsigned>(picked[i]));
+				if (n <= 0 || static_cast<size_t>(n) >= sizeof(preset) - used)
+					break;
+				used += static_cast<size_t>(n);
+			}
+		}
+		char q[768];
+		if (want_auto)
+			snprintf(q, sizeof(q),
+				"UPDATE `cp_companion_persistence` SET skill_preset=NULL"
+				" WHERE owner_account_id=%u AND shell_index=%u",
+				owner_account, index_);
+		else
+			snprintf(q, sizeof(q),
+				"UPDATE `cp_companion_persistence` SET skill_preset='%s'"
+				" WHERE owner_account_id=%u AND shell_index=%u",
+				preset, owner_account, index_);
+		if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+			Sql_ShowDebug(mmysql_handle);
+			if (out_msg != nullptr)
+				safesnprintf(out_msg, out_msg_len, "Could not save the selection (see map-server console).");
+			return -1;
+		}
+	}
+
+	// Apply to the live shell and ask for a rebuild. skills_need_reseed is the
+	// existing job-change flag: the seeders rebuild both lists when they see it
+	// and clear it once both are done, so the change lands on the next tick.
+	if (live != nullptr) {
+		live->pop.skill_override = want_auto ? std::vector<uint16_t>() : picked;
+		live->pop.skill_override_active = !want_auto;
+		live->pop.skills_need_reseed = true;
+	}
+
+	if (out_msg != nullptr) {
+		if (want_auto) {
+			safesnprintf(out_msg, out_msg_len,
+				"%s is back on its class skill list.", name_);
+		} else if (picked.empty()) {
+			safesnprintf(out_msg, out_msg_len,
+				"%s will use no skills (auto-attack only)%s.", name_,
+				rejected_unusable.empty() ? "" : " - the skills you named have no usable entry for its class");
+		} else {
+			safesnprintf(out_msg, out_msg_len, "%s: %u skill%s selected%s%s.",
+				name_, static_cast<unsigned>(picked.size()), picked.size() == 1 ? "" : "s",
+				live == nullptr ? " (applies when summoned)" : "",
+				rejected_unusable.empty() ? "" : " - some were not usable for its class");
+		}
+	}
+	ShowInfo("population_engine: skill selection for companion %u (owner %u): %s (%u of %u usable)\n",
+		index_, owner_account, want_auto ? "auto" : "explicit",
+		static_cast<unsigned>(picked.size()), static_cast<unsigned>(asked));
+	return want_auto ? 0 : static_cast<int>(picked.size());
+}
+
+void population_engine_companion_skill_list(uint32_t owner_account, const char* name_, int fd)
+{
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0])
+		return;
+	uint32_t index_ = 0; bool active = false;
+	if (!population_engine_companion_find(owner_account, name_, &index_, &active)) {
+		clif_displaymessage(fd, "@CPSKFAIL no such companion");
+		return;
+	}
+
+	// Live class wins: a companion that advanced job must offer its NEW class's
+	// skills, which is the same reason the roster's live_job field exists.
+	map_session_data* live = nullptr;
+	for (map_session_data* cand : g_population_engine_pcs) {
+		if (cand != nullptr && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
+			live = cand;
+			break;
+		}
+	}
+	uint16_t class_ = 0;
+	bool override_active = false;
+	std::vector<uint16_t> picked;
+	{
+		char q[320];
+		snprintf(q, sizeof(q),
+			"SELECT job_id, skill_preset FROM `cp_companion_persistence`"
+			" WHERE owner_account_id=%u AND shell_index=%u",
+			owner_account, index_);
+		if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+			Sql_ShowDebug(mmysql_handle);
+			clif_displaymessage(fd, "@CPSKFAIL query failed");
+			return;
+		}
+		char* data = nullptr;
+		if (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+			Sql_GetData(mmysql_handle, 0, &data, nullptr);
+			class_ = static_cast<uint16_t>(data != nullptr ? atoi(data) : 0);
+			Sql_GetData(mmysql_handle, 1, &data, nullptr);
+			// A NULL column is "never chosen" (auto). An empty string is a chosen
+			// empty selection; the two must not collapse.
+			if (data != nullptr) {
+				override_active = true;
+				population_engine_companion_parse_skill_override(data, picked);
+			}
+		}
+		Sql_FreeResult(mmysql_handle);
+	}
+	if (live != nullptr && live->status.class_ != 0)
+		class_ = live->status.class_;
+	if (class_ == 0) {
+		clif_displaymessage(fd, "@CPSKFAIL unknown class");
+		return;
+	}
+
+	const std::vector<uint16_t> legal = pop_companion_legal_skill_ids(class_, job_name(class_));
+	int emitted = 0;
+	for (uint16_t sid : legal) {
+		const bool selected = override_active
+			? (std::find(picked.begin(), picked.end(), sid) != picked.end())
+			: false;
+		char msg[128];
+		// id | name | selected | level the preset casts it at
+		snprintf(msg, sizeof(msg), "@CPSK|%u|%s|%d|%u",
+			static_cast<unsigned>(sid), skill_get_name(sid), selected ? 1 : 0,
+			static_cast<unsigned>(skill_get_max(sid)));
+		clif_displaymessage(fd, msg);
+		++emitted;
+	}
+	char endmsg[160];
+	snprintf(endmsg, sizeof(endmsg), "@CPSKEND|%d|%s|%d|%d",
+		emitted, job_name(class_), override_active ? 1 : 0, active ? 1 : 0);
+	clif_displaymessage(fd, endmsg);
+}
+
 /// RAGNAROKMAC (Phase 3): draft a brand-new companion of a chosen job, then hand
 /// it to `owner` as a summoned party member. Unlike @companion summon (which
 /// re-spawns a companion that was recruited and saved before), this creates the
@@ -4730,7 +5037,8 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	uint32_t sh_armor, uint32_t sh_weapon, uint32_t sh_shield, uint32_t sh_shoes,
 	uint32_t sh_acc_l, uint32_t sh_acc_r,
 	int pow_, int sta_, int wis_, int spl_, int con_, int crt_,
-	int mode_, int duty_, int heal_at_, int emergency_at_)
+	int mode_, int duty_, int heal_at_, int emergency_at_,
+	const char* skill_preset)
 {
 	// Deterministic spawn cell next to the owner (small ring for an open spot).
 	int16_t x = 0, y = 0; bool placed = false;
@@ -4820,6 +5128,13 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	shell->pop.role = static_cast<int8_t>(duty_);
 	if (heal_at_ > 0)      shell->pop.companion_heal_at      = static_cast<int16_t>(heal_at_);
 	if (emergency_at_ > 0) shell->pop.companion_emergency_at = static_cast<int16_t>(emergency_at_);
+	// RAGNAROKMAC (skill selector): restore the player's skill selection. A NULL
+	// column means "never chosen" and leaves the shell on the class preset list;
+	// a non-NULL one is an explicit choice, even when it is empty (no skills).
+	if (skill_preset != nullptr) {
+		shell->pop.skill_override_active = true;
+		population_engine_companion_parse_skill_override(skill_preset, shell->pop.skill_override);
+	}
 	shell->status.job_level  = cap_value(job_level, 1, MAX_LEVEL);
 	shell->status.str = str; shell->status.agi = agi;
 	shell->status.vit = vit; shell->status.int_ = intl;
@@ -4931,7 +5246,7 @@ int population_engine_recall_companions(map_session_data *owner, uint32_t only_i
 		" pow_, sta_, wis_, spl_, con_, crt_, mode, duty, heal_at, emergency_at,"
 		" costume_top_nameid, costume_mid_nameid, costume_low_nameid, costume_garment_nameid,"
 		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
-		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid"
+		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid, skill_preset"
 		" FROM `cp_companion_persistence` WHERE owner_account_id=%u AND active=1%s",
 		owner->status.account_id, only_index != 0 ? " AND shell_index=" : "");
 	// The index is a number, so append it rather than parameterising the format.
@@ -4992,6 +5307,13 @@ int population_engine_recall_companions(map_session_data *owner, uint32_t only_i
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_shoes = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_acc_l = atoi(data);
 		Sql_GetData(mmysql_handle, col++, &data, nullptr); uint32_t sh_acc_r = atoi(data);
+		// v7: the player's skill selection, or NULL when never chosen. A NULL
+		// column must stay distinguishable from an empty one (see the selector).
+		char presetbuf[512];
+		Sql_GetData(mmysql_handle, col++, &data, nullptr);
+		if (data != nullptr)
+			safestrncpy(presetbuf, data, sizeof(presetbuf));
+		const char* skill_preset = (data != nullptr) ? presetbuf : nullptr;
 		if (index_ == 0 || job_id == 0) continue;
 		// DB stores sex as TINYINT (0=SEX_MALE, 1=SEX_FEMALE); the spawn path
 		// expects the 'M'/'F' letters.
@@ -4999,7 +5321,8 @@ int population_engine_recall_companions(map_session_data *owner, uint32_t only_i
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
 			head_mid, head_bottom, armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk,
 			namebuf, c_top, c_mid, c_low, c_garment, sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r,
-			pow_, sta_, wis_, spl_, con_, crt_, mode_, duty_, heal_at_, emergency_at_);
+			pow_, sta_, wis_, spl_, con_, crt_, mode_, duty_, heal_at_, emergency_at_,
+			skill_preset);
 		recalled++;
 	}
 	Sql_FreeResult(mmysql_handle);

@@ -1,4 +1,7 @@
--- Companion persistence table (v4): v3 added `name` + accessories; v4 adds costume headgear/garment and shadow gear columns so traded vanity/shadow equipment survives restarts. — the shell's generated name
+-- Companion persistence table (v7): v3 added `name` + accessories; v4 costume headgear/garment and shadow
+-- gear; v5 the 4th-job traits; v6 stance/duty/heal thresholds; v7 `skill_preset`, the
+-- player's own per-companion skill selection. This file is the documentation copy of the
+-- schema `stack/src/cmds.rs` provisions at boot -- keep them byte-identical.
 -- is snapshotted at recruit time and restored on recall, so companions keep
 -- their identity across restarts (name/job/sex otherwise re-roll every boot).
 CREATE TABLE IF NOT EXISTS `cp_companion_persistence` (
@@ -42,6 +45,17 @@ CREATE TABLE IF NOT EXISTS `cp_companion_persistence` (
            `luk_`             SMALLINT      NOT NULL DEFAULT 100,
            `map_id`           SMALLINT      NOT NULL DEFAULT 0, -- mapindex id of owner at recruit (recall target)
            `active`           TINYINT       NOT NULL DEFAULT 1, -- 1 = recalled on login; 0 = expelled/released (Goal 3)
+           `pow_`             SMALLINT      NOT NULL DEFAULT 0, -- 4th-job traits (growth, v5)
+           `sta_`             SMALLINT      NOT NULL DEFAULT 0,
+           `wis_`             SMALLINT      NOT NULL DEFAULT 0,
+           `spl_`             SMALLINT      NOT NULL DEFAULT 0,
+           `con_`             SMALLINT      NOT NULL DEFAULT 0,
+           `crt_`             SMALLINT      NOT NULL DEFAULT 0,
+           `mode`             TINYINT       NOT NULL DEFAULT 1,  -- companion stance: 0 passive, 1 defensive, 2 attack (v6)
+           `duty`             TINYINT       NOT NULL DEFAULT 0,  -- role: 0 attacker, 1 tank, 2 support (v6)
+           `heal_at`          TINYINT       NOT NULL DEFAULT 75, -- support heal threshold HP% (v6)
+           `emergency_at`     TINYINT       NOT NULL DEFAULT 35, -- support emergency heal HP% (v6)
+           `skill_preset`     TEXT          NULL DEFAULT NULL,   -- chosen skill ids, comma separated (v7); NULL = the class preset list, '' = none chosen
            `favorite`         TINYINT       NOT NULL DEFAULT 0, -- 1 = owner favorited (friend list sort)
            `recruited_at`     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
                           ON UPDATE CURRENT_TIMESTAMP,

@@ -83,6 +83,29 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 /// Goal 2: unequip every worn item on the shell and hand each piece to the owner (or drop at feet when overweight). Returns count moved, -1 on bad args.
 int population_engine_companion_return_gear(map_session_data *owner, map_session_data *shell, uint32_t slot_mask = 0);
 int population_engine_companion_set_heal_thresholds(uint32_t owner_account, int16_t heal_at, int16_t emergency_at);
+/// Skill selector: replace one saved companion's skill choice.
+///
+/// @param owner_account  owner whose saved list to search
+/// @param name_          the companion's name
+/// @param spec           comma/space separated skill ids or names, or the
+///                       literal "auto" to go back to the class preset list
+/// @param out_msg        receives a human-readable result/why-not
+/// @param out_msg_len    size of out_msg
+/// @return number of skills selected, or -1 when the arguments were rejected.
+///         "auto" reports 0 with a message, not an error.
+int population_engine_companion_set_skill_override(uint32_t owner_account, const char* name_,
+	const char* spec, char* out_msg, size_t out_msg_len);
+/// Skill selector: list the skills this companion's CURRENT class may use, and
+/// which of them are currently selected. Answered through the chat channel as
+/// @CPSK|... lines so the panel never parses prose (see the @CP rule).
+void population_engine_companion_skill_list(uint32_t owner_account, const char* name_, int fd);
+/// Skill selector: split a stored/typed preset string into skill ids on `out`.
+/// Accepts numeric ids and server skill names, comma and/or space separated.
+/// Returns the number parsed (0 for an empty string). Whether that means "auto"
+/// is the CALLER's call and depends on the column being NULL, not on the count:
+/// NULL = never chosen (auto), empty string = a chosen empty selection.
+size_t population_engine_companion_parse_skill_override(const char* stored,
+	std::vector<uint16_t>& out);
 uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job_id, int quality, const char *name_hint);
 void population_engine_companion_list_raw(uint32_t owner_account, int fd);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).

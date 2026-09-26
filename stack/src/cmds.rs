@@ -1533,6 +1533,7 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
            `duty`             TINYINT       NOT NULL DEFAULT 0, -- role: 0 attacker, 1 tank, 2 support (v6)
            `heal_at`          TINYINT       NOT NULL DEFAULT 75, -- support heal threshold HP% (v6)
            `emergency_at`     TINYINT       NOT NULL DEFAULT 35, -- support emergency heal HP% (v6)
+           `skill_preset`     TEXT          NULL DEFAULT NULL,   -- chosen skill ids, comma separated (v7); NULL = the class preset list, '' = none chosen
            `map_id`           SMALLINT      NOT NULL DEFAULT 0, -- mapindex id of owner at recruit (recall target)
            `active`           TINYINT       NOT NULL DEFAULT 1, -- 1 = recalled on login; 0 = released (Goal 3 sets this)
            `favorite`         TINYINT       NOT NULL DEFAULT 0, -- 1 = owner favorited (friend list sort)
@@ -1577,6 +1578,10 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
         ("duty", "TINYINT NOT NULL DEFAULT 0"),
         ("heal_at", "TINYINT NOT NULL DEFAULT 75"),
         ("emergency_at", "TINYINT NOT NULL DEFAULT 35"),
+        // v7: the player's own skill selection for this companion. NULL means
+        // "never chosen" so an upgrade keeps every existing companion on the
+        // class preset list, which is the behaviour it had before the selector.
+        ("skill_preset", "TEXT NULL DEFAULT NULL"),
     ] {
         let _ = dk.exec_sql(&format!(
             "ALTER TABLE `cp_companion_persistence` ADD COLUMN IF NOT EXISTS `{column}` {definition}"
