@@ -413,9 +413,7 @@ Body:
 
   # JOB_WIZARD = 9
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SLOWPOISON }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLIND }
 
@@ -674,11 +672,10 @@ Body:
   # JOB_SAGE = 16 (elemental combos: freeze target → lightning follow-up)
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: AL_HOLYLIGHT, Level: 1, Rate: 9000 }
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MO_BALKYOUNG, Level: 1, Rate: 9000 }
 
   - JobId: 16
@@ -946,9 +943,7 @@ Body:
 
   # JOB_HIGH_WIZARD = 4010
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SLOWPOISON }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLIND }
 
@@ -1224,11 +1219,10 @@ Body:
   # JOB_PROFESSOR = 4017
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: AL_HOLYLIGHT, Level: 1, Rate: 9000 }
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MO_BALKYOUNG, Level: 1, Rate: 9000 }
 
   - JobId: 4017
@@ -1777,11 +1771,9 @@ Body:
       - { SkillId: AL_PNEUMA,              Level: 1,  Rate: 9000, Target: self, Condition: skill_used, CondValue: MO_FINGEROFFENSIVE, Cooldown: 10000 }
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: AL_HOLYLIGHT, Level: 1, Rate: 9000 }
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: PR_IMPOSITIO, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_IMPOSITIO }
       - { SkillId: PR_KYRIE, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KYRIE }
       - { SkillId: PR_SANCTUARY, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2379,12 +2371,11 @@ Body:
       - { SkillId: SR_GENTLETOUCH_CURE, Level: 5,  Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: AL_HOLYLIGHT, Level: 1, Rate: 9000 }
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_PNEUMA, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MO_BALKYOUNG, Level: 1, Rate: 9000 }
       - { SkillId: MO_BLADESTOP, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BLADESTOP_WAIT }
       - { SkillId: MO_BODYRELOCATION, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2771,7 +2762,7 @@ Body:
       - { SkillId: AB_SECRAMENT, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SECRAMENT }
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
@@ -2780,7 +2771,6 @@ Body:
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_PNEUMA, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: CD_ARGUTUS_TELUM, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_A_TELUM }
       - { SkillId: CD_BENEDICTUM, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BENEDICTUM }
       - { SkillId: CD_COMPETENTIA, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_COMPETENTIA }
@@ -2793,7 +2783,6 @@ Body:
       - { SkillId: CD_RELIGIO, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_RELIGIO }
       - { SkillId: MG_SAFETYWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: PR_ASPERSIO, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_ASPERSIO }
-      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: PR_GLORIA, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_GLORIA }
       - { SkillId: PR_IMPOSITIO, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_IMPOSITIO }
       - { SkillId: PR_KYRIE, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KYRIE }
@@ -3042,7 +3031,7 @@ Body:
       - { SkillId: IQ_WILL_OF_FAITH, Level: 10, Rate: 10000 }
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
@@ -3051,7 +3040,6 @@ Body:
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_PNEUMA, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: CH_PALMSTRIKE, Level: 5, Rate: 9000 }
       - { SkillId: CH_TIGERFIST, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANKLE }
       - { SkillId: IQ_BLAZING_FLAME_BLAST, Level: 5, Rate: 9000 }
@@ -3359,7 +3347,7 @@ Body:
       - { SkillId: AC_CONCENTRATION, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CONCENTRATE }
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
-      - { SkillId: AL_CRUCIS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGNUMCRUCIS }
+      - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
@@ -3367,7 +3355,6 @@ Body:
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_PNEUMA, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
-      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AS_ENCHANTPOISON, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_ENCPOISON }
       - { SkillId: AS_POISONREACT, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_POISONREACT }
       - { SkillId: AS_VENOMDUST, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }

@@ -803,6 +803,10 @@ bool population_shell_skill_condition_ok(
 	}
 }
 
+/// Defined further down; the per-tick path needs it to honour a skill-selection change
+/// immediately rather than at the next session restart (see the call in the tick).
+static void population_shell_seed_attack_skills_if_empty(map_session_data *sd);
+
 namespace { // reopen anon namespace for the rest of the file
 
 /// Unified condition gate that picks between the flat-enum legacy path and the
@@ -1271,6 +1275,14 @@ static void population_shell_combat_process_tick(map_session_data *sd, t_tick cu
 	pe.movement_decision_trace_id++;
 
 	population_shell_cleanup_expired_buffs(sd, current_tick);
+
+	// A skill-selection change (and a job change) must take effect on the next tick.
+	// The seeders are the only place `skill_override` is applied, and they used to be
+	// reachable only from combat_start_session - so setting a companion to "none" left
+	// it casting the list it was seeded with until it was re-summoned. The seeder clears
+	// this flag itself, so the rebuild runs in exactly one tick per change.
+	if (sd->pop.skills_need_reseed)
+		population_shell_seed_attack_skills_if_empty(sd);
 
 	const bool flag_attack_only = (sd->pop.flags & PSF::AttackOnly) != 0
 		|| sd->sc.getSCE(SC_BERSERK) != nullptr; // Frenzy: auto-attack only, no skills
