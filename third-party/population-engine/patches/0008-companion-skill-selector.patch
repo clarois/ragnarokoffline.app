@@ -2,20 +2,32 @@ From 0000000000000000000000000000000000000004
 Subject: [PATCH] Companion skill selector: @companion skills <name> - per-companion skill selection
 
 Adds a "skills" subcommand to @companion so each saved companion can use a
-subset of its PRESET skill list: "@companion skills <name>" lists what the
-companion's current class may use (the intersection of the class skill-tree
-closure and the curated rows in population_skill_db.yml) plus which are
-selected; "<list>", "none" and "auto" set it. The selection is stored per
-companion in cp_companion_persistence.skill_preset (v7) and applied from the
-existing skills_need_reseed rebuild path, so it needs no new tick logic.
+subset of its PRESET skill list.
 
-skill_preset IS NULL means "never chosen" (the class preset list, i.e. the
+  @companion skills <name>              list what the class may use + what is selected
+  @companion skills <name> <list>       select those (ids or names, comma/space sep)
+  @companion skills <name> none|clear   select nothing (auto-attack only)
+  @companion skills <name> auto         back to the class preset list
+  @companion skills <name> toggle <sk>  flip one skill   (the tick-box UI uses this)
+  @companion skills <name> only <sk>    select exactly that one
+  @companion skills <name> all          select every legal skill
+
+The legal set is the class skill-tree closure INTERSECTED with the curated rows in
+population_skill_db.yml, so a Priest cannot be given Cardinal skills and a skill
+with no curated behaviour row is reported rather than cast blindly.
+
+The per-skill verbs exist because `param` in this branch is
+`char param[NAME_LENGTH]` = 23 bytes and the sscanf truncates: a whole skill list
+cannot travel in one command (a 4th-job companion has 13-73 legal skills), so the
+UI sends one small command per click and the stored selection is the state.
+
+skill_preset (v7) IS NULL means "never chosen" (the class preset list, i.e. the
 behaviour every companion had before); an empty string is a deliberate empty
 choice. The two must stay distinct because the seeders rebuild a list while it
 is empty.
 --- a/src/custom/atcommand.inc
 +++ b/src/custom/atcommand.inc
-@@ -551,6 +551,42 @@
+@@ -551,6 +551,59 @@
  	// RAGNAROKMAC (Phase 2): support healer thresholds for the whole party
  	// ("@companion heal <normal%> <emergency%>"). Stored per companion row via the
  	// existing persistence path; the support presets gate on these.
@@ -46,6 +58,23 @@ is empty.
 +			population_engine_companion_skill_list(sd->status.account_id, sk_name, fd);
 +			return 0;
 +		}
++		// RAGNAROKMAC (skill selector UI): per-skill verbs. `param` is 23 bytes, so a
++		// whole skill list cannot travel in one command - the tick-box window sends one
++		// small command per click and the stored selection is the state.
++		{
++			char verb[16] = {0}, skill_tok[NAME_LENGTH] = {0};
++			if (sscanf(sk_tail, "%15s %23s", verb, skill_tok) >= 1
++			    && (strcmpi(verb, "toggle") == 0 || strcmpi(verb, "only") == 0 || strcmpi(verb, "all") == 0)) {
++				char vreply[256];
++				const int now = population_engine_companion_toggle_skill(
++					sd->status.account_id, sk_name, verb, skill_tok, vreply, sizeof(vreply));
++				if (now < 0)
++					clif_displaymessage(fd, vreply[0] ? vreply : "Could not change that skill.");
++				else
++					clif_displaymessage(fd, vreply);
++				return 0;
++			}
++		}
 +		char reply[512];
 +		const int picked = population_engine_companion_set_skill_override(
 +			sd->status.account_id, sk_name, sk_tail, reply, sizeof(reply));
@@ -58,7 +87,7 @@ is empty.
  	if (strcmpi(cmd, "heal") == 0) {
  		int normal = 0, emergency = 0;
  		if (sscanf(param, "%d %d", &normal, &emergency) != 2 || normal < 1 || normal > 99 ||
-@@ -569,6 +605,6 @@
+@@ -569,6 +622,6 @@
  		clif_displaymessage(fd, msg);
  		return 0;
  	}

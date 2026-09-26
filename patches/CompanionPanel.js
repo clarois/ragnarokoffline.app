@@ -54,6 +54,19 @@ let _forceRedraw = false;
 /// Our own duty choices, so a row can show the badge before the server echoes.
 const _duties = {};
 
+/// The companion whose skill picker is open ('' = closed), and the menu last
+/// received from the server for it.
+///
+/// The menu is authoritative server-side: the engine emails the legal set (a tick
+/// box per skill, `@CPSK|id|name|selected|level`) and this only mirrors it. A click
+/// sends `toggle` and waits for the server to re-send, so the panel can never show a
+/// tick the server did not agree to - which matters because the selection is what
+/// decides whether a companion heals or fights.
+let _skillTarget = '';
+let _skillPending = [];
+let _skills = [];
+let _skillMeta = { job: '', chosen: false, emitted: 0, answered: false };
+
 /**
  * Jobs the Summon tab offers: the same names @companion jobs prints and the
  * engine's kJobNameMap resolves. Kept as plain data so the panel needs no
@@ -146,6 +159,58 @@ function _renderStatus(text) {
  * @param {string} text
  * @return {boolean} true when the line was ours
  */
+/**
+ * Parse one @CPSK line (see population_engine_companion_skill_list):
+ *   @CPSK|<id>|<name>|<selected 0/1>|<max level>
+ *   @CPSKEND|<count>|<job>|<chosen 0/1>|<summoned 0/1>
+ *
+ * @param {string} text
+ * @return {boolean} true when the line was ours
+ */
+function parseSkillLine(text) {
+	const idx = text.indexOf('@CPSK');
+	if (idx < 0) {
+		return false;
+	}
+	const body = text.slice(idx);
+	if (body.startsWith('@CPSKEND')) {
+		const p = body.split('|');
+		_skills = _skillPending.slice();
+		_skillPending = [];
+		_skillMeta = {
+			job: p[2] || '',
+			chosen: p[3] === '1',
+			emitted: parseInt(p[1], 10) || 0,
+			answered: true
+		};
+		// Redraw only when the picker is open, so a stray push does not churn the DOM.
+		if (_skillTarget) {
+			_render();
+		}
+		return true;
+	}
+	if (body.startsWith('@CPSKFAIL')) {
+		_skillPending = [];
+		_skills = [];
+		_skillMeta = { job: '', chosen: false, emitted: 0, answered: true };
+		if (_skillTarget) {
+			_render();
+		}
+		return true;
+	}
+	const p = body.split('|');
+	if (p[0] !== '@CPSK' || p.length < 5) {
+		return false;
+	}
+	_skillPending.push({
+		id: parseInt(p[1], 10) || 0,
+		name: p[2],
+		selected: p[3] === '1',
+		level: parseInt(p[4], 10) || 0
+	});
+	return true;
+}
+
 function parseRosterLine(text) {
 	const idx = text.indexOf('@CP');
 	if (idx < 0) {
@@ -216,7 +281,9 @@ function _render() {
 		_drawParty();
 		_drawSummon();
 		_drawBattle();
+		_drawSkills();
 		_drawGear();
+		_mountSkillPicker();
 	});
 }
 
@@ -342,7 +409,13 @@ function _drawParty() {
 			});
 		}, 'Delete this saved companion permanently');
 
-		page.append(_row(id, lv, badge, duty, summon, fav, trash));
+		// Skills sits beside Duty: both configure how this companion fights, and both
+		// are per-companion, so they belong next to each other on the row.
+		const skills = _button('Skills', 'b', () => {
+			openSkillPicker(m.name);
+		}, `Choose which skills ${m.name} may use`);
+
+		page.append(_row(id, lv, badge, duty, skills, summon, fav, trash));
 	});
 
 	page.append(_button('Refresh', 'b wide', refreshRoster));
@@ -460,6 +533,212 @@ function _drawBattle() {
 	));
 }
 
+/// Ask the server for one companion's skill menu. Answered through the chat hook
+/// as @CPSK|... lines, terminated by @CPSKEND.
+function askSkills(name) {
+	_skillPending = [];
+	_skills = [];
+	_skillMeta = { job: '', chosen: false, emitted: 0, answered: false };
+	talk(`@companion skills ${name}`, false);
+}
+
+/// Open the picker for one saved companion. Works for a benched companion too -
+/// the selection is stored on its row and applies at its next summon, which is what
+/// lets a player configure three priests before summoning any of them.
+function openSkillPicker(name) {
+	_skillTarget = name;
+	askSkills(name);
+	_render();
+}
+
+function closeSkillPicker() {
+	_skillTarget = '';
+	_skillPending = [];
+	_skills = [];
+	_render();
+}
+
+/// Escape closes the picker. Installed once from init(); it defers to the panel
+/// being open AND a picker being up, so it never steals Escape from a dialogue or
+/// from the client's own windows.
+function installSkillEscape() {
+	if (window.__companionSkillEscape === true) {
+		return;
+	}
+	window.addEventListener('keydown', ev => {
+		if (ev.key !== 'Escape' || !_skillTarget) {
+			return;
+		}
+		if (!CompanionPanel.__active || !CompanionPanel._host
+			|| CompanionPanel._host.style.display === 'none') {
+			return;
+		}
+		ev.stopPropagation();
+		closeSkillPicker();
+	}, true);
+	window.__companionSkillEscape = true;
+}
+
+/// The picker overlay: one tick box per legal skill, grouped Offense / Defence /
+/// Support by the skill's own target so a player can find "the heals" without
+/// reading 70 ids.
+function _skillPickerOverlay() {
+	const root = CompanionPanel.getRoot();
+	const overlay = document.createElement('div');
+	overlay.className = 'skill-overlay';
+
+	const box = document.createElement('div');
+	box.className = 'skill-box';
+
+	const head = document.createElement('div');
+	head.className = 'skill-head';
+	const title = document.createElement('div');
+	title.className = 'skill-title';
+	title.textContent = _skillMeta.job
+		? `Skills — ${_skillTarget} (${_skillMeta.job})`
+		: `Skills — ${_skillTarget}`;
+	head.append(title);
+	box.append(head);
+
+	const state = document.createElement('div');
+	state.className = 'hint';
+	if (!_skillMeta.answered) {
+		state.textContent = 'asking the server…';
+		box.append(state);
+	} else if (!_skills.length) {
+		state.textContent = 'This companion has no usable skills for its class yet.';
+		box.append(state);
+	} else {
+		// The count is the one thing that tells the player whether their tick landed.
+		state.textContent = `${_skills.filter(s => s.selected).length} of ${_skills.length} selected`
+			+ (_skillMeta.chosen ? '' : ' — using the full class list');
+		box.append(state);
+
+		const list = document.createElement('div');
+		list.className = 'skill-list';
+		let lastGroup = '';
+		_skills.forEach(s => {
+			// The engine does not send a target, so group by name prefix family:
+			// this is display only and never decides behaviour.
+			const group = _skillGroupOf(s.name);
+			if (group !== lastGroup) {
+				lastGroup = group;
+				const h = document.createElement('h4');
+				h.textContent = group;
+				list.append(h);
+			}
+			const row = document.createElement('label');
+			row.className = 'skill-row' + (s.selected ? ' on' : '');
+
+			const cb = document.createElement('input');
+			cb.type = 'checkbox';
+			cb.checked = !!s.selected;
+			cb.addEventListener('click', e => e.stopPropagation());
+			cb.addEventListener('change', () => {
+				// One small command per click: the atcommand's param buffer is 23
+				// bytes, so a whole list cannot travel in one line. The server
+				// re-sends the menu after the change, so the tick follows the server
+				// rather than being set optimistically here.
+				cb.disabled = true;
+				talk(`@companion skills ${_skillTarget} toggle ${s.id}`, false);
+				window.setTimeout(() => askSkills(_skillTarget), 250);
+			});
+
+			const nm = document.createElement('span');
+			nm.className = 'skill-name';
+			nm.textContent = s.name;
+
+			const lv = document.createElement('span');
+			lv.className = 'skill-lv';
+			lv.textContent = s.level ? `Lv${s.level}` : '';
+
+			row.append(cb, nm, lv);
+			list.append(row);
+		});
+		box.append(list);
+	}
+
+	const actions = document.createElement('div');
+	actions.className = 'skill-actions';
+	const mk = (label, cmd, title) => _button(label, 'b', () => {
+		talk(`@companion skills ${_skillTarget} ${cmd}`, false);
+		window.setTimeout(() => askSkills(_skillTarget), 300);
+	}, title);
+	actions.append(
+		mk('All', 'all', 'Use every skill this class can use'),
+		mk('None', 'none', 'Use no skills (auto-attack only)'),
+		mk('Auto', 'auto', 'Back to the class default list'),
+		_button('Close', 'b', closeSkillPicker, 'Close this picker')
+	);
+	box.append(actions);
+
+	overlay.append(box);
+	overlay.addEventListener('mousedown', e => e.stopImmediatePropagation());
+	overlay.addEventListener('click', e => e.stopPropagation());
+	return overlay;
+}
+
+/// Display bucket for a skill, from its Aegis name prefix. Presentation only.
+function _skillGroupOf(name) {
+	const p = String(name || '').slice(0, 2).toUpperCase();
+	if (p === 'AL' || p === 'PR' || p === 'AB' || p === 'HP' || p === 'CD') return 'Support';
+	if (p === 'SM' || p === 'KN' || p === 'LK' || p === 'RK' || p === 'DK' || p === 'CR'
+		|| p === 'PA' || p === 'IG' || p === 'MO' || p === 'CH' || p === 'SR' || p === 'IQ') return 'Melee / defence';
+	return 'Offense / utility';
+}
+
+function _drawSkills() {
+	const page = _page('skills');
+	if (!page) {
+		return;
+	}
+	page.replaceChildren();
+
+	const hint = document.createElement('div');
+	hint.className = 'hint';
+	hint.textContent = 'Each companion keeps its own skill set. Pick one to choose which of '
+		+ 'its class skills it may use — a Priest can be built for support or for melee.';
+	page.append(hint);
+
+	if (!_roster.length) {
+		const e = document.createElement('div');
+		e.className = 'empty';
+		e.textContent = 'No saved companions yet.';
+		page.append(e);
+		page.append(_button('Refresh', 'b wide', refreshRoster));
+		return;
+	}
+
+	_roster.forEach(m => {
+		const row = document.createElement('div');
+		row.className = 'row';
+		const id = document.createElement('div');
+		id.className = 'id';
+		const nm = document.createElement('div');
+		nm.className = 'nm';
+		nm.textContent = (m.favorite ? '★ ' : '') + m.name;
+		const cls = document.createElement('div');
+		cls.className = 'cls';
+		cls.textContent = m.liveJob || m.job;
+		id.append(nm, cls);
+		row.append(id, _button('Choose skills', 'b', () => openSkillPicker(m.name),
+			`Choose which skills ${m.name} may use`));
+		page.append(row);
+	});
+}
+
+/// Mount the picker overlay when one is open. Called from every _render() so the
+/// list follows the server's answer, and it drops any previous overlay first - a
+/// stacked overlay would swallow clicks meant for the one underneath.
+function _mountSkillPicker() {
+	const root = CompanionPanel.getRoot();
+	root.querySelectorAll('.skill-overlay').forEach(el => el.remove());
+	if (!_skillTarget) {
+		return;
+	}
+	root.append(_skillPickerOverlay());
+}
+
 function _drawGear() {
 	const page = _page('gear');
 	if (!page) {
@@ -521,6 +800,9 @@ function installChatHook() {
 	}
 	const original = ChatBox.addText;
 	ChatBox.addText = function addText(text, ...rest) {
+		if (typeof text === 'string' && text.indexOf('@CPSK') >= 0 && parseSkillLine(text)) {
+			return;
+		}
 		if (typeof text === 'string' && text.indexOf('@CP') >= 0 && parseRosterLine(text)) {
 			return;
 		}
@@ -589,6 +871,7 @@ function confirmInWindow(question, detail) {
  */
 CompanionPanel.init = function init() {
 	installChatHook();
+	installSkillEscape();
 	const root = this.getRoot();
 
 	this.draggable('.titlebar');
@@ -649,6 +932,10 @@ CompanionPanel.init = function init() {
 			// there looking broken after companions are summoned or benched.
 			if (btn.dataset.tab === 'party' || btn.dataset.tab === 'gear') {
 				refreshRoster();
+			}
+			// The Skills tab shows a chooser, so it opens with the list already fresh.
+			if (btn.dataset.tab === 'skills') {
+				_render();
 			}
 		});
 	});

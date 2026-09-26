@@ -99,6 +99,12 @@ int population_engine_companion_set_skill_override(uint32_t owner_account, const
 /// which of them are currently selected. Answered through the chat channel as
 /// @CPSK|... lines so the panel never parses prose (see the @CP rule).
 void population_engine_companion_skill_list(uint32_t owner_account, const char* name_, int fd);
+/// Skill selector UI: flip one skill in a companion's selection.
+/// `verb` is "toggle" (flip), "only" (select just this) or "all" (select every
+/// legal skill); `skill_token` is an id or name, unused for "all".
+/// @return the selected count, or -1 when rejected (message in out_msg).
+int population_engine_companion_toggle_skill(uint32_t owner_account, const char* name_,
+	const char* verb, const char* skill_token, char* out_msg, size_t out_msg_len);
 /// Skill selector: split a stored/typed preset string into skill ids on `out`.
 /// Accepts numeric ids and server skill names, comma and/or space separated.
 /// Returns the number parsed (0 for an empty string). Whether that means "auto"

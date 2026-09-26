@@ -2510,6 +2510,158 @@ int population_engine_companion_set_skill_override(uint32_t owner_account, const
 	return want_auto ? 0 : static_cast<int>(picked.size());
 }
 
+/// RAGNAROKMAC (skill selector): flip exactly one skill in a companion's selection.
+///
+/// The tick-box UI cannot send a whole list (the atcommand's `param` is 23 bytes
+/// and truncates), so each click is one small command and the stored selection is
+/// the state. Resolution order matters: `none`/`auto`/`toggle`/`only`/`all` are
+/// verbs, anything else is treated as a single skill id or name.
+///
+/// @param verb  "toggle" (flip), "only" (select just this), "all" (select every
+///              legal skill). Any other value is not handled here.
+/// @return count of selected skills after the change, or -1 when rejected.
+int population_engine_companion_toggle_skill(uint32_t owner_account, const char* name_,
+	const char* verb, const char* skill_token, char* out_msg, size_t out_msg_len)
+{
+	if (out_msg != nullptr && out_msg_len > 0)
+		out_msg[0] = '\0';
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0] || verb == nullptr)
+		return -1;
+
+	uint32_t index_ = 0; bool active = false;
+	if (!population_engine_companion_find(owner_account, name_, &index_, &active))
+		return -1;
+
+	// Live class when summoned (a companion that just advanced must offer its NEW
+	// class's skills), else the persisted job_id.
+	map_session_data* live = nullptr;
+	for (map_session_data* cand : g_population_engine_pcs) {
+		if (cand != nullptr && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
+			live = cand;
+			break;
+		}
+	}
+	uint16_t class_ = 0;
+	char stored[512];
+	stored[0] = '\0';
+	bool storage_never_set = true; // stays true only when the column comes back NULL
+	{
+		char q[320];
+		snprintf(q, sizeof(q),
+			"SELECT job_id, skill_preset FROM `cp_companion_persistence`"
+			" WHERE owner_account_id=%u AND shell_index=%u",
+			owner_account, index_);
+		if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+			Sql_ShowDebug(mmysql_handle);
+			return -1;
+		}
+		char* data = nullptr;
+		if (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+			Sql_GetData(mmysql_handle, 0, &data, nullptr);
+			class_ = static_cast<uint16_t>(data != nullptr ? atoi(data) : 0);
+			Sql_GetData(mmysql_handle, 1, &data, nullptr);
+			// NULL = never chosen ("auto"). Copy only a real value so an empty string
+			// stays empty and therefore means "chose nothing".
+			if (data != nullptr) {
+				safestrncpy(stored, data, sizeof(stored));
+				storage_never_set = false;
+			}
+		}
+		Sql_FreeResult(mmysql_handle);
+	}
+	if (live != nullptr && live->status.class_ != 0)
+		class_ = live->status.class_;
+	if (class_ == 0)
+		return -1;
+
+	const std::vector<uint16_t> legal = pop_companion_legal_skill_ids(class_, job_name(class_));
+	if (legal.empty())
+		return -1;
+
+	// Current selection. `storage_never_set` is the NULL-vs-empty distinction the row
+	// depends on: NULL = the companion was never configured and is using the whole
+	// class list (which is what the UI displays as everything ticked, because that is
+	// what the shell actually casts), so a flip must start from that full list - an
+	// untick removes exactly one skill instead of discarding the class list and
+	// selecting the single skill under the cursor. An explicit empty string stays
+	// "chose nothing" and is left alone.
+	std::vector<uint16_t> picked;
+	if (storage_never_set)
+		picked = legal;
+	else
+		population_engine_companion_parse_skill_override(stored, picked);
+
+	if (strcmpi(verb, "all") == 0) {
+		picked = legal;
+	} else {
+		if (skill_token == nullptr || !skill_token[0])
+			return -1;
+		uint16_t sid = 0;
+		if (skill_token[0] >= '0' && skill_token[0] <= '9') {
+			const long v = strtol(skill_token, nullptr, 10);
+			if (v > 0 && v < MAX_SKILL)
+				sid = static_cast<uint16_t>(v);
+		} else {
+			sid = skill_name2id(skill_token);
+		}
+		if (sid == 0 || std::find(legal.begin(), legal.end(), sid) == legal.end()) {
+			if (out_msg != nullptr)
+				safesnprintf(out_msg, out_msg_len,
+					"%s cannot use %s.", name_,
+					skill_token[0] ? skill_token : "(no skill given)");
+			return -1;
+		}
+		std::vector<uint16_t>::iterator it = std::find(picked.begin(), picked.end(), sid);
+		if (strcmpi(verb, "only") == 0) {
+			picked.clear();
+			picked.push_back(sid);
+		} else if (it != picked.end()) {
+			picked.erase(it);      // toggle off
+		} else {
+			picked.push_back(sid); // toggle on
+		}
+	}
+
+	// Persist, then apply to the live shell through the existing rebuild flag.
+	char preset[512];
+	preset[0] = '\0';
+	{
+		size_t used = 0;
+		for (size_t i = 0; i < picked.size(); ++i) {
+			const int n = snprintf(preset + used, sizeof(preset) - used, "%s%u",
+				i > 0 ? "," : "", static_cast<unsigned>(picked[i]));
+			if (n <= 0 || static_cast<size_t>(n) >= sizeof(preset) - used)
+				break;
+			used += static_cast<size_t>(n);
+		}
+	}
+	{
+		char q[768];
+		snprintf(q, sizeof(q),
+			"UPDATE `cp_companion_persistence` SET skill_preset='%s'"
+			" WHERE owner_account_id=%u AND shell_index=%u",
+			preset, owner_account, index_);
+		if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+			Sql_ShowDebug(mmysql_handle);
+			if (out_msg != nullptr)
+				safesnprintf(out_msg, out_msg_len, "Could not save the selection.");
+			return -1;
+		}
+	}
+	if (live != nullptr) {
+		live->pop.skill_override = picked;
+		live->pop.skill_override_active = true;
+		live->pop.skills_need_reseed = true;
+	}
+	if (out_msg != nullptr)
+		safesnprintf(out_msg, out_msg_len, "%s: %u skill%s selected%s.",
+			name_, static_cast<unsigned>(picked.size()), picked.size() == 1 ? "" : "s",
+			live == nullptr ? " (applies when summoned)" : "");
+	ShowInfo("population_engine: skill selection for companion %u now %u skill(s) (%s)\n",
+		index_, static_cast<unsigned>(picked.size()), verb);
+	return static_cast<int>(picked.size());
+}
+
 void population_engine_companion_skill_list(uint32_t owner_account, const char* name_, int fd)
 {
 	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0])
@@ -2531,6 +2683,10 @@ void population_engine_companion_skill_list(uint32_t owner_account, const char* 
 	}
 	uint16_t class_ = 0;
 	bool override_active = false;
+	// NULL means "never chosen": the shell is casting the whole class list, so the
+	// menu must show every legal skill as selected rather than leaving the boxes blank
+	// and implying the companion does nothing.
+	bool never_chosen = true;
 	std::vector<uint16_t> picked;
 	{
 		char q[320];
@@ -2552,6 +2708,7 @@ void population_engine_companion_skill_list(uint32_t owner_account, const char* 
 			// empty selection; the two must not collapse.
 			if (data != nullptr) {
 				override_active = true;
+				never_chosen = false;
 				population_engine_companion_parse_skill_override(data, picked);
 			}
 		}
@@ -2567,9 +2724,10 @@ void population_engine_companion_skill_list(uint32_t owner_account, const char* 
 	const std::vector<uint16_t> legal = pop_companion_legal_skill_ids(class_, job_name(class_));
 	int emitted = 0;
 	for (uint16_t sid : legal) {
-		const bool selected = override_active
-			? (std::find(picked.begin(), picked.end(), sid) != picked.end())
-			: false;
+		// On auto every legal skill is in effect, so every box is ticked.
+		const bool selected = never_chosen
+			? true
+			: (std::find(picked.begin(), picked.end(), sid) != picked.end());
 		char msg[128];
 		// id | name | selected | level the preset casts it at
 		snprintf(msg, sizeof(msg), "@CPSK|%u|%s|%d|%u",
