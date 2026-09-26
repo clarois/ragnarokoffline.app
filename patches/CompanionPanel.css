@@ -151,8 +151,25 @@
 	border-bottom: 1px dotted #ded4bd;
 }
 
-#CompanionPanel .row .nm {
+/* Two-line identity column: name over class + tier. min-width:0 is what lets the
+   column shrink below its content so the ellipsis actually engages instead of the
+   row overflowing. */
+#CompanionPanel .row .id {
 	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+}
+
+#CompanionPanel .row .nm {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#CompanionPanel .row .id .cls {
+	font-size: 10px;
+	line-height: 1.2;
+	color: #7a6d52;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

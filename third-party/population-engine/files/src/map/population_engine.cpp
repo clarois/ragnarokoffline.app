@@ -4600,7 +4600,11 @@ void population_engine_reassert_companions(int32_t party_id)
 /// RAGNAROKMAC (Phase 3): machine-readable companion list for the in-game panel.
 ///
 /// One line per companion, fixed field order, pipe-separated:
-///   @CP|name|job_name|base_level|active(0/1)|favorite(0/1)|level(current,0 if not summoned)
+///   @CP|name|job_name|base_level|active(0/1)|favorite(0/1)|level(current,0 if not summoned)|live_job_name
+///
+/// The last field is the class the shell is ACTUALLY running (empty when not
+/// summoned). job_name above comes from the persisted row, which lags a job
+/// change until the next snapshot; the panel prefers the live value.
 /// terminated by a sentinel line:
 ///   @CPEND|count
 ///
@@ -4643,6 +4647,7 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		// base_level is the spawn-time snapshot, which lags a companion that has
 		// been levelling in the party.
 		int live_lv = 0;
+		const char *live_job = nullptr;
 		for (map_session_data *sd : g_population_engine_pcs) {
 			if (sd == nullptr || !pop_is_companion(sd))
 				continue;
@@ -4651,12 +4656,18 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 			if (strcmp(sd->status.name, namebuf) != 0)
 				continue;
 			live_lv = sd->status.base_level;
+			// The live class too: the persisted job_id only catches up on the next
+			// gear-hash snapshot, so a companion that just advanced would show its
+			// OLD class in the panel. With job advancement shipped, that is the
+			// normal case rather than an edge one.
+			live_job = job_name(sd->status.class_);
 			break;
 		}
 
-		char msg[NAME_LENGTH + 96];
-		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d",
-			namebuf, job_name(job_id), base_lv, active, fav, live_lv);
+		char msg[NAME_LENGTH + 160];
+		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d|%s",
+			namebuf, job_name(job_id), base_lv, active, fav, live_lv,
+			live_job != nullptr ? live_job : "");
 		clif_displaymessage(fd, msg);
 		count++;
 	}

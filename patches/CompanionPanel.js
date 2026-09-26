@@ -76,6 +76,25 @@ const JOB_TIERS = [
 ];
 
 /**
+ * Which job tier a class name belongs to, read off JOB_TIERS.
+ *
+ * The tier decides the stat ceiling a companion can grow into (1st/2nd/trans cap
+ * at 99, 3rd and 4th at 130), so it is worth showing next to the class rather
+ * than making the player remember which names are which era.
+ *
+ * @param {string} job
+ * @returns {string} '' when the class is not in the table
+ */
+function _tierOf(job) {
+	for (const [tier, jobs] of JOB_TIERS) {
+		if (jobs.indexOf(job) >= 0) {
+			return tier;
+		}
+	}
+	return '';
+}
+
+/**
  * Send a chat line exactly as typing it would.
  *
  * @param {string} text
@@ -121,7 +140,7 @@ function _renderStatus(text) {
 
 /**
  * Parse one @CP line. Format (see population_engine_companion_list_raw):
- *   @CP|name|job|base_level|active|favorite|live_level
+ *   @CP|name|job|base_level|active|favorite|live_level|live_job
  *   @CPEND|count
  *
  * @param {string} text
@@ -142,6 +161,7 @@ function parseRosterLine(text) {
 		const changed = fresh.length !== _roster.length ||
 			fresh.some((m, i) => !_roster[i] ||
 				m.name !== _roster[i].name || m.job !== _roster[i].job ||
+				m.liveJob !== _roster[i].liveJob ||
 				m.level !== _roster[i].level || m.active !== _roster[i].active ||
 				m.liveLevel !== _roster[i].liveLevel);
 		_roster = fresh;
@@ -173,7 +193,11 @@ function parseRosterLine(text) {
 		level: parseInt(parts[3], 10) || 0,
 		active: parts[4] === '1',
 		favorite: parts[5] === '1',
-		liveLevel: parseInt(parts[6], 10) || 0
+		liveLevel: parseInt(parts[6], 10) || 0,
+		// The class the shell is actually running. The persisted `job` above lags a
+		// job change until the next snapshot, so this wins when present; absent on
+		// an older server, which is why it is read positionally with a fallback.
+		liveJob: (parts[7] || '').trim()
 	});
 	return true;
 }
@@ -243,10 +267,31 @@ function _drawParty() {
 	}
 
 	_roster.forEach(m => {
-		const nm = document.createElement('span');
+		// Layout B: the name sits on the first line and the class + tier on a
+		// second one, inside a single flexible column. The class used to live in
+		// nm.title (a hover tooltip), so the saved list showed no class at all;
+		// stacking it also means a long class name is cropped by the column
+		// instead of pushing the level and the buttons off the row. The level
+		// always comes from the live shell when there is one - the persisted
+		// base_level is the recruit-time snapshot and lags a levelling companion.
+		const id = document.createElement('div');
+		id.className = 'id';
+
+		const nm = document.createElement('div');
 		nm.className = 'nm';
 		nm.textContent = (m.favorite ? '★ ' : '') + m.name;
-		nm.title = `${m.name} — ${m.job}`;
+		nm.title = m.name;
+
+		const cls = document.createElement('div');
+		cls.className = 'cls';
+		// Live class first: a companion that just advanced would otherwise show the
+		// class it was recruited as until the next persistence snapshot.
+		const job = m.liveJob || m.job;
+		const tier = _tierOf(job);
+		cls.textContent = tier ? `${job} · ${tier} job` : job;
+		cls.title = m.liveLevel ? `${job} (live at Lv.${m.liveLevel})` : job;
+
+		id.append(nm, cls);
 
 		const lv = document.createElement('span');
 		lv.className = 'lv';
@@ -297,7 +342,7 @@ function _drawParty() {
 			});
 		}, 'Delete this saved companion permanently');
 
-		page.append(_row(nm, lv, badge, duty, summon, fav, trash));
+		page.append(_row(id, lv, badge, duty, summon, fav, trash));
 	});
 
 	page.append(_button('Refresh', 'b wide', refreshRoster));
