@@ -652,6 +652,22 @@ void population_engine_shell_release(map_session_data* sd)
 			sd->status.name, PARTY_MEMBER_WITHDRAW_LEAVE);
 		party_member_withdraw(party_id, sd->status.account_id, sd->status.char_id,
 			sd->status.name, PARTY_MEMBER_WITHDRAW_LEAVE);
+		// party_member_withdraw() clears the member row but NOT data[].sd, which is
+		// where this shell was registered. Leaving it there means the periodic
+		// party_send_xy_timer dereferences freed memory - and its only guard is a
+		// null check, which a dangling pointer passes. Clear every slot that still
+		// points at this shell before it is freed.
+		struct party_data *pd = party_search(party_id);
+		if (pd != nullptr) {
+			for (int32_t slot = 0; slot < MAX_PARTY; ++slot) {
+				if (pd->data[slot].sd == sd) {
+					pd->data[slot].sd = nullptr;
+					pd->data[slot].x = 0;
+					pd->data[slot].y = 0;
+					pd->data[slot].hp = 0;
+				}
+			}
+		}
 	}
 	sd->status.party_id = 0; // clear synthetic membership before teardown
 	g_pop_chat_next_tick.erase(sd->id);
@@ -4470,9 +4486,29 @@ void population_engine_reassert_companions(int32_t party_id)
 			continue;
 		if (sd->pop.companion_owner_account == 0)
 			continue;
-		// Membership is by owner: a shell belongs to the party its owner is in.
+		// Membership is by owner CHARACTER, not account: one account can have two
+		// characters in different parties, and map_id2sd() resolves by account, so it
+		// may return the sibling. Resolve the session whose char also belongs to THIS
+		// party, otherwise a companion lands in the wrong character's party.
 		map_session_data *owner = map_id2sd(sd->pop.companion_owner_account);
-		if (owner == nullptr || owner->status.party_id != party_id)
+		if (owner != nullptr && owner->status.party_id != party_id)
+			owner = nullptr; // account's session is a different character's party
+		if (owner == nullptr) {
+			// Fall back to scanning the party for a real (non-shell) member whose
+			// account matches, which is unambiguous when both characters are online.
+			for (int32_t j = 0; j < MAX_PARTY; ++j) {
+				map_session_data *cand = p->data[j].sd;
+				if (cand == nullptr || cand == sd)
+					continue;
+				if (population_engine_is_population_pc(cand->id))
+					continue;
+				if (cand->status.account_id == sd->pop.companion_owner_account) {
+					owner = cand;
+					break;
+				}
+			}
+		}
+		if (owner == nullptr)
 			continue;
 
 		int32 i;

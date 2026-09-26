@@ -215,3 +215,35 @@ test('the panel offers a delete button with an in-window confirmation', () => {
 	assert.ok(css.includes('.confirm-overlay'), 'the overlay needs styling');
 	assert.ok(css.includes('button.danger'), 'the destructive button needs its own look');
 });
+
+test('releasing a shell clears the party slot that pointed at it', () => {
+	// The crash: SIGSEGV (signal 0xb) in party_send_xy_timer+0x8c immediately
+	// after @companion remove. That timer is periodic and does
+	//
+	//     map_session_data* sd = p->data[i].sd;
+	//     if (!sd) continue;                  // guards null, NOT dangling
+	//     if (p->data[i].x != sd->x || ...)   // dereferences it
+	//
+	// reassert put a shell pointer in data[].sd; party_member_withdraw clears the
+	// member row but not that pointer, so freeing the shell left the party holding
+	// freed memory. The release path must clear every slot that points at it.
+	const rel = src.slice(src.indexOf('void population_engine_shell_release'));
+	assert.ok(rel.length > 0, 'shell_release not found');
+	const body = rel.slice(0, 4000);
+	assert.match(body, /pd->data\[slot\]\.sd == sd/,
+		'release must find the party slot holding this shell');
+	assert.match(body, /pd->data\[slot\]\.sd = nullptr;/, 'and null it before the shell is freed');
+});
+
+test('the re-assert matches the owner character, not just the account', () => {
+	// One account, two characters, two parties: map_id2sd() resolves by account
+	// and may return the sibling, which registered a companion into the wrong
+	// character's party (the crash report shows 're-asserted ... party 2' while
+	// the owner was in party 7).
+	const fn = src.slice(src.indexOf('void population_engine_reassert_companions'));
+	const body = fn.slice(0, 3500);
+	assert.match(body, /owner->status\.party_id != party_id/,
+		'the account-resolved session must be rejected when it is in another party');
+	assert.match(body, /cand->status\.account_id == sd->pop\.companion_owner_account/,
+		'and the party must be scanned for the right real member');
+});
