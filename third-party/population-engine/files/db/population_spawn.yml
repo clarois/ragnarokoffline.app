@@ -55,7 +55,7 @@ Body:
       - new_1-3
     TownsPopulation: 60
 
-  - Profile: combat_pve_low
+  - Profile: pve_first_acolyte
     Towns:
       - prontera
       - morocc
@@ -72,7 +72,7 @@ Body:
       - umbala
       - niflheim
       - louyang
-    TownsPopulation: 270
+    TownsPopulation: 54
     Fields:
       - gef_fild00
       - gef_fild01
@@ -88,7 +88,142 @@ Body:
       - prt_fild06
       - prt_fild07
       - prt_fild08
-    FieldsPopulation: 420
+
+  - Profile: pve_first_swordsman
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - xmas
+      - comodo
+      - yuno
+      - amatsu
+      - gonryun
+      - umbala
+      - niflheim
+      - louyang
+    TownsPopulation: 54
+    Fields:
+      - gef_fild00
+      - gef_fild01
+      - gef_fild04
+      - gef_fild07
+      - moc_fild07
+      - moc_fild11
+      - moc_fild12
+      - moc_fild18
+      - pay_fild01
+      - pay_fild03
+      - prt_fild01
+      - prt_fild06
+      - prt_fild07
+      - prt_fild08
+
+  - Profile: pve_first_mage
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - xmas
+      - comodo
+      - yuno
+      - amatsu
+      - gonryun
+      - umbala
+      - niflheim
+      - louyang
+    TownsPopulation: 54
+    Fields:
+      - gef_fild00
+      - gef_fild01
+      - gef_fild04
+      - gef_fild07
+      - moc_fild07
+      - moc_fild11
+      - moc_fild12
+      - moc_fild18
+      - pay_fild01
+      - pay_fild03
+      - prt_fild01
+      - prt_fild06
+      - prt_fild07
+      - prt_fild08
+
+  - Profile: pve_first_archer
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - xmas
+      - comodo
+      - yuno
+      - amatsu
+      - gonryun
+      - umbala
+      - niflheim
+      - louyang
+    TownsPopulation: 54
+    Fields:
+      - gef_fild00
+      - gef_fild01
+      - gef_fild04
+      - gef_fild07
+      - moc_fild07
+      - moc_fild11
+      - moc_fild12
+      - moc_fild18
+      - pay_fild01
+      - pay_fild03
+      - prt_fild01
+      - prt_fild06
+      - prt_fild07
+      - prt_fild08
+
+  - Profile: pve_first_thief
+    Towns:
+      - prontera
+      - morocc
+      - geffen
+      - payon
+      - alberta
+      - izlude
+      - aldebaran
+      - xmas
+      - comodo
+      - yuno
+      - amatsu
+      - gonryun
+      - umbala
+      - niflheim
+      - louyang
+    TownsPopulation: 54
+    Fields:
+      - gef_fild00
+      - gef_fild01
+      - gef_fild04
+      - gef_fild07
+      - moc_fild07
+      - moc_fild11
+      - moc_fild12
+      - moc_fild18
+      - pay_fild01
+      - pay_fild03
+      - prt_fild01
+      - prt_fild06
+      - prt_fild07
+      - prt_fild08
 
   - Profile: combat_pve
     Towns:

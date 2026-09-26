@@ -187,6 +187,12 @@ struct s_population {
 	/// that replaced a per-tick re-warp loop (a shell teleported every 400 ms
 	/// cannot walk, which reads as "the companion stands still").
 	uint16_t placement_fail_streak = 0;
+	/// RAGNAROKMAC (growth): last base level pushed to the party window. The stock
+	/// party_send_levelup() routes through intif_party_changemap() to the CHAR
+	/// server, which has no row for a shell and therefore discards it - so a
+	/// companion's level in the party window only ever updated on a map change.
+	/// The growth poll compares against this and re-broadcasts locally instead.
+	int16_t  last_party_level_broadcast = 0;
 	int16_t  companion_emergency_at = 35; ///< emergency/big-heal below this HP%
 	t_tick companion_follow_next = 0; ///< Rate limit for owner-follow movement decisions.
 	bool companion_formation_active = false; ///< True while walking to the shell's assigned idle formation cell.

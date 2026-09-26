@@ -773,6 +773,27 @@ std::vector<map_session_data*> population_engine_collect_stale_shells()
 			// released — releasing freed the shell and (via the EXPEL-typed leave)
 			// permanently benched it. If the owner is genuinely gone (logout), fall
 			// through to the normal release; the login recall re-summons it.
+			//
+			// pop_companion_owner() above demands that the shell's party_id match the
+			// owner's party_id, which is exactly the link the char server destroys:
+			// party_recv_info() replays the party without this shell's row (a shell
+			// has no `char` table row), so the owner reads as absent, the branch falls
+			// through to the release, and the player sees a companion silently
+			// expelled from the party that @companion summon cannot bring back — the
+			// recall takes the "already live" path for a shell still in the registry
+			// and returns without re-registering it. Ownership (the account link) is
+			// the durable identity, so heal the local party row and retry.
+			if (owner == nullptr && sd->pop.companion_owner_account != 0) {
+				map_session_data *cand = map_id2sd(sd->pop.companion_owner_account);
+				if (cand != nullptr && !population_engine_is_population_pc(cand->id)
+					&& cand->state.active && cand->prev != nullptr) {
+					pop_companion_register_local_party(sd, cand);
+					owner = pop_companion_owner(sd);
+					if (owner != nullptr)
+						ShowInfo("Population engine: re-registered companion %s into %s's party after a party rebuild.\n",
+							sd->status.name, owner->status.name);
+				}
+			}
 			if (owner && owner->state.active) {
 				ShowInfo("Population engine: companion %s left behind; respawning beside owner %s (kept in party).\n",
 					sd->status.name, owner->status.name);
@@ -2371,8 +2392,40 @@ TIMER_FUNC(population_engine_global_combat_timer)
 			// the profile target spread, then walk the job line at the gates.
 			if (pop_is_companion(sd) && sd->pop.companion_owner_account != 0) {
 				std::shared_ptr<PopulationEngine> prof = population_engine_db_for_shell(sd).find(sd->status.class_);
+				// RAGNAROKMAC (growth): the extra point grant is a 3rd-job-and-up
+				// privilege, so the 1st/2nd/trans ramp stays stock and the surge
+				// lands exactly when the job line reaches 3rd. Expressed as an
+				// EXCLUSION (novice 0, 1st 1-6, 2nd 7-23, trans 4001-4022) rather
+				// than a range test, because the id space is sparse: 3rd is
+				// 4054-4079, 4th is 4252-4316, and the extended lines sit at
+				// 4046-4049 / 4211-4218 — a ">= 4050" test would silently skip
+				// the extended jobs and an ">= 4200" one would skip every 3rd.
+				const int32 jid = sd->status.class_;
+				const bool pre_third = (jid == 0) || (jid >= 1 && jid <= 23)
+					|| (jid >= 4001 && jid <= 4022);
+				if (!pre_third) {
+					const int grant = static_cast<int>(battle_config.population_engine_companion_points_per_level);
+					if (grant > 0) {
+						sd->status.status_point += grant;
+						sd->status.trait_point  += grant;
+					}
+				}
 				pop_companion_spend_stat_points(sd, prof);
 				pop_companion_try_job_advance(sd);
+				// RAGNAROKMAC: the party window shows levels from the map's own party
+				// data, and the stock level-up broadcast is a char-server round trip
+				// that drops shells. Re-broadcast locally when the level changed.
+				if (sd->pop.last_party_level_broadcast != sd->status.base_level) {
+					sd->pop.last_party_level_broadcast = sd->status.base_level;
+					struct party_data *pd = party_search(sd->status.party_id);
+					if (pd != nullptr) {
+						int32 slot;
+						ARR_FIND(0, MAX_PARTY, slot, pd->data[slot].sd == sd);
+						if (slot < MAX_PARTY)
+							pd->party.member[slot].lv = sd->status.base_level;
+						clif_party_info(*pd, nullptr);
+					}
+				}
 			}
 			const uint64_t h = pop_companion_gear_hash(sd);
 			auto it = g_pop_companion_gear_hash.find(sd->id);

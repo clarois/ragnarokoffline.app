@@ -101,6 +101,12 @@ Body:
       Novice: novice_set
     BaseLevel: [1, 12]
     JobLevel: [1, 10]
+    Str: [10, 40]
+    Agi: [10, 40]
+    Vit: [10, 40]
+    Int: [10, 40]
+    Dex: [10, 40]
+    Luk: [10, 40]
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
@@ -115,6 +121,12 @@ Body:
     Jobs:
       Priest   : para_mage
     BaseLevel: [35, 58]
+    Str: [1, 20]
+    Agi: [1, 30]
+    Vit: [60, 90]
+    Int: [80, 99]
+    Dex: [50, 80]
+    Luk: [1, 20]
     JobLevel: [25, 50]
     NameProfile: default
     ChatProfile: default
@@ -127,12 +139,96 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: combat_pve_low           # newbie fields: 1st classes, level 10-26, level 1-4 gear
+  - Profile: pve_first_acolyte           # newbie fields: Acolyte (per-job spread so growth has a target)
     Jobs:
-      Swordsman: low_melee
-      Mage     : low_rod
-      Archer   : low_bow
       Acolyte  : low_blunt
+    BaseLevel: [10, 26]
+    JobLevel: [8, 30]
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    Str: [20, 50]
+    Agi: [10, 40]
+    Vit: [40, 70]
+    Int: [70, 99]
+    Dex: [40, 70]
+    Luk: [1, 20]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_first_swordsman           # newbie fields: Swordsman (per-job spread so growth has a target)
+    Jobs:
+      Swordsman : low_melee
+    BaseLevel: [10, 26]
+    JobLevel: [8, 30]
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    Str: [70, 99]
+    Agi: [30, 60]
+    Vit: [50, 80]
+    Int: [1, 20]
+    Dex: [30, 60]
+    Luk: [1, 20]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_first_mage           # newbie fields: Mage (per-job spread so growth has a target)
+    Jobs:
+      Mage     : low_rod
+    BaseLevel: [10, 26]
+    JobLevel: [8, 30]
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    Str: [1, 20]
+    Agi: [10, 40]
+    Vit: [30, 60]
+    Int: [80, 99]
+    Dex: [50, 70]
+    Luk: [1, 20]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_first_archer           # newbie fields: Archer (per-job spread so growth has a target)
+    Jobs:
+      Archer   : low_bow
+    BaseLevel: [10, 26]
+    JobLevel: [8, 30]
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    Str: [1, 20]
+    Agi: [50, 80]
+    Vit: [30, 60]
+    Int: [20, 50]
+    Dex: [70, 99]
+    Luk: [1, 20]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_first_thief           # newbie fields: Thief (per-job spread so growth has a target)
+    Jobs:
       Thief    : low_melee
     BaseLevel: [10, 26]
     JobLevel: [8, 30]
@@ -141,6 +237,12 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
+    Str: [60, 99]
+    Agi: [60, 99]
+    Vit: [30, 60]
+    Int: [1, 20]
+    Dex: [30, 60]
+    Luk: [1, 20]
     Flags:
       - mortal
     TownBehavior: wander
@@ -413,11 +515,11 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
-    Str: [110, 120]
+    Str: [99, 99]
     Agi: [55, 65]
-    Vit: [100, 110]
+    Vit: [99, 99]
     Int: [1, 1]
     Dex: [65, 70]
     Luk: [1, 1]
@@ -437,11 +539,11 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [85, 90]
     Agi: [1, 1]
-    Vit: [110, 120]
+    Vit: [99, 99]
     Int: [55, 60]
     Dex: [55, 60]
     Luk: [1, 1]
@@ -461,13 +563,13 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [1, 1]
     Agi: [1, 1]
     Vit: [75, 80]
-    Int: [120, 130]
-    Dex: [95, 100]
+    Int: [99, 99]
+    Dex: [95, 99]
     Luk: [1, 1]
     Flags:
       - mortal
@@ -483,13 +585,13 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [1, 1]
     Agi: [1, 1]
     Vit: [45, 50]
-    Int: [120, 130]
-    Dex: [100, 110]
+    Int: [99, 99]
+    Dex: [99, 99]
     Luk: [1, 1]
     Flags:
       - mortal
@@ -505,13 +607,13 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [1, 1]
     Agi: [35, 40]
     Vit: [35, 40]
-    Int: [110, 120]
-    Dex: [100, 110]
+    Int: [99, 99]
+    Dex: [99, 99]
     Luk: [1, 1]
     Flags:
       - mortal
@@ -527,13 +629,13 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [1, 1]
-    Agi: [100, 110]
+    Agi: [99, 99]
     Vit: [25, 30]
     Int: [10, 12]
-    Dex: [120, 130]
+    Dex: [99, 99]
     Luk: [1, 1]
     Flags:
       - mortal
@@ -549,10 +651,10 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
-    Str: [100, 110]
-    Agi: [100, 110]
+    Str: [99, 99]
+    Agi: [99, 99]
     Vit: [45, 50]
     Int: [15, 20]
     Dex: [55, 60]
@@ -571,10 +673,10 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
-    Str: [120, 130]
-    Agi: [95, 100]
+    Str: [99, 99]
+    Agi: [95, 99]
     Vit: [75, 80]
     Int: [1, 1]
     Dex: [45, 50]
@@ -593,13 +695,13 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [55, 60]
     Agi: [1, 1]
-    Vit: [95, 100]
-    Int: [120, 130]
-    Dex: [100, 110]
+    Vit: [95, 99]
+    Int: [99, 99]
+    Dex: [99, 99]
     Luk: [1, 1]
     Flags:
       - mortal
@@ -615,12 +717,12 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
-    Str: [120, 130]
+    Str: [99, 99]
     Agi: [1, 1]
     Vit: [45, 50]
-    Int: [95, 100]
+    Int: [95, 99]
     Dex: [75, 80]
     Luk: [1, 1]
     Flags:
@@ -637,13 +739,13 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [1, 1]
     Agi: [1, 1]
     Vit: [55, 60]
-    Int: [120, 130]
-    Dex: [100, 110]
+    Int: [99, 99]
+    Dex: [99, 99]
     Luk: [1, 1]
     Flags:
       - mortal
@@ -659,13 +761,13 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 99]
+    BaseLevel: [70, 95]
     JobLevel: [40, 60]
     Str: [1, 1]
     Agi: [1, 1]
     Vit: [65, 70]
-    Int: [120, 130]
-    Dex: [95, 100]
+    Int: [99, 99]
+    Dex: [95, 99]
     Luk: [1, 1]
     Flags:
       - mortal
@@ -681,7 +783,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [25, 30]
     Agi: [70, 80]
@@ -705,7 +807,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [115, 120]
     Agi: [80, 100]
@@ -729,7 +831,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [115, 120]
     Agi: [80, 100]
@@ -753,7 +855,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [1, 1]
     Agi: [70, 100]
@@ -775,7 +877,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [1, 1]
     Agi: [75, 90]
@@ -797,7 +899,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [1, 1]
     Agi: [75, 90]
@@ -819,7 +921,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [75, 90]
     Agi: [100, 120]
@@ -841,7 +943,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [115, 120]
     Agi: [100, 120]
@@ -863,7 +965,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [20, 30]
     Agi: [110, 120]
@@ -885,7 +987,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [100, 120]
     Agi: [75, 100]
@@ -907,7 +1009,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [100, 120]
     Agi: [80, 100]
@@ -931,7 +1033,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [10, 20]
     Agi: [100, 120]
@@ -953,7 +1055,7 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [99, 150]
+    BaseLevel: [99, 145]
     JobLevel: [40, 70]
     Str: [1, 10]
     Agi: [90, 100]
@@ -983,12 +1085,12 @@ Body:
     Int: [1, 1]
     Dex: [1, 1]
     Luk: [115, 120]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
     Con: [30, 35]
-    Crt: [100, 100]
+    Crt: [100, 110]
     Flags:
       - mortal
     TownBehavior: wander
@@ -1014,8 +1116,8 @@ Body:
     Dex: [85, 90]
     Luk: [85, 90]
     Pow: [0, 0]
-    Sta: [100, 100]
-    Wis: [100, 100]
+    Sta: [100, 110]
+    Wis: [100, 110]
     Spl: [0, 0]
     Con: [0, 0]
     Crt: [0, 0]
@@ -1043,7 +1145,7 @@ Body:
     Int: [110, 120]
     Dex: [125, 130]
     Luk: [1, 1]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
@@ -1073,12 +1175,12 @@ Body:
     Int: [70, 90]
     Dex: [115, 120]
     Luk: [60, 89]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
-    Con: [70, 100]
-    Crt: [75, 100]
+    Con: [70, 110]
+    Crt: [75, 110]
     Flags:
       - mortal
     TownBehavior: wander
@@ -1101,7 +1203,7 @@ Body:
     Int: [1, 1]
     Dex: [60, 90]
     Luk: [120, 125]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
@@ -1129,11 +1231,11 @@ Body:
     Int: [45, 50]
     Dex: [75, 80]
     Luk: [85, 90]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [35, 40]
     Wis: [30, 32]
     Spl: [0, 0]
-    Con: [100, 100]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1157,11 +1259,11 @@ Body:
     Int: [20, 30]
     Dex: [120, 130]
     Luk: [70, 89]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
-    Con: [100, 100]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1188,8 +1290,8 @@ Body:
     Pow: [0, 0]
     Sta: [0, 0]
     Wis: [20, 36]
-    Spl: [100, 100]
-    Con: [100, 100]
+    Spl: [100, 110]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1216,8 +1318,8 @@ Body:
     Pow: [0, 0]
     Sta: [0, 0]
     Wis: [70, 72]
-    Spl: [100, 100]
-    Con: [100, 100]
+    Spl: [100, 110]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1242,8 +1344,8 @@ Body:
     Dex: [1, 1]
     Luk: [85, 90]
     Pow: [0, 0]
-    Sta: [100, 100]
-    Wis: [100, 100]
+    Sta: [100, 110]
+    Wis: [100, 110]
     Spl: [0, 0]
     Con: [0, 0]
     Crt: [30, 35]
@@ -1272,8 +1374,8 @@ Body:
     Pow: [0, 0]
     Sta: [0, 0]
     Wis: [0, 0]
-    Spl: [100, 100]
-    Con: [100, 100]
+    Spl: [100, 110]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1297,12 +1399,12 @@ Body:
     Int: [30, 40]
     Dex: [100, 110]
     Luk: [125, 130]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
     Con: [30, 35]
-    Crt: [100, 100]
+    Crt: [100, 110]
     Flags:
       - mortal
     TownBehavior: wander
@@ -1325,11 +1427,11 @@ Body:
     Int: [95, 100]
     Dex: [125, 130]
     Luk: [75, 80]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [20, 21]
     Wis: [50, 51]
     Spl: [0, 0]
-    Con: [100, 100]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1353,11 +1455,11 @@ Body:
     Int: [95, 100]
     Dex: [125, 130]
     Luk: [75, 80]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [20, 21]
     Wis: [50, 51]
     Spl: [0, 0]
-    Con: [100, 100]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1381,12 +1483,12 @@ Body:
     Int: [60, 90]
     Dex: [120, 130]
     Luk: [120, 126]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
-    Con: [100, 100]
-    Crt: [50, 100]
+    Con: [100, 110]
+    Crt: [50, 110]
     Flags:
       - mortal
     TownBehavior: wander
@@ -1409,12 +1511,12 @@ Body:
     Int: [80, 90]
     Dex: [1, 1]
     Luk: [100, 110]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
     Con: [20, 35]
-    Crt: [100, 100]
+    Crt: [100, 110]
     Flags:
       - mortal
     TownBehavior: wander
@@ -1437,11 +1539,11 @@ Body:
     Int: [85, 90]
     Dex: [105, 110]
     Luk: [55, 60]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [0, 0]
     Spl: [0, 0]
-    Con: [100, 100]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1468,8 +1570,8 @@ Body:
     Pow: [0, 0]
     Sta: [0, 0]
     Wis: [70, 72]
-    Spl: [100, 100]
-    Con: [100, 100]
+    Spl: [100, 110]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1496,8 +1598,8 @@ Body:
     Pow: [0, 0]
     Sta: [20, 36]
     Wis: [36, 72]
-    Spl: [100, 100]
-    Con: [100, 100]
+    Spl: [100, 110]
+    Con: [100, 110]
     Crt: [0, 0]
     Flags:
       - mortal
@@ -1521,12 +1623,12 @@ Body:
     Int: [50, 60]
     Dex: [90, 100]
     Luk: [100, 110]
-    Pow: [100, 100]
+    Pow: [100, 110]
     Sta: [0, 0]
     Wis: [20, 30]
     Spl: [0, 0]
     Con: [30, 40]
-    Crt: [100, 100]
+    Crt: [100, 110]
     Flags:
       - mortal
     TownBehavior: wander
