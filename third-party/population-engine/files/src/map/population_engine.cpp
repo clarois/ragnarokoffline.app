@@ -4446,6 +4446,43 @@ static void pop_companion_register_local_party(map_session_data *sd, map_session
 	const int32 party_id = owner->status.party_id;
 	struct party_data *p = party_search(party_id);
 
+	// RAGNAROKMAC: leave the party this shell is currently registered in before it
+	// becomes a member of this one.
+	//
+	// The roster is shared across the owner's characters, so switching characters
+	// re-runs the recall and moves every companion into the newly logged-in
+	// character's party. This function used to repoint sd->status.party_id and
+	// write data[i].sd in the NEW party while leaving the pointer in the old one,
+	// so two parties held the same shell. shell_release() scrubs only the party
+	// named by status.party_id, and party_send_xy_timer iterates EVERY party in
+	// party_db, so the stale pointer in the abandoned party was dereferenced after
+	// the shell was freed - SIGSEGV in party_send_xy_timer+0x8c, right after the
+	// death/wipe release, which is the crash the incident report caught.
+	//
+	// Mirrors population_engine_shell_release's teardown (leave + withdraw + null
+	// the data[] slot) so "registered in at most one party" becomes an invariant of
+	// this function instead of something the release path has to keep repairing.
+	if (sd->status.party_id > 0 && sd->status.party_id < 0x70000000 &&
+		sd->status.party_id != party_id) {
+		const int32 old_party_id = sd->status.party_id;
+		intif_party_leave(old_party_id, sd->status.account_id, sd->status.char_id,
+			sd->status.name, PARTY_MEMBER_WITHDRAW_LEAVE);
+		party_member_withdraw(old_party_id, sd->status.account_id, sd->status.char_id,
+			sd->status.name, PARTY_MEMBER_WITHDRAW_LEAVE);
+		// party_member_withdraw clears the member row but not the data[] slot.
+		struct party_data *old_pd = party_search(old_party_id);
+		if (old_pd != nullptr) {
+			for (int32_t slot = 0; slot < MAX_PARTY; ++slot) {
+				if (old_pd->data[slot].sd == sd) {
+					old_pd->data[slot].sd = nullptr;
+					old_pd->data[slot].x = 0;
+					old_pd->data[slot].y = 0;
+					old_pd->data[slot].hp = 0;
+				}
+			}
+		}
+	}
+
 	sd->status.party_id = party_id;
 	sd->party_joining = false;
 	sd->party_invite = 0;
