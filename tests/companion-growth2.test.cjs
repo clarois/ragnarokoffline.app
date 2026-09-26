@@ -17,7 +17,9 @@ const PATCH7 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0
 
 const src = fs.readFileSync(ENGINE, 'utf8');
 const state = fs.readFileSync(STATE, 'utf8');
-const patch7 = fs.readFileSync(PATCH7, 'utf8');
+// Tolerate a missing file: run against an earlier commit (patch 0007 did not
+// exist yet) the assertions below must fail on their own terms, not crash here.
+const patch7 = fs.existsSync(PATCH7) ? fs.readFileSync(PATCH7, 'utf8') : '';
 
 test('the extra point grant is a battle config, not a hard-coded constant', () => {
 	// A formula baked into the source means changing the companion economy costs
