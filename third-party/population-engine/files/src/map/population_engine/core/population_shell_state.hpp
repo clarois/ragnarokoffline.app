@@ -58,6 +58,12 @@ struct PopulationShellBuffSkill {
 /// real players leave this in its default-constructed state.
 struct s_population {
 	std::vector<PopulationShellCombatSkill> attack_skills; ///< Offensive skill rotation (not `ca.autocombatskills` / not autosupport).
+	/// RAGNAROKMAC: skill presets are seeded from the shell's CLASS, and the lists
+	/// above are only built while empty. A companion that advances job therefore
+	/// kept its old class's rotation forever (Acolyte -> Priest still cast Acolyte
+	/// skills). The job-change path sets this, and the seeders rebuild when they
+	/// see it, then clear it.
+	bool     skills_need_reseed = false;
 	std::vector<PopulationShellBuffSkill>   buff_skills;   ///< Self-buff maintenance list (Target:1 from population_skill_db.yml).
 	t_tick   reactive_buff_cd    = 0;  ///< Independent buff cooldown — decoupled from ca.skill_cd so self-buffs and attacks can fire in the same tick.
 	t_tick   sticky_until        = 0;  ///< Tick at which the current sticky target commitment expires.

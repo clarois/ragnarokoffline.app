@@ -1782,7 +1782,13 @@ static void population_shell_seed_attack_skills_if_empty(map_session_data *sd)
 
 	const uint16_t base_job = population_engine_job_base_class(sd->status.class_);
 
-	if (sd->pop.attack_skills.empty()) {
+	// Rebuild when empty (first tick) OR when a job change asked for a reseed:
+	// the rotation is keyed on sd->status.class_, so a companion that advanced
+	// would otherwise keep the previous class's skills for the rest of its life.
+	// The flag is cleared in the buff section below, once BOTH lists are rebuilt.
+	const bool rebuild_skills = sd->pop.attack_skills.empty() || sd->pop.skills_need_reseed;
+
+	if (rebuild_skills) {
 		std::vector<PopulationShellCombatSkill> cand;
 		std::unordered_set<uint16_t> seen;
 		cand.reserve(24);
@@ -1841,12 +1847,23 @@ static void population_shell_seed_attack_skills_if_empty(map_session_data *sd)
 			sd->pop.attack_skills = std::move(cand);
 			sd->pop.attack_skill_cursor = 0;
 			population_shell_recalc_max_attack_skill_range(sd);
+		} else if (rebuild_skills) {
+			// The new class has no preset (or none loaded): drop the old class's
+			// rotation rather than keep casting it. The shell then auto-attacks,
+			// which is the documented behaviour for a job with no entries.
+			sd->pop.attack_skills.clear();
+			sd->pop.attack_skill_cursor = 0;
+			sd->pop.max_attack_skill_range = -1;
 		}
 	}
 
 	// Seed self-buff and ally-buff maintenance lists from population_skill_db.yml Target:1/2 entries.
 	// Run independently of attack skill seeding so clearing buff skills re-seeds on next tick.
-	if (sd->pop.buff_skills.empty()) {
+	// Same rebuild condition as the attack rotation: a buff list seeded for the old
+	// class (Acolyte's Heal/Inc-Agi) must not survive a job change.
+	if (sd->pop.buff_skills.empty() || sd->pop.skills_need_reseed) {
+		if (sd->pop.skills_need_reseed)
+			sd->pop.buff_skills.clear();
 		const std::vector<s_pop_skill_entry> *db_skills = population_skill_db().find(sd->status.class_);
 		if (!db_skills || db_skills->empty())
 			db_skills = population_skill_db().find(base_job);
@@ -1883,6 +1900,10 @@ static void population_shell_seed_attack_skills_if_empty(map_session_data *sd)
 			}
 		}
 	}
+
+	// Last of the two rebuilds, so both lists now reflect the current class: drop
+	// the request. Without this the seeders would rebuild on every tick forever.
+	sd->pop.skills_need_reseed = false;
 }
 
 const char *population_combat_reject_code_name(PopulationCombatRejectCode code)

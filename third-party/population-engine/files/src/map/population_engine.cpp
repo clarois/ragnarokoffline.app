@@ -2218,9 +2218,14 @@ static void pop_companion_try_job_advance(map_session_data *sd)
 	sd->status.job_exp = 0;
 	ShowInfo("Population engine: companion %s advanced from %s to %s (base %d/job %d).\n",
 		sd->status.name, old_name, job_name(next), sd->status.base_level, sd->status.job_level);
-	// Re-arm the skill preset for the new job: clear per-skill cooldowns and let the
-	// combat session re-seed from population_skill_db.yml on its next tick.
+	// Re-arm the skill preset for the new job. Clearing the cooldowns alone was NOT
+	// enough and the old comment was simply wrong: the rotation and buff lists are
+	// keyed on status.class_ and the seeders only rebuild while those vectors are
+	// EMPTY, so the previous class's skills survived the change and the companion
+	// kept casting them forever (live: 11 companions advanced from Acolyte but all
+	// still used Acolyte skills). Request an explicit reseed instead.
 	sd->pop.skill_next_use_tick.clear();
+	sd->pop.skills_need_reseed = true;
 	// Re-equip from the new job's Eden set: unequip current gear into the shell's
 	// inventory first (nothing is destroyed), then run the same equip pass spawn uses.
 	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
