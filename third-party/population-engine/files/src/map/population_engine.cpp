@@ -5293,6 +5293,50 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 	clif_displaymessage(fd, endmsg);
 }
 
+/// RAGNAROKMAC (temporary diagnostic): dump every live population shell and what it carries.
+/// Written to settle a series of inferences made from logs: whether the shell holding a
+/// companion index is really that companion, whether it got the persisted name/level/selection,
+/// and whether the engine can resolve it as a companion at all.
+void population_engine_shell_dump(int fd)
+{
+	if (mmysql_handle == nullptr)
+		return;
+	char line[320];
+	snprintf(line, sizeof(line), "=== live population shells (%zu) ===", g_population_engine_pcs.size());
+	clif_displaymessage(fd, line);
+	size_t n = 0;
+	for (map_session_data *sd : g_population_engine_pcs) {
+		if (sd == nullptr)
+			continue;
+		const uint32_t idx = sd->status.char_id >= POPULATION_ENGINE_CHAR_ID_BASE
+			? sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE : 0;
+		snprintf(line, sizeof(line),
+			"@SHELL|%u|%s|%u|%u|%d|%zu|%zu|%d|%d|%d|%d|%d",
+			idx, sd->status.name, (unsigned)sd->status.class_,
+			(unsigned)sd->pop.companion_owner_account,
+			sd->pop.skill_override_active ? 1 : 0,
+			sd->pop.attack_skills.size(), sd->pop.buff_skills.size(),
+			sd->state.active ? 1 : 0,
+			(sd->prev != nullptr) ? 1 : 0,
+			(map_id2bl(sd->id) == sd) ? 1 : 0,
+			(int)sd->status.party_id,
+			pop_is_companion(sd) ? 1 : 0);
+		clif_displaymessage(fd, line);
+		++n;
+	}
+	snprintf(line, sizeof(line), "@SHELLEND|%zu", n);
+	clif_displaymessage(fd, line);
+
+	// And every persisted row, so a reader can compare directly.
+	char q[512];
+	snprintf(q, sizeof(q),
+		"SELECT shell_index, name, job_id, active FROM `cp_companion_persistence` "
+		"WHERE owner_account_id=%u ORDER BY shell_index", 0u);
+	// owner unknown here; the caller passes it via the at-command instead. This block is
+	// intentionally limited to a marker so the command stays simple.
+	clif_displaymessage(fd, "@SHELLROWS|see @companion list raw for the persisted side");
+}
+
 static void population_engine_recall_one_companion(map_session_data *owner, int16_t map_id, uint32_t index_,
 	int16_t job_id, char sex, int hair_style, int hair_color, int cloth_color,
 	uint32_t garment, uint32_t option_, uint32_t weapon, uint32_t shield, uint32_t head_top,

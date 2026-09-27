@@ -114,6 +114,8 @@ size_t population_engine_companion_parse_skill_override(const char* stored,
 	std::vector<uint16_t>& out);
 uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job_id, int quality, const char *name_hint);
 void population_engine_companion_list_raw(uint32_t owner_account, int fd);
+/// Temporary diagnostic: dump every live population shell's identity and state.
+void population_engine_shell_dump(int fd);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
 void population_engine_companion_list(uint32_t owner_account, int fd);
 /// Goal 3 friend list: permanently delete a saved companion's row by name (irreversible).
