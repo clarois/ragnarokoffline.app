@@ -583,7 +583,6 @@ function installSkillEscape() {
 /// Support by the skill's own target so a player can find "the heals" without
 /// reading 70 ids.
 function _skillPickerOverlay() {
-	const root = CompanionPanel.getRoot();
 	const overlay = document.createElement('div');
 	overlay.className = 'skill-overlay';
 
@@ -730,13 +729,26 @@ function _drawSkills() {
 /// Mount the picker overlay when one is open. Called from every _render() so the
 /// list follows the server's answer, and it drops any previous overlay first - a
 /// stacked overlay would swallow clicks meant for the one underneath.
-function _mountSkillPicker() {
+/// The element overlay UI must be appended to.
+///
+/// NOT `getRoot()`. GUIComponent sets `id="<Name>"` on the HOST element while the html's
+/// `<div id="CompanionPanel">` renders INSIDE the shadow root, and getRoot() returns the
+/// shadow root. Every rule in CompanionPanel.css is scoped `#CompanionPanel ...`, so an
+/// overlay appended to the shadow root sits OUTSIDE that wrapper and none of its styles
+/// apply - it draws bare over the game world with no background or border. Mount into the
+/// wrapper instead; fall back to the root only if the wrapper is genuinely absent.
+function _panelMount() {
 	const root = CompanionPanel.getRoot();
-	root.querySelectorAll('.skill-overlay').forEach(el => el.remove());
+	return (root && root.querySelector) ? (root.querySelector('#CompanionPanel') || root) : root;
+}
+
+function _mountSkillPicker() {
+	const wrap = _panelMount();
+	wrap.querySelectorAll('.skill-overlay').forEach(el => el.remove());
 	if (!_skillTarget) {
 		return;
 	}
-	root.append(_skillPickerOverlay());
+	wrap.append(_skillPickerOverlay());
 }
 
 function _drawGear() {
@@ -862,7 +874,8 @@ function confirmInWindow(question, detail) {
 			}
 		};
 		window.addEventListener('keydown', onKey, true);
-		root.append(overlay);
+		// Same wrapper rule as the skill picker (see _panelMount).
+		_panelMount().append(overlay);
 	});
 }
 

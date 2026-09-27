@@ -53,9 +53,19 @@ test('the picker overlay is MOUNTED, not just constructed', () => {
 	// The exact bug that made the button look dead: an overlay built and never appended.
 	assert.match(js, /function _skillPickerOverlay\(/, 'the overlay must be built');
 	assert.match(js, /function _mountSkillPicker\(/, 'and something must mount it');
+	// Assert the append TARGET, not that an append exists. The first version of this test
+	// matched /root\.append\(_skillPickerOverlay\(\)\)/ and therefore passed on the
+	// broken code: getRoot() returns the SHADOW ROOT, so appending there put the overlay
+	// outside the `#CompanionPanel` wrapper that every rule in the stylesheet is scoped to,
+	// and the window rendered with no background at all.
 	const mount = js.slice(js.indexOf('function _mountSkillPicker('));
-	assert.match(mount.slice(0, 600), /root\.append\(_skillPickerOverlay\(\)\)/,
-		'_mountSkillPicker must append the overlay to the panel root');
+	const mountBody = mount.slice(0, 600);
+	assert.match(mountBody, /const wrap = _panelMount\(\);/,
+		'_mountSkillPicker must mount via _panelMount (the #CompanionPanel wrapper)');
+	assert.match(mountBody, /wrap\.append\(_skillPickerOverlay\(\)\)/,
+		'the overlay must be appended to the WRAPPER, not the shadow root');
+	assert.ok(!/root\.append\(_skillPickerOverlay\(\)\)/.test(mountBody),
+		'the overlay must NOT be appended to getRoot() directly - that is the no-background bug');
 	// _render is the single funnel every redraw goes through, so the call belongs there.
 	const render = js.slice(js.indexOf('function _render()'), js.indexOf('function _page('));
 	assert.match(render, /_mountSkillPicker\(\)/,
@@ -157,6 +167,34 @@ test('the toggle verbs ship in the patch that rathena applies', () => {
 	assert.match(p, /strcmpi\(cmd, "skills"\)/, 'the phase-1 subcommand must still ship');
 	assert.match(p, /population_engine_companion_set_skill_override\(/, 'phase-1 setter must still ship');
 	assert.match(p, /companion_resolve_name_and_tail\(/, 'phase-1 name resolution must still ship');
+});
+
+test('the wrapper helper exists, is defined before use, and is the only mount target', () => {
+	// The helper states the rule once. Two separate call sites (the picker and the delete
+	// confirmation) both had the bug, so pinning the helper is what keeps them consistent.
+	assert.match(js, /function _panelMount\(\) \{/,
+		'a single documented mount helper must exist');
+	assert.match(js, /root\.querySelector\('#CompanionPanel'\) \|\| root/,
+		'the helper must actually look the wrapper up and fall back to the root');
+
+	// Definition must precede every use. A count cannot show ordering, and a helper defined
+	// after its first use throws ReferenceError on that path only.
+	const lines = js.split('\n');
+	const defn = lines.findIndex(l => l.startsWith('function _panelMount()'));
+	assert.ok(defn >= 0, 'helper definition not found');
+	const uses = lines
+		.map((l, i) => ({ l, i }))
+		.filter(({ l }) => l.includes('_panelMount()') && !l.startsWith('function'));
+	assert.ok(uses.length >= 2, `expected both call sites, found ${uses.length}`);
+	for (const { l, i } of uses) {
+		assert.ok(i > defn, `_panelMount used at line ${i + 1}, before its definition at ${defn + 1}`);
+	}
+
+	// And nothing may mount an overlay onto the bare shadow root any more.
+	assert.ok(!/root\.append\(overlay\)/.test(js),
+		'confirmInWindow must not append to getRoot() either');
+	assert.match(js, /_panelMount\(\)\.append\(overlay\);/,
+		'the confirmation overlay must mount via the helper too');
 });
 
 test('the picker CSS is scoped, dense and backed by the real bitmaps', () => {
