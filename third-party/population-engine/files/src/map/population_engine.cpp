@@ -477,6 +477,9 @@ static std::unordered_set<uint32_t> g_reserved_companion_indices;
 static bool g_reserved_companion_indices_loaded = false;
 
 // Forward declarations.
+/// RAGNAROKMAC (vehicles): declared here because the job-advance path calls it long
+/// before its definition, which sits with spawn_shell further down.
+static void population_engine_sync_shell_vehicle(map_session_data *sd);
 static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, int y, uint32_t index,
 	uint16_t job_id, char sex, uint8_t hair_style, uint16_t hair_color,
 	uint16_t weapon, uint16_t shield, uint16_t head_top, uint16_t head_mid,
@@ -2321,6 +2324,9 @@ static void pop_companion_try_job_advance(map_session_data *sd)
 		population_engine_shell_equip_item(sd, pick_pool(equipment->acc_r_pool),       sd->status.char_id, "acc_r");
 	}
 	status_calc_pc(sd, SCO_FORCE);
+	// RAGNAROKMAC (vehicles): the new class may entitle the shell to a mount, falcon, warg or
+	// mado that the old one did not have (Swordsman -> Knight, Blacksmith -> Mechanic, ...).
+	population_engine_sync_shell_vehicle(sd);
 	// Persist the new job + reset job level right away so a crash can't roll it back.
 	population_engine_persist_companion_gear(sd);
 }
@@ -2386,7 +2392,13 @@ size_t population_engine_companion_parse_skill_override(const char* stored,
 		// within the skill_db range, so this cannot swallow a name.
 		if (tok[0] >= '0' && tok[0] <= '9') {
 			const long v = strtol(tok, nullptr, 10);
-			if (v > 0 && v < MAX_SKILL)
+			// RAGNAROKMAC: bound by the SKILL DATABASE, not by MAX_SKILL. MAX_SKILL is the
+			// size of status.skill[] (1641) while real ids reach 10019, so `v < MAX_SKILL`
+			// rejected every 4th-job skill - and because this parser also reads the STORED
+			// preset, those ids were dropped again on each recall, which is why a selection
+			// appeared to forget its high-id entries. skill_get_index() is the same validity
+			// predicate the seeders use.
+			if (v > 0 && v <= 0xFFFF)
 				sid = static_cast<uint16_t>(v);
 		} else {
 			sid = skill_name2id(tok);
@@ -2701,7 +2713,10 @@ int population_engine_companion_toggle_skill(uint32_t owner_account, const char*
 		uint16_t sid = 0;
 		if (skill_token[0] >= '0' && skill_token[0] <= '9') {
 			const long v = strtol(skill_token, nullptr, 10);
-			if (v > 0 && v < MAX_SKILL)
+			// RAGNAROKMAC: see the note in population_engine_companion_parse_skill_override.
+			// MAX_SKILL is the skill-array size, not the id ceiling: a 4th-job id such as
+			// MT_TRIPLE_LASER (6003) is above it and was rejected as "cannot use".
+			if (v > 0 && v <= 0xFFFF)
 				sid = static_cast<uint16_t>(v);
 		} else {
 			sid = skill_name2id(skill_token);
@@ -3424,6 +3439,48 @@ bool population_engine_reload_equipment(uint32_t *out_entry_count)
 	return ok;
 }
 
+/// RAGNAROKMAC (vehicles): give a shell the mount / pet / vehicle its class entitles it to.
+///
+/// The stock setters already tolerate population shells - `pc_setriding` and `pc_setfalcon`
+/// both carry `|| population_engine_is_population_pc(sd->id)` - but nothing ever called them,
+/// so no shell has had a mount, falcon or warg from the engine. RuneKnight and DragonKnight
+/// looked mounted only because stock rAthena sets the option when the skill is present and the
+/// tree grant gives them that skill.
+///
+/// Called at spawn (AFTER the skill tree is granted, since every test here is pc_checkskill)
+/// and after job advancement, so a Swordsman that levels into Knight gains the mount rather
+/// than keeping a pedestrian sprite.
+///
+/// Idempotent: each setter checks the current option before changing it, so calling this on an
+/// already-mounted shell is a no-op.
+static void population_engine_sync_shell_vehicle(map_session_data *sd)
+{
+	if (sd == nullptr)
+		return;
+	// Never touch a real player: this is for shells only.
+	if (!population_engine_is_population_pc(sd->id))
+		return;
+
+	// Riding: Peco Peco (Knight/Crusader line) or dragon (RuneKnight/RoyalGuard line).
+	if (pc_checkskill(sd, KN_RIDING) > 0 || pc_checkskill(sd, RK_DRAGONTRAINING) > 0)
+		pc_setriding(sd, 1);
+
+	// Falcon (Hunter/Sniper line).
+	if (pc_checkskill(sd, HT_FALCON) > 0)
+		pc_setfalcon(sd, 1);
+
+	// Warg (Ranger). This pin has no pc_setwarg(); the option IS the mechanism, and stock
+	// code only ever clears it when RA_WUGMASTERY is missing, so setting it here is stable.
+	if (pc_checkskill(sd, RA_WUGMASTERY) > 0 && !(sd->sc.option & OPTION_WUG))
+		pc_setoption(sd, sd->sc.option | OPTION_WUG);
+
+	// Mado Gear. pc_setmadogear() early-returns unless `(class_ & MAPID_THIRDMASK) ==
+	// MAPID_MECHANIC`, and a 4th job (Meister) fails that test, so the setter can never grant
+	// one. Set the option directly with the robot subtype instead.
+	if (pc_checkskill(sd, NC_MADOLICENCE) > 0 && !(sd->sc.option & OPTION_MADOGEAR))
+		pc_setoption(sd, sd->sc.option | OPTION_MADOGEAR, MADO_ROBOT);
+}
+
 static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, int y, uint32_t index,
 	uint16_t job_id, char sex, uint8_t hair_style, uint16_t hair_color,
 	uint16_t weapon, uint16_t shield, uint16_t head_top, uint16_t head_mid,
@@ -3914,6 +3971,10 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 	// take effect immediately. pc_equipitem below also triggers a recalc, but a shell
 	// with no equipment to wear would otherwise skip it and ship without passive stats.
 	status_calc_pc(sd, SCO_FORCE);
+
+	// RAGNAROKMAC (vehicles): mount / falcon / warg / mado, now that the tree is granted.
+	// Must come after the grants above, because every gate is pc_checkskill().
+	population_engine_sync_shell_vehicle(sd);
 
 	// max_weight must be raised before pc_additem: every pc_equipitem calls status_calc_pc
 	// which resets max_weight to job_base + str*300, causing subsequent pc_additem to fail
@@ -5310,8 +5371,33 @@ void population_engine_shell_dump(int fd)
 			continue;
 		const uint32_t idx = sd->status.char_id >= POPULATION_ENGINE_CHAR_ID_BASE
 			? sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE : 0;
+		// Decode the vehicle/pet bits so a reader can confirm a mount/falcon/warg/mado
+		// without judging it from the sprite. Empty string when none are set.
+		char veh[64];
+		veh[0] = '\0';
+		{
+			const int32 opt = sd->sc.option;
+			struct { int32 bit; const char *name; } kVeh[] = {
+				{ OPTION_RIDING,   "RIDING"   },
+				{ OPTION_DRAGON,   "DRAGON"   },
+				{ OPTION_WUG,      "WUG"      },
+				{ OPTION_WUGRIDER, "WUGRIDER" },
+				{ OPTION_FALCON,   "FALCON"   },
+				{ OPTION_MADOGEAR, "MADOGEAR" },
+			};
+			size_t used = 0;
+			for (const auto &v : kVeh) {
+				if ((opt & v.bit) == 0)
+					continue;
+				const int n = snprintf(veh + used, sizeof(veh) - used, "%s%s",
+					used > 0 ? "|" : "", v.name);
+				if (n <= 0 || static_cast<size_t>(n) >= sizeof(veh) - used)
+					break;
+				used += static_cast<size_t>(n);
+			}
+		}
 		snprintf(line, sizeof(line),
-			"@SHELL|%u|%s|%u|%u|%d|%zu|%zu|%d|%d|%d|%d|%d",
+			"@SHELL|%u|%s|%u|%u|%d|%zu|%zu|%d|%d|%d|%d|%d|0x%08x|%s",
 			idx, sd->status.name, (unsigned)sd->status.class_,
 			(unsigned)sd->pop.companion_owner_account,
 			sd->pop.skill_override_active ? 1 : 0,
@@ -5320,7 +5406,8 @@ void population_engine_shell_dump(int fd)
 			(sd->prev != nullptr) ? 1 : 0,
 			(map_id2bl(sd->id) == sd) ? 1 : 0,
 			(int)sd->status.party_id,
-			pop_is_companion(sd) ? 1 : 0);
+			pop_is_companion(sd) ? 1 : 0,
+			(unsigned)sd->sc.option, veh);
 		clif_displaymessage(fd, line);
 		++n;
 	}
