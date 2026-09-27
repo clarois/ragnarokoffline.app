@@ -42,6 +42,13 @@
 
 using namespace rathena;
 
+/// RAGNAROKMAC (skill selector): the sphere-chain machine and the seeders both need this,
+/// and the seeders' definition sits at file scope further down. Declared at FILE scope,
+/// BEFORE the anonymous namespace below opens - a declaration inside that namespace would
+/// name a different internal-linkage entity and every existing call site would fail to
+/// resolve (g++ reports it as "call of overloaded ... is ambiguous", not as a scope error).
+static bool population_shell_skill_selected(const map_session_data *sd, uint16_t skill_id);
+
 namespace {
 
 static void population_engine_apply_shell_hat_effect(map_session_data *sd, bool enable)
@@ -186,7 +193,15 @@ static bool population_shell_pick_sphere_chain_skill(map_session_data *sd, uint1
 	const int  sphere_cap   = callspirits_lv ? static_cast<int>(callspirits_lv) : 5;
 	const int  spheres_needed = 5; // Both Fury and Asura consume 5 spheres
 
+	// RAGNAROKMAC (skill selector): the chain must respect the player's selection too.
+	// It picks from pc_checkskill() - what the CLASS knows - and spawn grants every Monk its
+	// whole tree, so without this gate the machine overrode the rotation no matter what the
+	// player unticked (a Monk set to "none" kept building spheres and firing Asura).
+	// population_shell_skill_selected() returns true when no selection is active, so an
+	// unconfigured companion behaves exactly as before.
 	auto pick = [&](uint16 id, uint16 lv) {
+		if (!population_shell_skill_selected(sd, id))
+			return false;
 		if (!skill_isNotOk(id, *sd) && sd->status.sp >= static_cast<uint32>(skill_get_sp(id, lv))) {
 			out_id = id; out_lv = lv; return true;
 		}
