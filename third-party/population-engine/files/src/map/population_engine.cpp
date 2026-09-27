@@ -464,6 +464,17 @@ static int32 g_autosummon_timer = INVALID_TIMER;
 /// 5M-slot ID pool; index in [1, POPULATION_ENGINE_INDEX_MAX) keeps account_id below POPULATION_ENGINE_ACCOUNT_ID_END.
 static constexpr uint32_t POPULATION_ENGINE_INDEX_MAX = POPULATION_ENGINE_ACCOUNT_ID_END - POPULATION_ENGINE_ACCOUNT_ID_BASE;
 static std::atomic<uint32_t> g_next_population_engine_index(1);
+/// RAGNAROKMAC: indices owned by a PERSISTED companion, loaded from
+/// `cp_companion_persistence`. The ambient allocator must never issue one of these: the
+/// counter above resets to 1 on every engine start while a recruited companion keeps its
+/// permanent index, so without this reservation an ambient shell can be handed an index a
+/// companion already owns. Both then share `char_id == CHAR_ID_BASE + index`, and because
+/// the skill selector resolves "the live shell" BY INDEX, the player's selection lands on
+/// the ambient shell while the UI (name-based) shows the companion - so clearly-disabled
+/// skills keep being cast. Loaded lazily on first use because the table is provisioned by
+/// the supervisor at boot, which can run after the engine starts.
+static std::unordered_set<uint32_t> g_reserved_companion_indices;
+static bool g_reserved_companion_indices_loaded = false;
 
 // Forward declarations.
 static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, int y, uint32_t index,
@@ -906,15 +917,72 @@ void population_engine_stats_record_walk_failure()
 /// Exhaustion path (rare): scans g_population_engine_pcs for used indices and returns
 /// the first free slot, avoiding collision with any shell still alive.
 /// Returns 0 on total pool exhaustion (impossible under normal conditions).
+/// RAGNAROKMAC: load the persisted-companion index set once, on first use.
+/// Called from the allocator, so it runs whatever brings a shell into the world and cannot
+/// race the supervisor's table creation (an eager load at engine start could).
+static void population_engine_load_reserved_indices()
+{
+	if (g_reserved_companion_indices_loaded)
+		return;
+	g_reserved_companion_indices_loaded = true; // set even on failure: one attempt per start
+	if (mmysql_handle == nullptr)
+		return;
+	if (Sql_Query(mmysql_handle, "SELECT shell_index FROM `cp_companion_persistence`") != SQL_SUCCESS) {
+		// A missing table is legitimate on an install that never recruited anyone, so this is
+		// a warning rather than an error - but it must be VISIBLE, because silently getting an
+		// empty set is exactly how the index collision would come back unnoticed.
+		ShowWarning("Population engine: could not read reserved companion indices; ambient shells "
+			"may collide with persisted companions this session.\n");
+		Sql_ShowDebug(mmysql_handle);
+		return;
+	}
+	char* data = nullptr;
+	while (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+		Sql_GetData(mmysql_handle, 0, &data, nullptr);
+		const uint32_t idx = data != nullptr ? static_cast<uint32_t>(atoi(data)) : 0u;
+		if (idx != 0)
+			g_reserved_companion_indices.insert(idx);
+	}
+	Sql_FreeResult(mmysql_handle);
+	if (!g_reserved_companion_indices.empty())
+		ShowInfo("Population engine: reserved %zu persisted companion index(es) from ambient reuse.\n",
+			g_reserved_companion_indices.size());
+}
+
+/// Is `index` already owned by a persisted companion?
+/// Also reports a collision, which is the diagnostic this project lacked: it fires when a
+/// shell is about to be issued an index the persistence table already claims.
+static bool population_engine_index_is_reserved(uint32_t index, const char* source)
+{
+	if (index == 0)
+		return false;
+	if (g_reserved_companion_indices.find(index) == g_reserved_companion_indices.end())
+		return false;
+	ShowWarning("Population engine: index %u is owned by a persisted companion; refusing it for "
+		"%s (ambient spawn). This is the collision that makes a companion's skill selection "
+		"attach to the wrong shell.\n", index, source != nullptr ? source : "spawn");
+	return true;
+}
+
 static uint32_t population_engine_allocate_index()
 {
-	uint32_t index = g_next_population_engine_index.fetch_add(1, std::memory_order_relaxed);
-	if (index < POPULATION_ENGINE_INDEX_MAX)
-		return index;
+	population_engine_load_reserved_indices();
 
-	// Pool counter wrapped. Build a set of in-use indices and find the first free one.
-	ShowWarning("Population engine: ID counter exhausted; scanning for a free index (live shells: %zu).\n",
-		g_population_engine_pcs.size());
+	// Fast path: walk forward from the counter until an unreserved index is found. The loop is
+	// bounded because the reserved set is tiny (one entry per recruited companion) while the
+	// pool is 5M slots, so it exits almost immediately in practice.
+	for (int guard = 0; guard < 100000; ++guard) {
+		uint32_t index = g_next_population_engine_index.fetch_add(1, std::memory_order_relaxed);
+		if (index >= POPULATION_ENGINE_INDEX_MAX)
+			break; // fall through to the wrap scan below
+		if (!population_engine_index_is_reserved(index, "ambient spawn"))
+			return index;
+	}
+
+	// Pool counter wrapped (or the bounded walk above gave up). Build a set of in-use indices
+	// and find the first free one that is not reserved for a persisted companion.
+	ShowWarning("Population engine: ID counter exhausted; scanning for a free index (live shells: %zu, reserved: %zu).\n",
+		g_population_engine_pcs.size(), g_reserved_companion_indices.size());
 	std::unordered_set<uint32_t> used;
 	used.reserve(g_population_engine_pcs.size());
 	for (const map_session_data* sd : g_population_engine_pcs) {
@@ -924,10 +992,12 @@ static uint32_t population_engine_allocate_index()
 			used.insert(aid - POPULATION_ENGINE_ACCOUNT_ID_BASE);
 	}
 	for (uint32_t i = 1; i < POPULATION_ENGINE_INDEX_MAX; ++i) {
-		if (used.find(i) == used.end()) {
-			g_next_population_engine_index.store(i + 1, std::memory_order_relaxed);
-			return i;
-		}
+		if (used.find(i) != used.end())
+			continue;
+		if (population_engine_index_is_reserved(i, "ambient spawn (wrap scan)"))
+			continue;
+		g_next_population_engine_index.store(i + 1, std::memory_order_relaxed);
+		return i;
 	}
 	ShowError("Population engine: ID pool fully exhausted (%u slots all occupied); spawn skipped.\n",
 		static_cast<unsigned>(POPULATION_ENGINE_INDEX_MAX));
@@ -2381,11 +2451,36 @@ int population_engine_companion_set_skill_override(uint32_t owner_account, const
 
 	// The class to validate against: the live shell's when it is summoned (so a
 	// companion that just advanced is judged on its NEW class), else the row's.
+	//
+	// RAGNAROKMAC: match on IDENTITY, not index alone. A bare char_id test also matches any
+	// shell that happens to wear the same index, and attaching the selection to a coincidental
+	// shell is how a companion with every skill disabled kept casting: the player's choice went
+	// to the ambient shell while the party slot showed a shell with no override at all.
 	map_session_data* live = nullptr;
 	for (map_session_data* cand : g_population_engine_pcs) {
-		if (cand != nullptr && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
-			live = cand;
-			break;
+		if (cand == nullptr || !cand->state.active)
+			continue;
+		if (cand->status.char_id != POPULATION_ENGINE_CHAR_ID_BASE + index_)
+			continue;
+		if (cand->pop.companion_owner_account != owner_account)
+			continue; // another owner's shell, or an ambient one: not ours
+		if (!pop_is_companion(cand))
+			continue;
+		live = cand;
+		break;
+	}
+	if (live == nullptr) {
+		// Distinguish "not summoned" from "summoned but wearing a colliding index" - the
+		// second is a bug and must not be invisible.
+		for (map_session_data* cand : g_population_engine_pcs) {
+			if (cand != nullptr && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_)
+				// Phrased without embedded quotes: a bare char_id match can land on any shell
+				// wearing that index, and this is the log that names the collision.
+				ShowWarning("population_engine: companion index %u is worn by a shell that is not "
+					"the companion of owner %u (name=%s, override=%d). The selection was saved "
+					"but not applied - this is the index collision.\n",
+					index_, owner_account, cand->status.name,
+					cand->pop.skill_override_active ? 1 : 0);
 		}
 	}
 	uint16_t class_ = 0;
@@ -2534,12 +2629,19 @@ int population_engine_companion_toggle_skill(uint32_t owner_account, const char*
 
 	// Live class when summoned (a companion that just advanced must offer its NEW
 	// class's skills), else the persisted job_id.
+	// RAGNAROKMAC: identity, not index alone - see the note in set_skill_override.
 	map_session_data* live = nullptr;
 	for (map_session_data* cand : g_population_engine_pcs) {
-		if (cand != nullptr && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
-			live = cand;
-			break;
-		}
+		if (cand == nullptr || !cand->state.active)
+			continue;
+		if (cand->status.char_id != POPULATION_ENGINE_CHAR_ID_BASE + index_)
+			continue;
+		if (cand->pop.companion_owner_account != owner_account)
+			continue;
+		if (!pop_is_companion(cand))
+			continue;
+		live = cand;
+		break;
 	}
 	uint16_t class_ = 0;
 	char stored[512];
@@ -2674,12 +2776,19 @@ void population_engine_companion_skill_list(uint32_t owner_account, const char* 
 
 	// Live class wins: a companion that advanced job must offer its NEW class's
 	// skills, which is the same reason the roster's live_job field exists.
+	// RAGNAROKMAC: identity, not index alone - see the note in set_skill_override.
 	map_session_data* live = nullptr;
 	for (map_session_data* cand : g_population_engine_pcs) {
-		if (cand != nullptr && cand->status.char_id == POPULATION_ENGINE_CHAR_ID_BASE + index_) {
-			live = cand;
-			break;
-		}
+		if (cand == nullptr || !cand->state.active)
+			continue;
+		if (cand->status.char_id != POPULATION_ENGINE_CHAR_ID_BASE + index_)
+			continue;
+		if (cand->pop.companion_owner_account != owner_account)
+			continue;
+		if (!pop_is_companion(cand))
+			continue;
+		live = cand;
+		break;
 	}
 	uint16_t class_ = 0;
 	bool override_active = false;
