@@ -5445,6 +5445,13 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	if (skill_preset != nullptr) {
 		shell->pop.skill_override_active = true;
 		population_engine_companion_parse_skill_override(skill_preset, shell->pop.skill_override);
+		// RAGNAROKMAC: ASK FOR THE REBUILD. The shell's lists were seeded earlier in this
+		// call while override_active was still false, so they hold the full class list; the
+		// per-tick seeder only rebuilds when a list is empty or this flag is set, and it is
+		// neither - so without this line a restored selection is stored and displayed but
+		// never applied, on every login. That is exactly the state the @companion dump
+		// showed: override=1 with attack_n=13 / buff_n=9 against an empty selection.
+		shell->pop.skills_need_reseed = true;
 	}
 	shell->status.job_level  = cap_value(job_level, 1, MAX_LEVEL);
 	shell->status.str = str; shell->status.agi = agi;
