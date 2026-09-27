@@ -1811,6 +1811,20 @@ static void population_shell_seed_attack_skills_if_empty(map_session_data *sd)
 	// The flag is cleared in the buff section below, once BOTH lists are rebuilt.
 	const bool rebuild_skills = sd->pop.attack_skills.empty() || sd->pop.skills_need_reseed;
 
+	// RAGNAROKMAC: name the trigger whenever a rebuild fires. Runs only on an actual
+	// rebuild (idle cost zero) and distinguishes "the list was empty" from "a change asked
+	// for a reseed" - the probe for whether an active selection is being refilled.
+	if (rebuild_skills) {
+		ShowInfo("population_engine: skill rebuild [attack] companion=%s idx=%u trigger=%s "
+			"override=%d attack_n=%zu buff_n=%zu\n",
+			sd->status.name,
+			(unsigned)(sd->status.char_id >= POPULATION_ENGINE_CHAR_ID_BASE
+				? sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE : 0),
+			sd->pop.skills_need_reseed ? "reseed-flag" : "attack-list-empty",
+			sd->pop.skill_override_active ? 1 : 0,
+			sd->pop.attack_skills.size(), sd->pop.buff_skills.size());
+	}
+
 	if (rebuild_skills) {
 		std::vector<PopulationShellCombatSkill> cand;
 		std::unordered_set<uint16_t> seen;
@@ -1888,7 +1902,22 @@ static void population_shell_seed_attack_skills_if_empty(map_session_data *sd)
 	// Run independently of attack skill seeding so clearing buff skills re-seeds on next tick.
 	// Same rebuild condition as the attack rotation: a buff list seeded for the old
 	// class (Acolyte's Heal/Inc-Agi) must not survive a job change.
-	if (sd->pop.buff_skills.empty() || sd->pop.skills_need_reseed) {
+	//
+	// RAGNAROKMAC (skill selector): emptiness means "not yet seeded" ONLY while the player has
+	// made no choice. With an override active, an empty list is a legitimate end state - the
+	// player selected nothing - and treating it as "needs seeding" refills it from the curated
+	// rows, so a companion set to "none" regenerates its skills and keeps casting. The attack
+	// list already had this distinction via skill_override_active; this list did not, which is
+	// why the self-buffs (Ruwach, Status Recovery) survived a "none" selection.
+	const bool buffs_chosen_none = sd->pop.skill_override_active;
+	if ((!buffs_chosen_none && sd->pop.buff_skills.empty()) || sd->pop.skills_need_reseed) {
+		ShowInfo("population_engine: skill rebuild [buff] companion=%s trigger=%s override=%d "
+			"attack_n=%zu buff_n=%zu\n",
+			sd->status.name,
+			sd->pop.skills_need_reseed ? "reseed-flag"
+				: (buffs_chosen_none ? "SKIPPED-should-not-fire" : "buff-list-empty"),
+			sd->pop.skill_override_active ? 1 : 0,
+			sd->pop.attack_skills.size(), sd->pop.buff_skills.size());
 		if (sd->pop.skills_need_reseed)
 			sd->pop.buff_skills.clear();
 		const std::vector<s_pop_skill_entry> *db_skills = population_skill_db().find(sd->status.class_);
