@@ -71,6 +71,14 @@ bool population_engine_companion_set_favorite(uint32_t owner_account, const char
 /// Goal 3 friend list: find a saved companion by name; reports its index and active flag.
 bool population_engine_companion_find(uint32_t owner_account, const char* name_,
 	uint32_t* out_index, bool* out_active);
+/// Phase 3c: can this JOB's granted skill tree give a companion the homunculus its class entitles
+/// it to? The attach gate asks the live shell (`pc_checkskill`); the panel must answer the same
+/// question for a BENCHED companion, so it asks the tree (`Inherit` is flattened at load).
+bool population_engine_class_can_have_homunculus(uint16_t class_);
+/// Phase 3c: the panel's per-companion pet switch. 1 = on, 0 = off, -1 = flip.
+/// @return 1 when the state changed, 0 when it already was so, -1 when rejected (message in out_msg).
+int population_engine_companion_set_homunculus(uint32_t owner_account, const char* name_, int want,
+	char* out_msg, size_t out_msg_len);
 /// Goal 2: re-snapshot a summoned companion's current equipment + stats into its
 /// persistence row (debounced by the caller). Called on shell equipment changes.
 void population_engine_persist_companion_gear(map_session_data *sd);

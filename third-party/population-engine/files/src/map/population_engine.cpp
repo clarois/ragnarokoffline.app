@@ -487,6 +487,25 @@ static bool g_reserved_companion_indices_loaded = false;
 /// before its definition, which sits with spawn_shell further down.
 static void population_engine_sync_shell_vehicle(map_session_data *sd);
 static void population_engine_sync_shell_homunculus(map_session_data *sd);
+/// RAGNAROKMAC (homunculus, phase 3c): can this JOB have a pet at all?
+///
+/// The attach gate asks the live shell (`pc_checkskill(sd, AM_CALLHOMUN)`), which cannot answer
+/// for a benched companion - the panel has to decide whether to draw a control at all. So ask the
+/// source both of them share: this job's granted skill tree. `SkillTreeDatabase::loadingFinished`
+/// flattens `Inherit` into `tree->skills`, so Alchemist -> Creator -> Biolo all answer true here
+/// while every other job answers false, with no job whitelist to maintain.
+bool population_engine_class_can_have_homunculus(uint16_t class_)
+{
+	std::shared_ptr<s_skill_tree> tree = skill_tree_db.find(class_);
+	if (tree == nullptr)
+		return false;
+	for (const auto &entry : tree->skills) {
+		if (entry.first == AM_CALLHOMUN && entry.second && entry.second->max_lv > 0)
+			return true;
+	}
+	return false;
+}
+
 /// RAGNAROKMAC (homunculus, phase 3): this companion's stored pet state.
 ///
 /// The pet's own level and exp have to live here rather than in the char server: `hom_id` stays 0
@@ -5191,6 +5210,118 @@ bool population_engine_companion_find(uint32_t owner_account, const char* name_,
 	return true;
 }
 
+/// RAGNAROKMAC (homunculus, phase 3c): the panel's per-companion pet switch.
+///
+/// A player never SUMMONS this pet - the engine attaches it at spawn - so this is a switch, not a
+/// summon. OFF puts a live pet away with stock's own `hom_vaporize` (the same call `pc.cpp` makes
+/// on logout): it stays attached but inactive, so the driver stops and the client stops drawing it.
+/// ON brings it back by clearing that flag in place, or attaches a fresh one from the row when the
+/// companion has no pet at all (benched, or killed - `hom_is_active` is false for a dead pet and
+/// the attach restores class, level and exp).
+///
+/// `hom_call()` is deliberately NOT used for the ON direction: its first line is
+/// `if (!sd->status.hom_id) return hom_create_request(...)`, and a shell's `hom_id` is 0 by design,
+/// so it would take the CHAR-SERVER path this whole feature exists to avoid.
+///
+/// @param want  1 = on, 0 = off, -1 = flip
+/// @return 1 when the state changed, 0 when it was already so, -1 when rejected (message in out_msg).
+int population_engine_companion_set_homunculus(uint32_t owner_account, const char *name_, int want,
+	char *out_msg, size_t out_msg_len)
+{
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0])
+		return -1;
+	uint32_t index_ = 0;
+	bool active = false;
+	if (!population_engine_companion_find(owner_account, name_, &index_, &active)) {
+		if (out_msg != nullptr)
+			safesnprintf(out_msg, out_msg_len, "No saved companion named %s.", name_);
+		return -1;
+	}
+
+	// NULL (never chosen) reads as ON: for this class the pet is on unless the player said no.
+	int enabled = -1;
+	{
+		char q[320];
+		snprintf(q, sizeof(q),
+			"SELECT hom_enabled FROM `cp_companion_persistence`"
+			" WHERE owner_account_id=%u AND shell_index=%u", owner_account, index_);
+		if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+			Sql_ShowDebug(mmysql_handle);
+			if (out_msg != nullptr)
+				safesnprintf(out_msg, out_msg_len, "Could not read the pet switch (see map-server console).");
+			return -1;
+		}
+		if (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+			char *data = nullptr;
+			Sql_GetData(mmysql_handle, 0, &data, nullptr);
+			if (data != nullptr && data[0] != '\0')
+				enabled = atoi(data);
+		}
+		Sql_FreeResult(mmysql_handle);
+	}
+	if (want < 0)
+		want = (enabled == 0) ? 1 : 0;
+	want = want ? 1 : 0;
+	if (want == enabled || (want == 1 && enabled != 0)) {
+		if (out_msg != nullptr)
+			safesnprintf(out_msg, out_msg_len, "%s: its homunculus is already %s.",
+				name_, want ? "summoned" : "put away");
+		return 0;
+	}
+
+	// The row is the durable half; apply to the shell only once it is written.
+	{
+		char q[320];
+		snprintf(q, sizeof(q),
+			"UPDATE `cp_companion_persistence` SET hom_enabled=%d"
+			" WHERE owner_account_id=%u AND shell_index=%u", want, owner_account, index_);
+		if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+			Sql_ShowDebug(mmysql_handle);
+			if (out_msg != nullptr)
+				safesnprintf(out_msg, out_msg_len, "Could not save the pet switch (see map-server console).");
+			return -1;
+		}
+	}
+
+	// A benched companion has no shell: the stored switch is honoured by the attach at its next
+	// summon, which already refuses when the column is 0.
+	map_session_data *live = nullptr;
+	for (map_session_data *cand : g_population_engine_pcs) {
+		if (cand == nullptr || !pop_is_companion(cand))
+			continue;
+		if (cand->pop.companion_owner_account != owner_account)
+			continue;
+		if (cand->status.char_id != POPULATION_ENGINE_CHAR_ID_BASE + index_)
+			continue;
+		live = cand;
+		break;
+	}
+
+	if (live != nullptr) {
+		if (want == 0) {
+			if (live->hd != nullptr && live->hd->homunculus.vaporize == HOM_ST_ACTIVE)
+				hom_vaporize(live, HOM_ST_ACTIVE);
+		} else if (live->hd != nullptr) {
+			if (live->hd->homunculus.vaporize != HOM_ST_ACTIVE) {
+				hom_init_timers(live->hd);
+				live->hd->homunculus.vaporize = HOM_ST_ACTIVE;
+				clif_hominfo(live, live->hd, 1);
+			}
+		} else {
+			population_engine_sync_shell_homunculus(live);
+		}
+	}
+
+	if (out_msg != nullptr)
+		safesnprintf(out_msg, out_msg_len, "%s: its homunculus is now %s%s.",
+			name_, want ? "summoned" : "put away",
+			live == nullptr ? " (applies when summoned)" : "");
+	ShowInfo("population_engine: homunculus switch for companion %u set to %d (live=%s)\n",
+		index_, want, live == nullptr ? "no" : "yes");
+	return 1;
+}
+
+
 /// Goal 3 friend list: permanently DELETE a saved companion's row by name.
 /// Irreversible — the snapshot (name, gear, stats) is gone. If the companion
 /// is currently summoned, the caller must release the shell first.
@@ -5482,7 +5613,7 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 	if (mmysql_handle == nullptr) return;
 	char q[400];
 	snprintf(q, sizeof(q),
-		"SELECT name, job_id, active, favorite, base_level FROM `cp_companion_persistence`"
+		"SELECT name, job_id, active, favorite, base_level, hom_enabled FROM `cp_companion_persistence`"
 		" WHERE owner_account_id=%u ORDER BY favorite DESC, name ASC",
 		owner_account);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
@@ -5500,8 +5631,8 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		Sql_GetData(mmysql_handle, 2, &data, nullptr); int active = atoi(data) != 0 ? 1 : 0;
 		Sql_GetData(mmysql_handle, 3, &data, nullptr); int fav = atoi(data) != 0 ? 1 : 0;
 		Sql_GetData(mmysql_handle, 4, &data, nullptr); int base_lv = atoi(data);
-
-		// A null byte or a newline inside a name would break the one-line format,
+		Sql_GetData(mmysql_handle, 5, &data, nullptr);
+		int hom_enabled = (data != nullptr && data[0] != '\0') ? atoi(data) : -1;
 		// and a name is player-chosen, so scrub before sending.
 		for (char *c = namebuf; *c != '\0'; ++c) {
 			if (*c == '|' || *c == '\n' || *c == '\r')
@@ -5513,6 +5644,10 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		// been levelling in the party.
 		int live_lv = 0;
 		const char *live_job = nullptr;
+		// The live CLASS, not just its name: the pet switch's applicability is a
+		// property of the class, and a shell that just advanced must be judged on the
+		// class it is running rather than the persisted job_id.
+		uint16_t live_class = 0;
 		for (map_session_data *sd : g_population_engine_pcs) {
 			if (sd == nullptr || !pop_is_companion(sd))
 				continue;
@@ -5526,13 +5661,22 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 			// OLD class in the panel. With job advancement shipped, that is the
 			// normal case rather than an edge one.
 			live_job = job_name(sd->status.class_);
+			live_class = sd->status.class_;
 			break;
 		}
 
+		// The pet switch, as a tri-state so the panel knows whether to draw a control at
+		// all: -1 = this job cannot have one, 0 = the player turned it off, 1 = on.
+		// NULL (never chosen) reads as on, matching the attach's own rule.
+		int hom = -1;
+		const uint16_t tree_class = live_class != 0 ? live_class : static_cast<uint16_t>(job_id);
+		if (population_engine_class_can_have_homunculus(tree_class))
+			hom = (hom_enabled == 0) ? 0 : 1;
+
 		char msg[NAME_LENGTH + 160];
-		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d|%s",
+		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d|%s|%d",
 			namebuf, job_name(job_id), base_lv, active, fav, live_lv,
-			live_job != nullptr ? live_job : "");
+			live_job != nullptr ? live_job : "", hom);
 		clif_displaymessage(fd, msg);
 		count++;
 	}

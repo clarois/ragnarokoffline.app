@@ -228,7 +228,7 @@ function parseRosterLine(text) {
 				m.name !== _roster[i].name || m.job !== _roster[i].job ||
 				m.liveJob !== _roster[i].liveJob ||
 				m.level !== _roster[i].level || m.active !== _roster[i].active ||
-				m.liveLevel !== _roster[i].liveLevel);
+				m.liveLevel !== _roster[i].liveLevel || m.hom !== _roster[i].hom);
 		_roster = fresh;
 		_pending = [];
 		const age = _rosterRequestedAt ? Math.round((Date.now() - _rosterRequestedAt) / 1000) : 0;
@@ -262,7 +262,14 @@ function parseRosterLine(text) {
 		// The class the shell is actually running. The persisted `job` above lags a
 		// job change until the next snapshot, so this wins when present; absent on
 		// an older server, which is why it is read positionally with a fallback.
-		liveJob: (parts[7] || '').trim()
+		liveJob: (parts[7] || '').trim(),
+		// The pet switch (phase 3c): -1 = this class cannot have a homunculus, 0 = the
+		// player put it away, 1 = on. Read positionally with a -1 fallback so an older
+		// server that does not send the field draws no control instead of a wrong one.
+		hom: (() => {
+			const raw = parts.length > 8 ? parseInt(parts[8], 10) : NaN;
+			return Number.isFinite(raw) ? raw : -1;
+		})()
 	});
 	return true;
 }
@@ -415,7 +422,30 @@ function _drawParty() {
 			openSkillPicker(m.name);
 		}, `Choose which skills ${m.name} may use`);
 
-		page.append(_row(id, lv, badge, duty, skills, summon, fav, trash));
+		// PETHOM (phase 3c): the homunculus switch, drawn only for a companion whose class
+		// can have one at all (the server sends -1 for the rest, so a Swordsman shows no
+		// control rather than a dead one). The engine attaches the pet by itself at spawn,
+		// so this is a switch and not a summon: the label carries the state, and the click
+		// sends the same at-command a player would type, then lets the server's pushed
+		// roster confirm it - the panel never invents the new state.
+		const pet = m.hom < 0 ? null : _button(
+			m.hom ? 'Pet on' : 'Pet off',
+			'b',
+			() => {
+				talk(`@companion homunculus ${m.name} ${m.hom ? 'off' : 'on'}`, false);
+				window.setTimeout(refreshRoster, 600);
+			},
+			m.hom ? `Put ${m.name}'s homunculus away` : `Bring ${m.name}'s homunculus back`
+		);
+
+		// The row's call shape is pinned by tests/companion-panel-row and -skill-picker, and this
+		// control is conditional, so build the row as usual and slot the button in beside Duty
+		// and Skills rather than rebuilding the child list on every added control.
+		const row = _row(id, lv, badge, duty, skills, summon, fav, trash);
+		if (pet) {
+			row.insertBefore(pet, summon);
+		}
+		page.append(row);
 	});
 
 	page.append(_button('Refresh', 'b wide', refreshRoster));

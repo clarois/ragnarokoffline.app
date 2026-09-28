@@ -238,8 +238,9 @@ idempotent application, and a clean Population Engine data validation.
   sex, looks, gear, duty/mode, the per-companion skill selection and growth are held in
   `cp_companion_persistence` and survive a full server and app shutdown. `docs/DATABASE.md`
   has the table and the boot migration that maintains it.
-- A companion's homunculus (alchemist line) is in-memory only so far - its class, level and
-  exp are not persisted yet. Design and phases: [HOMUNCULUS.md](HOMUNCULUS.md).
+- A companion's homunculus (alchemist line) is **implemented and persisted**: a visible pet that
+  fights on its own, levels from its own kills, survives bench and recall, and is switched per
+  companion from the companion row. Design, phases and traps: [HOMUNCULUS.md](HOMUNCULUS.md).
 - A shell's class, level, equipment, skills, looks, and dialogue come from the
   current Population Engine generation and YAML data.
 - There is no refusal roll based on level difference yet. Eligible shells
@@ -493,6 +494,30 @@ Investigation:
 - Note that the homunculus has no server-side AI of its own (no `hom_ai` in `src/map/`): a real
   one is driven by client-side Lua, which a shell cannot have. A driver is therefore part of the
   feature, not a follow-up.
+
+Implementation status (all four phases are on `main`):
+
+- **Attach.** `hom_alloc()` in-map, `sd->status.hom_id` left 0, gated on
+  `pc_checkskill(sd, AM_CALLHOMUN)`; the class is derived deterministically from the companion index
+  (`HM_CLASS_BASE + index % 8`) rather than stock's random pick, because the attach re-runs on every
+  recall.
+- **Driver.** A server-side substitute for the client-side Lua AI, built from the calls rAthena's own
+  homunculus AI script commands use (`unit_attack(hd, id, 1)` / `unit_stop_attack`), run inside the
+  existing per-tick combat pass. The pet picks its own target within its master's 12-cell command
+  radius and walks home past it.
+- **Growth.** Stock: `mob.cpp` already pays `hom_gainexp` to every exp receiver that owns a
+  homunculus, so no award code was written — a second path would double-pay.
+- **Persistence (v8).** `hom_class` / `hom_level` / `hom_exp` / `hom_enabled` in
+  `cp_companion_persistence`, restored at attach. `NULL` means "never chosen", which is ON for this
+  class, so an upgrade cannot re-enable a pet the player switched off.
+- **Panel control (3c).** A `Pet on` / `Pet off` button on the companion row, fed by a tri-state on
+  the roster line and backed by `@companion homunculus <name> [on|off]` (patch 0010). OFF uses
+  stock's `hom_vaporize`; ON clears the flag in place rather than calling `hom_call()`, whose
+  `hom_id == 0` branch would round-trip to the char server.
+
+Verified by `tests/companion-homunculus{,-ai,-growth,-persistence,-toggle}.test.cjs`, each calibrated
+to fail on its parent commit. **Not verified by any test: that the pet is drawn and moves** — that is
+the client's word, so the acceptance criteria below stay open until it is seen in game.
 
 Acceptance criteria:
 

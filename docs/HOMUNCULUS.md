@@ -70,7 +70,8 @@ Creator keeps it, and our data already records `JOB_ALCHEMIST = 18`, `JOB_CREATO
 `ADD COLUMN IF NOT EXISTS` helper is at `:1587`) with the homunculus state, following the
 `skill_preset` (v7) model:
 
-- `hom_enabled` — the toggle: `NULL` = default (off for now), `1` = on, `0` = explicitly off
+- `hom_enabled` — the toggle: `NULL` = never chosen, which is ON for this class; `1` = on;
+  `0` = the player switched it off
 - `hom_class`, `hom_level`, `hom_exp`
 
 **Stock table.** `docs/DATABASE.md` documents the stock homunculus failure modes (a
@@ -130,8 +131,25 @@ the row and resumes the stored class and level; restoring the level also restore
 permanently stalled. A stored class the data set no longer has falls back to the derived one rather
 than costing the companion its pet. The recurring gear snapshot writes the pet's live state only
 while the pet exists, so a switched-off companion cannot have its stored level overwritten with 0.
-Outstanding: the panel control (the column can be set by hand today, and is honoured at the next
-summon).
+**The panel control — implemented (phase 3c).** The companion row carries a `Pet on` / `Pet off`
+button, drawn only for a companion whose CLASS can have a pet. The roster line carries the switch as
+a tri-state (`-1` = this job cannot have one, `0` = off, `1` = on), and applicability is answered
+from the granted skill tree (`skill_tree_db.find(class_)`, whose `Inherit` is flattened at load)
+because the attach's own gate needs a live shell and a benched companion has none.
+`@companion homunculus <name> [on|off]` (`pet` is an alias; a bare name flips) ships in
+`patches/0010-companion-homunculus-toggle.patch`, so it works for a benched companion too — the
+stored column is honoured at its next summon.
+
+Both directions are deliberate, and the obvious call is the wrong one for ON:
+
+| Direction | What it does | Why not the obvious one |
+| --- | --- | --- |
+| OFF | `hom_vaporize(sd, HOM_ST_ACTIVE)` | Stock's own "put it away" (what `pc.cpp` calls on logout): the pet stays attached but inactive, so `hom_is_active` goes false and the driver stops on its own |
+| ON | clears `homunculus.vaporize` in place, then `hom_call`'s own follow-ups (`hom_init_timers`, `clif_hominfo`) | **`hom_call()` must not be used.** Its first line is `if (!sd->status.hom_id) return hom_create_request(...)`, and a shell's `hom_id` is 0 by design, so it would take the char-server path this whole feature exists to avoid |
+| ON, no pet at all | `population_engine_sync_shell_homunculus(sd)` | Attaches from the row, so a killed or never-attached pet returns with its class, level and exp |
+
+Only the setter writes `hom_enabled`: the recurring gear snapshot must not touch it, or the next tick
+would re-enable a pet the player switched off.
 
 **Growth — already stock, and verified safe (no award code was written).** `mob.cpp` pays
 `hom_gainexp(tmpsd[i]->hd, base_exp * battle_config.homunculus_exp_gain / 100)` to every exp
