@@ -164,8 +164,46 @@ test('no guard makes a repeat announcement a no-op', () => {
 	const body = src.slice(i, i + 2600);
 	assert.ok(!/&&\s*!\(sd->sc\.option & OPTION_(WUG|MADOGEAR)\)/.test(body),
 		'no option-presence guard may sit on the setter: it would suppress the re-announce');
-	assert.match(body, /if \(pc_checkskill\(sd, RA_WUGMASTERY\) > 0\)\n\t\tpc_setoption\(sd, sd->sc\.option \| OPTION_WUG\);/,
-		'the warg setter must run unconditionally when the skill is present');
+	assert.match(body, /pc_setoption\(sd, sd->sc\.option \| OPTION_WUG\);/,
+		'the warg setter must be present so a repeat call still re-announces');
+	assert.ok(!/if \(sd->sc\.option & OPTION_WUG\)/.test(body),
+		'the warg setter must not be gated on OPTION_WUG already being set');
 	assert.match(body, /if \(pc_checkskill\(sd, NC_MADOLICENCE\) > 0\)\n\t\tpc_setoption\(sd, sd->sc\.option \| OPTION_MADOGEAR, MADO_ROBOT\);/,
 		'the mado setter likewise');
+});
+
+test('the falcon and warg are mutually exclusive: the warg wins', () => {
+	// A Ranger/Windhawk's granted tree carries RA_WUGMASTERY *and* HT_FALCON (inherited from the
+	// Hunter line), so granting each option in its own `if` left the shell with FALCON|WUG
+	// (0x00100010) - what @companion dump reported for jobs 4056/4257, while the Sniper
+	// (HT_FALCON only) showed FALCON alone. The client builds a falcon entity and a wug entity
+	// independently, so it drew BOTH sprites at once. Verified live, pinned here.
+	const i = src.indexOf('static void population_engine_sync_shell_vehicle(map_session_data *sd)\n{');
+	assert.ok(i > 0, 'the vehicle helper must be defined');
+	const body = src.slice(i, i + 2600);
+
+	// The warg branch must open a BLOCK...
+	const wug = body.indexOf('pc_checkskill(sd, RA_WUGMASTERY) > 0) {');
+	assert.ok(wug > 0, 'the warg branch must open a block - a bare `if` is the bug');
+
+	// ...and the falcon must be granted only in its `else`, never as a standalone `if`.
+	const falconGrant = body.indexOf('pc_setfalcon(sd, 1)');
+	assert.ok(falconGrant > wug, 'the falcon grant must follow the warg branch');
+	assert.match(body.slice(wug, falconGrant),
+		/\} else if \(pc_checkskill\(sd, HT_FALCON\) > 0\) \{/,
+		'the falcon must be granted in the ELSE of the warg branch');
+
+	// The stale falcon must be cleared BEFORE OPTION_WUG is set, so the single announce that
+	// follows carries the warg alone.
+	const clear = body.indexOf('pc_setfalcon(sd, 0)');
+	const wugSet = body.indexOf('sd->sc.option | OPTION_WUG');
+	assert.ok(clear > 0, 'the warg branch must clear a stale falcon');
+	assert.ok(clear > wug && clear < wugSet,
+		'pc_setfalcon(sd, 0) must sit inside the warg branch and before the OPTION_WUG set');
+	assert.match(body.slice(wug, clear), /if \(sd->sc\.option & OPTION_FALCON\)/,
+		'the clear must be conditional on the falcon bit actually being present');
+
+	// The bug in one line: a standalone falcon grant that fires alongside the warg.
+	assert.ok(!/if \(pc_checkskill\(sd, HT_FALCON\) > 0\)\n\t\tpc_setfalcon\(sd, 1\);/.test(body),
+		'a standalone falcon grant is the bug: it fires together with the warg for Ranger/Windhawk');
 });

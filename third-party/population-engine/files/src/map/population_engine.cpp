@@ -3465,20 +3465,33 @@ static void population_engine_sync_shell_vehicle(map_session_data *sd)
 	if (pc_checkskill(sd, KN_RIDING) > 0 || pc_checkskill(sd, RK_DRAGONTRAINING) > 0)
 		pc_setriding(sd, 1);
 
-	// Falcon (Hunter/Sniper line).
-	if (pc_checkskill(sd, HT_FALCON) > 0)
-		pc_setfalcon(sd, 1);
-
-	// Warg (Ranger). This pin has no pc_setwarg(); the option IS the mechanism, and stock
-	// code only ever clears it when RA_WUGMASTERY is missing, so setting it here is stable.
+	// Falcon (Hunter/Sniper line) and Warg (Ranger/Windhawk) are MUTUALLY EXCLUSIVE.
 	//
-	// Deliberately NOT guarded with `!(option & OPTION_WUG)`: re-sending the same value is how
-	// the option change is re-announced to the client, and pc_setoption() has no early-return
-	// (it assigns and calls clif_changeoption unconditionally), so a repeat call is a cheap
-	// broadcast rather than a no-op. Without that, a recall that moves the shell after the
-	// first announcement leaves the client rendering no warg while the server state is correct.
-	if (pc_checkskill(sd, RA_WUGMASTERY) > 0)
+	// A Ranger/Windhawk's granted tree carries RA_WUGMASTERY *and* HT_FALCON (inherited from
+	// the Hunter line), so granting each option in its own `if` leaves the shell with
+	// FALCON|WUG (0x00100010) and the client draws a falcon AND a warg at the same time -
+	// `clif_changeoption` carries a bitmask and the client builds each vehicle independently.
+	// Stock never hits this because a real player holds only one of the two skills.
+	//
+	// The warg wins: that is what the class is meant to show. Clearing the falcon first means
+	// the announce that follows carries the warg alone.
+	if (pc_checkskill(sd, RA_WUGMASTERY) > 0) {
+		if (sd->sc.option & OPTION_FALCON)
+			pc_setfalcon(sd, 0); // stock routes flag=0 to pc_setoption(option & ~OPTION_FALCON)
+
+		// This pin has no pc_setwarg(); the option IS the mechanism, and stock code only ever
+		// clears it when RA_WUGMASTERY is missing, so setting it here is stable.
+		//
+		// Deliberately NOT guarded with `!(option & OPTION_WUG)`: re-sending the same value is
+		// how the option change is re-announced to the client, and pc_setoption() has no
+		// early-return (it assigns and calls clif_changeoption unconditionally), so a repeat
+		// call is a cheap broadcast rather than a no-op. Without that, a recall that moves the
+		// shell after the first announcement leaves the client rendering no warg while the
+		// server state is correct.
 		pc_setoption(sd, sd->sc.option | OPTION_WUG);
+	} else if (pc_checkskill(sd, HT_FALCON) > 0) {
+		pc_setfalcon(sd, 1);
+	}
 
 	// Mado Gear. pc_setmadogear() early-returns unless `(class_ & MAPID_THIRDMASK) ==
 	// MAPID_MECHANIC`, and a 4th job (Meister) fails that test, so the setter can never grant
