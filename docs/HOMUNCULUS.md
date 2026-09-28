@@ -37,6 +37,19 @@ This mirrors the precedent already set twice: `pc_setmadogear` cannot work for a
 the vehicle option is set directly; `pc_setwarg` does not exist, so `OPTION_WUG` is set
 directly.
 
+## Why the companion needs a server-side driver
+
+A homunculus's AI is **client-side Lua**, not server logic. `docs/CUSTOM_HOMUNCULUS_AI.md`
+documents how a player drops AzzyAI into `AI/USER_AI/` beside `data.grf` and switches it on
+with `/hoai`. The client decides, then sends the resulting move, attack and skill commands to
+the map server - which is exactly why every homunculus action arrives as a client packet
+(`clif_parse_UseSkillToId_homun`, `clif_parse_UseSkillToPos_homun`, `clif.cpp:12774`, `:12802`).
+
+A population shell has no client, so it can never obtain AI that way: there is no `/hoai` to
+type and no Lua to run on its behalf. Server-side decision-making is therefore not a shortcut
+but the only possibility, and it belongs where the shell's own combat decisions are already
+made.
+
 ## Design
 
 **Attach.** Build `struct s_homunculus` in memory from `homunculus_db` (class, level, stats
@@ -59,6 +72,13 @@ Creator keeps it, and our data already records `JOB_ALCHEMIST = 18`, `JOB_CREATO
 
 - `hom_enabled` — the toggle: `NULL` = default (off for now), `1` = on, `0` = explicitly off
 - `hom_class`, `hom_level`, `hom_exp`
+
+**Stock table.** `docs/DATABASE.md` documents the stock homunculus failure modes (a
+`char.homun_id` pointing at a missing row) and the `rostack sql` repair CLI, and records that
+`char` and `homunculus` are MyISAM tables **with no foreign keys** - so a row for a synthetic
+`char_id` would not be rejected on referential grounds. We do not write one anyway: keeping
+`hom_id = 0` skips the char-server round trip entirely and leaves those stock diagnostics
+meaningful for real players.
 
 **Toggle.** Same channel as the skill picker: extend the `@CPSKEND|<count>|<job>|<chosen>|<summoned>`
 summary with the homunculus field, or add a parallel `@CPHOM|...` line, and add the control to

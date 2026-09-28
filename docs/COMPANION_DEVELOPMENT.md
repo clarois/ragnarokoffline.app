@@ -459,6 +459,35 @@ Acceptance criteria:
 - Logs record the gap, selected band, and outcome without flooding normal logs
   or exposing private account data.
 
+### 8. Homunculus for alchemist-line companions
+
+Observed concern: an alchemist-line companion has no homunculus, so it fights without the pet a
+real player of that class would bring. The design lives in [HOMUNCULUS.md](HOMUNCULUS.md).
+
+Investigation:
+
+- Confirm the stock path is unusable for a shell: creation, load and save all round-trip to the
+  char-server (`homunculus.cpp:1276`, `:1123`, `:838`, `pc.cpp:2491`) while shells carry
+  synthetic identities (`char_id == CHAR_ID_BASE + index`, `population_engine.cpp:471`), so
+  there is no `char` row for a `homunculus` row to belong to.
+- Attach in-map instead through `hom_alloc()`, filling `struct s_homunculus` from
+  `homunculus_db`, with `sd->status.hom_id` deliberately left at 0 so every char-server call
+  stays a no-op - including the row delete on block free at `unit.cpp:4148`.
+- Gate on `pc_checkskill(sd, AM_CALLHOMUN)` rather than a job whitelist, so class progression
+  needs no list to maintain.
+- Note that the homunculus has no server-side AI of its own (no `hom_ai` in `src/map/`): a real
+  one is driven by client-side Lua, which a shell cannot have. A driver is therefore part of the
+  feature, not a follow-up.
+
+Acceptance criteria:
+
+- An alchemist-line companion brings a homunculus that is visible and moves with it.
+- The homunculus survives bench, summon and resummon.
+- `@companion dump` reports its class, level and id, so the state is readable without judging a
+  sprite.
+- No `intif_homunculus_*` call is reachable for a shell, and `sd->status.hom_id` stays 0.
+- The toggle is per companion and persists, so two alchemist companions can differ.
+
 ## Recommended next sequence
 
 1. Keep PR #128 reviewable as the baseline and respond to maintainer feedback.
