@@ -286,6 +286,11 @@ Body:
       - { SkillId: AL_PNEUMA,     Level: 1,  Rate: 10000, Target: self, Condition: skill_used, CondValue: MO_FINGEROFFENSIVE, Cooldown: 5000 }
 
   # JOB_MERCHANT = 5
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
+
   - JobId: 5
     Skills:
 
@@ -326,6 +331,9 @@ Body:
   # ---------------------------------------------------------------------------
 
   # JOB_KNIGHT = 7
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
+
   - JobId: 7
     Skills:
 
@@ -406,6 +414,12 @@ Body:
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_FREEZE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STONE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SLEEP }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 9
     Skills:
@@ -530,6 +544,8 @@ Body:
   # JOB_CRUSADER = 14
       - { SkillId: AS_VENOMDUST, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
 
   - JobId: 14
     Skills:
@@ -574,6 +590,10 @@ Body:
       - { SkillId: SM_AUTOBERSERK, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_AUTOBERSERK }
       - { SkillId: SM_BASH, Level: 10, Rate: 9000 }
       - { SkillId: SM_MAGNUM, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WATK_ELEMENT }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 15
     Skills:
@@ -649,6 +669,15 @@ Body:
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
       - { SkillId: MO_BALKYOUNG, Level: 1, Rate: 9000 }
+      - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
+      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 16
     Skills:
@@ -727,6 +756,8 @@ Body:
       - { SkillId: RG_FLAGGRAFFITI, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: RG_GRAFFITI, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
 
   - JobId: 18
     Skills:
@@ -746,6 +777,9 @@ Body:
       - { SkillId: AM_POTIONPITCHER,   Level: 5,  Rate: 10000, Target: self, Condition: damaged_gt, CondValue: 20, Cooldown: 4000 }
 
   # JOB_BARD = 19
+      - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+
   - JobId: 19
     Skills:
 
@@ -892,6 +926,12 @@ Body:
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_FREEZE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STONE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SLEEP }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 4010
     Skills:
@@ -1027,6 +1067,8 @@ Body:
   # JOB_PALADIN = 4015
       - { SkillId: AS_VENOMDUST, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
 
   - JobId: 4015
     Skills:
@@ -1075,6 +1117,10 @@ Body:
       - { SkillId: SM_AUTOBERSERK, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_AUTOBERSERK }
       - { SkillId: SM_BASH, Level: 10, Rate: 9000 }
       - { SkillId: SM_MAGNUM, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WATK_ELEMENT }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 4016
     Skills:
@@ -1145,6 +1191,15 @@ Body:
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
       - { SkillId: MO_BALKYOUNG, Level: 1, Rate: 9000 }
+      - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
+      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 4017
     Skills:
@@ -1244,6 +1299,8 @@ Body:
       - { SkillId: RG_GRAFFITI, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: ST_REJECTSWORD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_REJECTSWORD }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
 
   - JobId: 4019
     Skills:
@@ -1267,6 +1324,8 @@ Body:
       - { SkillId: AM_CP_HELM, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_CP_HELM }
       - { SkillId: AM_CP_SHIELD, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_CP_SHIELD }
       - { SkillId: CR_SLIMPITCHER, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 4020
     Skills:
@@ -1643,6 +1702,12 @@ Body:
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SLEEP }
       - { SkillId: PR_SUFFRAGIUM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SUFFRAGIUM }
       - { SkillId: PR_TURNUNDEAD, Level: 10, Rate: 9000 }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 4063
     Skills:
@@ -1777,6 +1842,16 @@ Body:
       - { SkillId: GC_VENOMPRESSURE, Level: 5, Rate: 9000 }
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_PARALYSE }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_PYREXIA }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DEATHHURT }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_LEECHESEND }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_VENOMBLEED }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_MAGICMUSHROOM }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_TOXIN }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_OBLIVIONCURSE }
 
   - JobId: 4065
     Skills:
@@ -1852,6 +1927,10 @@ Body:
       - { SkillId: SM_AUTOBERSERK, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_AUTOBERSERK }
       - { SkillId: SM_BASH, Level: 10, Rate: 9000 }
       - { SkillId: SM_MAGNUM, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WATK_ELEMENT }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 4073
     Skills:
@@ -2027,6 +2106,8 @@ Body:
       - { SkillId: WM_GLOOMYDAY, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_GLOOMYDAY }
       - { SkillId: WM_MELODYOFSINK, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MELODYOFSINK }
       - { SkillId: WM_SATURDAY_NIGHT_FEVER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SATURDAYNIGHTFEVER }
+      - { SkillId: WM_DEADHILLHERE, Level: 5, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: WM_DEADHILLHERE, Level: 5, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 4075
     Skills:
@@ -2103,6 +2184,8 @@ Body:
       - { SkillId: WM_GLOOMYDAY, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_GLOOMYDAY }
       - { SkillId: WM_MELODYOFSINK, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MELODYOFSINK }
       - { SkillId: WM_SATURDAY_NIGHT_FEVER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SATURDAYNIGHTFEVER }
+      - { SkillId: WM_DEADHILLHERE, Level: 5, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: WM_DEADHILLHERE, Level: 5, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 4076
     Skills:
@@ -2174,6 +2257,19 @@ Body:
       - { SkillId: MO_FINGEROFFENSIVE, Level: 5, Rate: 9000 }
       - { SkillId: MO_INVESTIGATE, Level: 5, Rate: 9000 }
       - { SkillId: MO_STEELBODY, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STEELBODY }
+      - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
+      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - { SkillId: SR_POWERVELOCITY, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: SR_POWERVELOCITY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 4077
     Skills:
@@ -2237,6 +2333,8 @@ Body:
       - { SkillId: AM_CP_WEAPON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_CP_WEAPON }
       - { SkillId: AM_DEMONSTRATION, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AM_SPHEREMINE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
+      - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 4078
     Skills:
@@ -2299,6 +2397,8 @@ Body:
       - { SkillId: RG_INTIMIDATE, Level: 5, Rate: 9000 }
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
 
   - JobId: 4079
     Skills:
@@ -2412,7 +2512,6 @@ Body:
       - { SkillId: AS_SONICBLOW, Level: 10, Rate: 9000 }
       - { SkillId: AS_VENOMDUST, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AS_VENOMKNIFE, Level: 1, Rate: 9000 }
-      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: GC_CLOAKINGEXCEED, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CLOAKINGEXCEED }
       - { SkillId: GC_CROSSIMPACT, Level: 5, Rate: 9000 }
@@ -2430,10 +2529,19 @@ Body:
       - { SkillId: SHC_FATAL_SHADOW_CROW, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SHC_IMPACT_CRATER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WEAPONBLOCK_ON }
       - { SkillId: SHC_SHADOW_STAB, Level: 5, Rate: 9000 }
-      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_PARALYSE }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_PYREXIA }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DEATHHURT }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_LEECHESEND }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_VENOMBLEED }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_MAGICMUSHROOM }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_TOXIN }
+      - { SkillId: GC_ANTIDOTE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_OBLIVIONCURSE }
 
   - JobId: 4255
     Skills:
@@ -2522,7 +2630,6 @@ Body:
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
@@ -2555,6 +2662,12 @@ Body:
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SLEEP }
       - { SkillId: PR_SUFFRAGIUM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SUFFRAGIUM }
       - { SkillId: PR_TURNUNDEAD, Level: 10, Rate: 9000 }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: PR_BENEDICTIO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 4257
     Skills:
@@ -2614,7 +2727,6 @@ Body:
       - { SkillId: IG_REBOUND_SHIELD, Level: 10, Rate: 8000 }
       - { SkillId: IG_HOLY_SHIELD, Level: 10, Rate: 7000, Condition: melee_attacked, CondValue: 1 }
 
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
@@ -2662,6 +2774,10 @@ Body:
       - { SkillId: SM_BASH, Level: 10, Rate: 9000 }
       - { SkillId: SM_ENDURE, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ENDURE }
       - { SkillId: SM_MAGNUM, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WATK_ELEMENT }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 4259
     Skills:
@@ -2721,10 +2837,11 @@ Body:
       - { SkillId: ST_CHASEWALK, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CHASEWALK }
       - { SkillId: ST_PRESERVE, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_PRESERVE }
       - { SkillId: ST_REJECTSWORD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_REJECTSWORD }
-      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
 
   - JobId: 4261
     Skills:
@@ -2794,7 +2911,6 @@ Body:
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
@@ -2846,6 +2962,11 @@ Body:
       - { SkillId: SR_POWERVELOCITY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: SR_RAISINGDRAGON, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RAISINGDRAGON }
       - { SkillId: SR_RIDEINLIGHTNING, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
 
   - JobId: 4263
     Skills:
@@ -3110,7 +3231,6 @@ Body:
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
@@ -3161,7 +3281,6 @@ Body:
       - { SkillId: SM_BASH, Level: 10, Rate: 9000 }
       - { SkillId: SM_ENDURE, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ENDURE }
       - { SkillId: SM_MAGNUM, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WATK_ELEMENT }
-      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
@@ -3176,6 +3295,13 @@ Body:
       - { SkillId: WZ_STORMGUST, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: WZ_VERMILION, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: WZ_WATERBALL, Level: 5, Rate: 9000 }
+      - { SkillId: AL_WARP, Level: 4, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
+      - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
+      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_DPOISON }
 
   - JobId: 4308
     Skills:

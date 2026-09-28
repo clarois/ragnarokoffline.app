@@ -65,6 +65,11 @@ _ap.add_argument("--rathena", default=os.environ.get("RATHENA_DIR", os.path.expa
                  help="pinned rAthena checkout holding db/re/*.yml (default: ~/ro/rathena)")
 _ap.add_argument("--repo", default=ROOT, help="ragnarokoffline.app checkout (default: this script's repo)")
 _ap.add_argument("--write", action="store_true", help="apply the plan (default: dry run)")
+_ap.add_argument("--list-skipped", action="store_true",
+                 help="print every skipped skill and its reason, not just the counts")
+_ap.add_argument("--all-shapes", action="store_true",
+                 help="apply the full row-shape table to 2nd/3rd jobs too (default: only "
+                      "Attack/Ground there, because their buffs are hand-tuned)")
 ARGS = _ap.parse_args()
 
 RATHENA = ARGS.rathena
@@ -204,6 +209,20 @@ SKIP = re.compile(
     r"|WS_CARTBOOST|BS_ADRENALINE2|NC_|GN_|KO_|OB_|RL_|NJ_|TK_|SG_|SO_EL_|SO_SPELLFISH|SO_ELEMENTAL_SHIELD)"
 )
 
+# Skills the Support-without-Status branch cannot shape correctly. Only the CURES need this: their
+# gate must be "the ally HAS this status" (one row per status, and the status list lives in the
+# skill's impl - `status_change_end` - which no YAML field carries), where the branch's generic
+# "ally is hurt" gate fires on a healthy ally and wastes the cast. Everything else that lands in
+# that branch (AM_BERSERKPITCHER, SR_POWERVELOCITY, MO_KITRANSLATION, MO_ABSORBSPIRITS,
+# WM_DEADHILLHERE) keeps the branch's shape, which is what the 4th jobs already ship - Biolo has an
+# AM_BERSERKPITCHER row and Troubadour/Trouvere have WM_DEADHILLHERE, so excluding them for the
+# 2nd/3rd jobs would make this file inconsistent with its own settled policy.
+HAND_WRITTEN = {
+    "AL_CURE": "cure: needs Condition: ally_status per status, from cure.cpp",
+    "TF_DETOXIFY": "cure: needs Condition: ally_status per status, from detoxify.cpp",
+    "GC_ANTIDOTE": "cure: needs Condition: ally_status per status, from antidote.cpp",
+}
+
 def q(skill, extra):
     return f"      - {{ SkillId: {skill}, {extra} }}"
 
@@ -269,14 +288,16 @@ def main():
     plan = {}   # jid -> list of (line, skill, category)
     skipped = collections.Counter()
     reasons = collections.Counter()
+    why = collections.defaultdict(list)
 
     for name, jid in list(FOURTH.items()) + list(SECOND_THIRD.items()):
-        deep = jid in FOURTH.values()
+        deep = ARGS.all_shapes or jid in FOURTH.values()
         cl = closure(name, )
         cur = existing.get(jid, set())
         for skill in sorted(k for k in cl if k not in cur):
             if SKIP.match(skill):
                 skipped["family-skip"] += 1
+                why["family-skip"].append(f"{skill} ({name})")
                 continue
             m = meta.get(skill)
             if not m:
@@ -284,11 +305,21 @@ def main():
                 continue
             if m["tt"] == "Passive":
                 skipped["passive"] += 1
+                why["passive"].append(f"{skill} ({name})")
+                continue
+            if skill in HAND_WRITTEN:
+                skipped["needs a hand-written row"] += 1
+                why["hand-written"].append(f"{skill} ({name}) - {HAND_WRITTEN[skill]}")
                 continue
             lines, cat = rows_for(skill, m, sc_ok, deep)
             if lines is None:
                 skipped[cat.split(" (")[0]] += 1
                 reasons[cat] += 1
+                key = "attack-without-damage" if cat.startswith("attack-without-damage") \
+                    else "support-no-status" if cat.startswith("support with no status") \
+                    else "self-no-status" if cat.startswith("self skill with no Status") \
+                    else cat.split(" (")[0]
+                why[key].append(f"{skill} ({name})")
                 continue
             plan.setdefault(jid, []).append((lines, skill, cat))
 
@@ -302,6 +333,13 @@ def main():
     for k, v in skipped.most_common(14):
         print(f"  {v:5d}  {k}")
     print()
+    if ARGS.list_skipped:
+        print("--- skipped, by skill ---")
+        for k in sorted(why, key=lambda k: -len(why[k])):
+            print(f"  [{k}] {len(why[k])}")
+            for item in sorted(why[k]):
+                print(f"      {item}")
+        print()
     print("--- per job ---")
     for jid in sorted(plan):
         cats = collections.Counter(c for _, _, c in plan[jid])
