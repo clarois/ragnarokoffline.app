@@ -11,17 +11,21 @@ vendored engine and its broader Ragnarok Offline changes, see
 
 ## Source of truth
 
-Snapshot date: **2026-09-13**.
+Snapshot date: **2026-09-28**.
 
 | Item | Current value |
 |---|---|
-| Repository | `Alex-crows/ragnarokoffline.app` fork of `Flux159/ragnarokoffline.app` |
-| Feature branch | `feature/recruitable-ai-companions` |
-| Upstream base | `upstream/main` at `f8465f7` |
-| Draft PR | `Flux159/ragnarokoffline.app#128` |
-| App baseline | Ragnarok Offline 1.2.3 |
-| rAthena pin | `e985006171d2eb320ee512a653f4c83aea3d81b6` |
-| roBrowserLegacy pin | `6a177d9b4e8da41d6af76f6e7c527d52beb781c3` |
+| Repository | `clarois/ragnarokoffline.app`, fork of `Flux159/ragnarokoffline.app` |
+| Branch | `main` - companion work lands there directly now; the commit history is the sequence |
+| Upstream base | `upstream/main`; resolve it with `git log upstream/main -1` rather than trusting a SHA written here |
+| Upstream PR | `Flux159/ragnarokoffline.app#128` - deliberately on hold; nothing goes upstream without an explicit decision |
+| App baseline | Ragnarok Offline 1.3.1 (`package.json`); `v1.3.2` is the newest tag |
+| rAthena pin | `94919f5a0c309d5fbd1e32897f07644faedf3a30` (`Flux159/rathena`, branch `ragnarokoffline`) |
+| rAthena upstream pin | `e985006171d2eb320ee512a653f4c83aea3d81b6` - the merge base, fetched only by the diagnostics |
+| roBrowserLegacy pin | `7ed31a16df31b57c32f790d848fcc61af5e371e1` |
+| ROenglishRE pin | `66cdfec631603fda6a90ba4bbe26ab07b5204c84` |
+
+These are a convenience copy of `config/VENDOR_PINS`; read that file when the two disagree.
 
 The Git branch is authoritative. Files under `@Mods/party-invite-test`, the
 packaged app payload, the user runtime, and Docker images are local test and
@@ -230,9 +234,12 @@ idempotent application, and a clean Population Engine data validation.
 
 - Companions are recruited from the ambient population. There is no Adventurer's
   Guild board, hiring UI, or custom companion builder.
-- Companion identity, recruitment, role, and mode are runtime-only and do not
-  survive a full server/app shutdown. Returning to character select without
-  stopping the server does not end the runtime session.
+- **Companion persistence is implemented**, so this is no longer a limitation: name, job,
+  sex, looks, gear, duty/mode, the per-companion skill selection and growth are held in
+  `cp_companion_persistence` and survive a full server and app shutdown. `docs/DATABASE.md`
+  has the table and the boot migration that maintains it.
+- A companion's homunculus (alchemist line) is in-memory only so far - its class, level and
+  exp are not persisted yet. Design and phases: [HOMUNCULUS.md](HOMUNCULUS.md).
 - A shell's class, level, equipment, skills, looks, and dialogue come from the
   current Population Engine generation and YAML data.
 - There is no refusal roll based on level difference yet. Eligible shells
@@ -245,6 +252,14 @@ idempotent application, and a clean Population Engine data validation.
 The items below are **not implemented in PR #128**. Each needs its own evidence
 and should not be marked complete merely because a likely code location was
 found.
+
+Status as of 2026-09-28: **item 4 (unified ammunition) and item 5 (persistence) are
+implemented.** The engine carries `runtime/population_shell_ammo.*` and spawn records that
+unified ammo is managed at runtime; companions now survive a restart through
+`cp_companion_persistence` and the boot migration in `stack/src/cmds.rs`. Items 1, 2, 3, 6 and
+7 have **not** been re-triaged since the original snapshot - treat them as open until someone
+verifies each one against the running game. Item 8 (homunculus) is the newest and has its own
+design document.
 
 ### 1. Priest self-buffs in a player party
 
