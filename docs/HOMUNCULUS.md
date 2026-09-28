@@ -100,6 +100,21 @@ enemy, `unit_attack(hom, ...)`, follow the master when idle or out of range, han
 dead/vaporized states.
 *Acceptance:* the homunculus attacks on its own and returns to the companion.
 
+**Implemented.** `population_engine_homunculus_per_tick(sd)` and its target picker live in
+`population_engine/runtime/population_engine_combat.cpp`, called from the shell's own combat tick
+(`population_engine_combat_per_tick`), so the pet inherits that tick's cadence and lifecycle
+instead of owning a timer. It acts through the calls rAthena's own homunculus AI script commands
+use (`setunitdata UHOM_TARGETID` -> `unit_attack(hd, id, 1)`, `unit_stop_attack(hd)` for 0), and
+chasing is left to `unit_attack`, which walks the unit into range itself - the same thing the mob
+AI relies on. Targets are ranked by distance to the pet (agreed scope 4) and must also sit inside
+the master's 12-cell command radius; past 12 cells from the master the pet leashes home with
+`unit_walktobl(hd, sd, 2, 1)`. `@companion dump` gained `@SHELLHOMAI` carrying the pet's target and
+attack state, so "is it fighting" is server state rather than a sprite to judge.
+
+Not covered: the arena-observation branch of the tick returns before the hook, and a sitting or
+vending companion leaves its pet standing - both deliberate, since a companion that is not in a
+fight should not be picking one.
+
 **Phase 3 — growth, persistence, toggle.**
 Level/exp from kills, written through `cp_companion_persistence`; panel toggle; the v8
 migration.

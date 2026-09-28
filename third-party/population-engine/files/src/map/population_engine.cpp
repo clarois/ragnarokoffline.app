@@ -5524,6 +5524,19 @@ void population_engine_shell_dump(int fd)
 			snprintf(line, sizeof(line), "@SHELLHOM|%u|0|0|0|0|0|0", idx);
 		}
 		clif_displaymessage(fd, line);
+
+		// RAGNAROKMAC (homunculus, phase 2): what the driver decided - so "is it fighting" is
+		// read from server state rather than judged from a sprite, which is the one thing a
+		// screenshot cannot settle.
+		if (sd->hd != nullptr) {
+			snprintf(line, sizeof(line), "@SHELLHOMAI|%u|%u|%d|%d|%d",
+				idx,
+				static_cast<uint32>(sd->hd->ud.target),
+				sd->hd->ud.attacktimer != INVALID_TIMER ? 1 : 0,
+				distance_bl(sd, sd->hd),
+				sd->hd->ud.walktimer != INVALID_TIMER ? 1 : 0);
+			clif_displaymessage(fd, line);
+		}
 		++n;
 	}
 	snprintf(line, sizeof(line), "@SHELLEND|%zu", n);

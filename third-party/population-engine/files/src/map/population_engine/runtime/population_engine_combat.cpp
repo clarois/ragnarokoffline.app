@@ -31,6 +31,7 @@
 #include "../expanded_ai/expanded_condition.hpp"
 #include "../../battle.hpp"
 #include "../../clif.hpp"
+#include "../../homunculus.hpp"
 #include "../../script.hpp"
 #include "../../map.hpp"
 #include "../../mob.hpp"
@@ -2112,6 +2113,102 @@ void population_engine_shell_reactive_cast(map_session_data *sd)
 	}
 }
 
+/// RAGNAROKMAC (homunculus, phase 2): the companion's pet picks its own target.
+///
+/// The pet ranks by distance to ITSELF, not to the master - that is what "picks its own target"
+/// means, and it is why two companions standing side by side end up with two independently
+/// engaged pets instead of both hitting whatever the shell is hitting.
+///
+/// Two radii bound the choice: the pet's own detection range, and the master's command radius.
+/// The second is what stops a pet being led off across the map by a fleeing monster.
+static uint32 population_engine_homunculus_target(map_session_data *sd, homun_data *hd)
+{
+	if (sd == nullptr || hd == nullptr)
+		return 0;
+
+	const int pet_detect = 12;       ///< how far the pet itself looks
+	const int master_radius = 12;    ///< the shell AI's own independent-acquisition radius
+
+	uint32 best_id = 0;
+	int best_distance = pet_detect + 1;
+
+	for (const auto &entry : sd->pop.mob_tracker.tracked_mobs) {
+		const s_pe_tracked_mob &mob = entry.second;
+		block_list *mob_bl = map_id2bl(static_cast<int>(mob.mob_id));
+
+		if (mob_bl == nullptr || mob_bl->m != hd->m)
+			continue;
+
+		const int pet_distance = distance_bl(hd, mob_bl);
+
+		if (pet_distance > pet_detect || pet_distance >= best_distance)
+			continue;
+		if (!check_distance_bl(sd, mob_bl, master_radius))
+			continue; // the master could not see it: not this pet's fight
+		// The engine's own notion of a valid enemy, so the pet can never engage something the
+		// shell systems consider off limits.
+		if (!population_shell_check_target(sd, mob.mob_id) &&
+			!population_shell_check_target_for_movement(sd, mob.mob_id))
+			continue;
+
+		best_id = mob.mob_id;
+		best_distance = pet_distance;
+	}
+
+	return best_id;
+}
+
+/// RAGNAROKMAC (homunculus, phase 2): one tick of the companion's homunculus.
+///
+/// A homunculus has no AI in the map server at all - its brain is client-side Lua, which a
+/// population shell can never run, so every stock action arrives as a client packet. This is the
+/// server-side substitute, built from the calls rAthena's own homunculus AI script commands use
+/// (`setunitdata UHOM_TARGETID` -> `unit_attack(hd, id, 1)`, and `unit_stop_attack(hd)` for 0).
+///
+/// Chasing is deliberately NOT done here: `unit_attack` walks the unit into range itself, which
+/// is exactly how the mob AI behaves. Writing a second pathfinder would be a bug farm.
+///
+/// Called from the shell's combat tick, so it inherits the tick's lifecycle and cost profile.
+static void population_engine_homunculus_per_tick(map_session_data *sd)
+{
+	if (sd == nullptr)
+		return;
+	if (!population_engine_is_population_pc(sd->id))
+		return; // never drive a real player's pet
+
+	homun_data *hd = sd->hd;
+
+	if (hd == nullptr)
+		return;
+	if (hd->master != sd)
+		return; // not ours to command
+	if (!hom_is_active(hd))
+		return; // dead, resting or vaporized - revival/growth belongs to phase 3
+	if (pc_isdead(sd))
+		return; // master is down: hold position beside him
+
+	// Leash. The master moved on, so come home rather than fight on: unit_walktobl paths around
+	// obstacles and stops 2 cells short, which is also how an idle pet trails him.
+	if (distance_bl(sd, hd) > 12) {
+		unit_stop_attack(hd);
+		unit_walktobl(hd, sd, 2, 1);
+		return;
+	}
+
+	const uint32 target_id = population_engine_homunculus_target(sd, hd);
+
+	if (target_id == 0) {
+		// Nothing to fight: drop any chase (the target may have died or hidden) and drift back
+		// to the master if the last fight pulled the pet away.
+		unit_stop_attack(hd);
+		if (distance_bl(sd, hd) > 3)
+			unit_walktobl(hd, sd, 2, 1);
+		return;
+	}
+
+	unit_attack(hd, target_id, 1);
+}
+
 int population_engine_combat_per_tick(map_session_data *sd, bool do_skills)
 {
 	if (sd == nullptr)
@@ -2262,6 +2359,11 @@ int population_engine_combat_per_tick(map_session_data *sd, bool do_skills)
 	if (DIFF_TICK(gettick(), pe.last_move) > 3000) {
 		sd->ud.canmove_tick = gettick();
 	}
+
+	// RAGNAROKMAC (homunculus, phase 2): the companion's pet takes its turn in the same tick,
+	// after the shell has decided, so it acts on this tick's state. It sits after the early
+	// returns on purpose: a sitting, vending or dead companion leaves its pet standing too.
+	population_engine_homunculus_per_tick(sd);
 
 	population_shell_status_checkmapchange(sd);
 
