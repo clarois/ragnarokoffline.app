@@ -129,3 +129,43 @@ test('the dump exposes the vehicle bits so the fix is verifiable by reading', ()
 	assert.match(body, /"@SHELL\|\%u\|%s\|%u\|%u\|%d\|%zu\|%zu\|%d\|%d\|%d\|%d\|%d\|0x%08x\|%s"/,
 		'the wire line must carry the raw option value and the decoded tag');
 });
+
+test('the vehicle is RE-ANNOUNCED after the final placement, not only at spawn', () => {
+	// Verified live: sc.option kept its bits across bench+summon (0x00100010 WUG|FALCON) while
+	// the sprite came back bare, so the state was never lost - the client was never told. The
+	// AREA-scoped option broadcast reaches nobody while the shell is off the grid, and recall
+	// moves the shell with a second pc_setpos after spawn_shell has already announced it.
+	const lines = src.split('\n');
+
+	// Every call site, so we can reason about position.
+	const callLines = [];
+	lines.forEach((l, i) => {
+		if (l.includes('population_engine_sync_shell_vehicle(') &&
+			!l.trimStart().startsWith('static') && !l.trimStart().startsWith('///')) {
+			callLines.push(i);
+		}
+	});
+	assert.ok(callLines.length >= 5,
+		`expected spawn + advance + both re-sync branches + the recall placement (found ${callLines.length})`);
+
+	// At least one call must sit after the last placement broadcast in the recall path.
+	const lastBroadcast = src.lastIndexOf('pop_shell_broadcast_map_placement(shell);');
+	assert.ok(lastBroadcast > 0, 'the recall placement broadcast must exist');
+	assert.ok(callLines.some(i => i > src.slice(0, lastBroadcast).split('\n').length - 1),
+		'a sync call must come after the recall path\'s final placement broadcast');
+});
+
+test('no guard makes a repeat announcement a no-op', () => {
+	// pc_setoption() has no early-return (it assigns then calls clif_changeoption
+	// unconditionally), so re-sending the same value IS the re-announce. A
+	// `!(option & BIT)` guard would skip the second call and defeat it - and it did, which is
+	// why the warg/mado appeared at spawn but not after a resummon.
+	const i = src.indexOf('static void population_engine_sync_shell_vehicle(map_session_data *sd)\n{');
+	const body = src.slice(i, i + 2600);
+	assert.ok(!/&&\s*!\(sd->sc\.option & OPTION_(WUG|MADOGEAR)\)/.test(body),
+		'no option-presence guard may sit on the setter: it would suppress the re-announce');
+	assert.match(body, /if \(pc_checkskill\(sd, RA_WUGMASTERY\) > 0\)\n\t\tpc_setoption\(sd, sd->sc\.option \| OPTION_WUG\);/,
+		'the warg setter must run unconditionally when the skill is present');
+	assert.match(body, /if \(pc_checkskill\(sd, NC_MADOLICENCE\) > 0\)\n\t\tpc_setoption\(sd, sd->sc\.option \| OPTION_MADOGEAR, MADO_ROBOT\);/,
+		'the mado setter likewise');
+});

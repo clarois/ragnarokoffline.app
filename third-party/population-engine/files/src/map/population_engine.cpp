@@ -3471,13 +3471,20 @@ static void population_engine_sync_shell_vehicle(map_session_data *sd)
 
 	// Warg (Ranger). This pin has no pc_setwarg(); the option IS the mechanism, and stock
 	// code only ever clears it when RA_WUGMASTERY is missing, so setting it here is stable.
-	if (pc_checkskill(sd, RA_WUGMASTERY) > 0 && !(sd->sc.option & OPTION_WUG))
+	//
+	// Deliberately NOT guarded with `!(option & OPTION_WUG)`: re-sending the same value is how
+	// the option change is re-announced to the client, and pc_setoption() has no early-return
+	// (it assigns and calls clif_changeoption unconditionally), so a repeat call is a cheap
+	// broadcast rather than a no-op. Without that, a recall that moves the shell after the
+	// first announcement leaves the client rendering no warg while the server state is correct.
+	if (pc_checkskill(sd, RA_WUGMASTERY) > 0)
 		pc_setoption(sd, sd->sc.option | OPTION_WUG);
 
 	// Mado Gear. pc_setmadogear() early-returns unless `(class_ & MAPID_THIRDMASK) ==
 	// MAPID_MECHANIC`, and a 4th job (Meister) fails that test, so the setter can never grant
 	// one. Set the option directly with the robot subtype instead.
-	if (pc_checkskill(sd, NC_MADOLICENCE) > 0 && !(sd->sc.option & OPTION_MADOGEAR))
+	// Same reasoning as the warg above: no guard, so a repeat call still re-announces.
+	if (pc_checkskill(sd, NC_MADOLICENCE) > 0)
 		pc_setoption(sd, sd->sc.option | OPTION_MADOGEAR, MADO_ROBOT);
 }
 
@@ -5467,6 +5474,9 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 			// placement here or the stale sweep will reap them in <100 ms.
 			pop_shell_finish_map_placement(existing);
 			pop_shell_broadcast_map_placement(existing);
+			// Re-announce the vehicle now that the shell is definitely on the grid: the
+			// option broadcast is AREA-scoped and reaches nobody while it is off-grid.
+			population_engine_sync_shell_vehicle(existing);
 		} else {
 			int16_t fx = existing->x, fy = existing->y;
 			if (!pop_companion_formation_cell(existing, owner, fx, fy)) { fx = existing->x; fy = existing->y; }
@@ -5475,6 +5485,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 				pop_shell_finish_map_placement(existing);
 				pop_shell_broadcast_map_placement(existing);
 			}
+			population_engine_sync_shell_vehicle(existing);
 		}
 		return;
 	}
@@ -5587,6 +5598,13 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	// finish the placement explicitly, then broadcast the spawn + party dots.
 	pop_shell_finish_map_placement(shell);
 	pop_shell_broadcast_map_placement(shell);
+	// RAGNAROKMAC (vehicles): re-announce the mount/falcon/warg/mado HERE, after the final
+	// placement. spawn_shell already applied them, but this path then moves the shell with a
+	// second pc_setpos; the client drops and re-adds the entity across that move and the re-add
+	// carries no option, so the sprite came back bare while sc.option stayed correct (verified
+	// by @companion dump: 0x00100010 WUG|FALCON with no warg drawn). Announcing after the last
+	// position change is what makes the bits visible.
+	population_engine_sync_shell_vehicle(shell);
 }
 
 // RAGNAROKMAC (Goal 1): post-recall self-heal.
