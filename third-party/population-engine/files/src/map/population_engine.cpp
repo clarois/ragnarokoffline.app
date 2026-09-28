@@ -60,6 +60,12 @@
 // Unity-build: all submodule translation units compiled via the factory.
 #include "population_engine/population_engine_factory.cpp"
 #include "population_engine/core/pe_perf.hpp"
+#include "homunculus.hpp"
+
+// RAGNAROKMAC (homunculus): defined in homunculus.cpp, but this pin exports no declaration
+// of it through a header our TU includes. Declared at FILE scope on purpose - a declaration
+// inside an anonymous namespace would give it internal linkage and fail to link.
+void hom_alloc(map_session_data *sd, struct s_homunculus *hom);
 
 // Goal 2: per-shell equipment fingerprint (id -> last-snapshotted hash). A cheap
 // sum of equipped item ids; recomputed each combat tick, re-snapshot only on change.
@@ -480,6 +486,77 @@ static bool g_reserved_companion_indices_loaded = false;
 /// RAGNAROKMAC (vehicles): declared here because the job-advance path calls it long
 /// before its definition, which sits with spawn_shell further down.
 static void population_engine_sync_shell_vehicle(map_session_data *sd);
+static void population_engine_sync_shell_homunculus(map_session_data *sd);
+/// RAGNAROKMAC (homunculus): give an alchemist-line shell the homunculus its class entitles it
+/// to, driven by the engine rather than by a client.
+///
+/// The stock path cannot serve a shell. `hom_create_request()` creates nothing in the map
+/// server - it fills a struct and asks the CHAR server (`intif_homunculus_create`), and a shell
+/// carries a synthetic identity (`char_id == POPULATION_ENGINE_CHAR_ID_BASE + index`) with no
+/// `char` row for a `homunculus` row to belong to. So build `s_homunculus` in memory exactly as
+/// `hom_create_request` does and hand it to `hom_alloc()`, which is the map-side alloc/attach
+/// and touches nothing off-server.
+///
+/// `sd->status.hom_id` is deliberately left at 0. Every char-server call in the stock code is
+/// keyed on `hom_id`, so 0 turns them all into no-ops against real data: the row delete in
+/// `unit_free`'s BL_HOM case, and the load at login in `pc.cpp`. It follows that nothing stock
+/// can ever load or save this pet, so its own state has to be persisted separately - the
+/// companion's level and exp are the engine's to keep.
+///
+/// Idempotent: a shell that already has one is left alone, so this is safe on every recall.
+static void population_engine_sync_shell_homunculus(map_session_data *sd)
+{
+	if (sd == nullptr)
+		return;
+	// Never touch a real player's homunculus.
+	if (!population_engine_is_population_pc(sd->id))
+		return;
+	if (sd->hd != nullptr)
+		return; // already attached
+	// Alchemist line only, through the class's own skill: a skill gate needs no job whitelist,
+	// so advancing Alchemist -> Creator keeps the pet without a list to maintain.
+	if (pc_checkskill(sd, AM_CALLHOMUN) <= 0)
+		return;
+
+	// Deterministic class per companion. Stock picks at random (`HM_CLASS_BASE + rnd_value(0,7)`),
+	// which is fine for a one-off creation but wrong here: this runs again after every recall, so
+	// a random pick would change the pet out from under the player.
+	if (sd->status.char_id < POPULATION_ENGINE_CHAR_ID_BASE)
+		return; // not a population shell
+	const uint32_t index = sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE;
+	const int32_t hom_class = HM_CLASS_BASE + static_cast<int32_t>(index % 8);
+
+	std::shared_ptr<s_homunculus_db> homun_db = homunculus_db.homun_search(hom_class);
+	if (homun_db == nullptr)
+		return; // unknown class: do not hand hom_alloc something it would request a delete for
+
+	struct s_homunculus homun;
+	memset(&homun, 0, sizeof(homun));
+	safestrncpy(homun.name, homun_db->name, NAME_LENGTH - 1);
+	homun.class_ = hom_class;
+	homun.level = 1;   // growth is a later change; a pet that exists comes first
+	homun.hunger = 32; // stock newborn values, as hom_create_request sets them
+	homun.intimacy = 2100;
+	homun.char_id = sd->status.char_id;
+	// homun.hom_id stays 0 - that is what keeps the char server out of this.
+
+	const s_hom_stats base = homun_db->base;
+	homun.max_hp = base.HP;
+	homun.max_sp = base.SP;
+	homun.str = base.str * 10;
+	homun.agi = base.agi * 10;
+	homun.vit = base.vit * 10;
+	homun.int_ = base.int_ * 10;
+	homun.dex = base.dex * 10;
+	homun.luk = base.luk * 10;
+	// A summon arrives healthy. Stock's `hp = 10` is a newborn's first breath and would leave a
+	// companion's pet dead on arrival beside a levelled companion.
+	homun.hp = homun.max_hp;
+	homun.sp = homun.max_sp;
+
+	hom_alloc(sd, &homun);
+}
+
 static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, int y, uint32_t index,
 	uint16_t job_id, char sex, uint8_t hair_style, uint16_t hair_color,
 	uint16_t weapon, uint16_t shield, uint16_t head_top, uint16_t head_mid,
@@ -2327,6 +2404,7 @@ static void pop_companion_try_job_advance(map_session_data *sd)
 	// RAGNAROKMAC (vehicles): the new class may entitle the shell to a mount, falcon, warg or
 	// mado that the old one did not have (Swordsman -> Knight, Blacksmith -> Mechanic, ...).
 	population_engine_sync_shell_vehicle(sd);
+	population_engine_sync_shell_homunculus(sd);
 	// Persist the new job + reset job level right away so a crash can't roll it back.
 	population_engine_persist_companion_gear(sd);
 }
@@ -3995,6 +4073,7 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 	// RAGNAROKMAC (vehicles): mount / falcon / warg / mado, now that the tree is granted.
 	// Must come after the grants above, because every gate is pc_checkskill().
 	population_engine_sync_shell_vehicle(sd);
+	population_engine_sync_shell_homunculus(sd);
 
 	// max_weight must be raised before pc_additem: every pc_equipitem calls status_calc_pc
 	// which resets max_weight to job_base + str*300, causing subsequent pc_additem to fail
@@ -5429,6 +5508,22 @@ void population_engine_shell_dump(int fd)
 			pop_is_companion(sd) ? 1 : 0,
 			(unsigned)sd->sc.option, veh);
 		clif_displaymessage(fd, line);
+
+		// RAGNAROKMAC (homunculus): the pet as readable state, for the same reason the vehicle
+		// bits are printed above - "is it there" must not be a sprite someone has to judge.
+		if (sd->hd != nullptr) {
+			snprintf(line, sizeof(line), "@SHELLHOM|%u|1|%d|%d|%d|%d|%d|%d",
+				idx,
+				(int)sd->hd->homunculus.class_,
+				(int)sd->hd->homunculus.level,
+				(int)sd->hd->homunculus.hp,
+				(int)sd->hd->battle_status.max_hp,
+				(int)sd->hd->homunculus.hom_id,
+				(int)sd->hd->homunculus.vaporize);
+		} else {
+			snprintf(line, sizeof(line), "@SHELLHOM|%u|0|0|0|0|0|0", idx);
+		}
+		clif_displaymessage(fd, line);
 		++n;
 	}
 	snprintf(line, sizeof(line), "@SHELLEND|%zu", n);
@@ -5490,6 +5585,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 			// Re-announce the vehicle now that the shell is definitely on the grid: the
 			// option broadcast is AREA-scoped and reaches nobody while it is off-grid.
 			population_engine_sync_shell_vehicle(existing);
+			population_engine_sync_shell_homunculus(existing);
 		} else {
 			int16_t fx = existing->x, fy = existing->y;
 			if (!pop_companion_formation_cell(existing, owner, fx, fy)) { fx = existing->x; fy = existing->y; }
@@ -5499,6 +5595,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 				pop_shell_broadcast_map_placement(existing);
 			}
 			population_engine_sync_shell_vehicle(existing);
+			population_engine_sync_shell_homunculus(existing);
 		}
 		return;
 	}
@@ -5618,6 +5715,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	// by @companion dump: 0x00100010 WUG|FALCON with no warg drawn). Announcing after the last
 	// position change is what makes the bits visible.
 	population_engine_sync_shell_vehicle(shell);
+	population_engine_sync_shell_homunculus(shell);
 }
 
 // RAGNAROKMAC (Goal 1): post-recall self-heal.
