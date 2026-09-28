@@ -19,10 +19,10 @@ Snapshot date: **2026-09-28**.
 | Branch | `main` - companion work lands there directly now; the commit history is the sequence |
 | Upstream base | `upstream/main`; resolve it with `git log upstream/main -1` rather than trusting a SHA written here |
 | Upstream PR | `Flux159/ragnarokoffline.app#128` - deliberately on hold; nothing goes upstream without an explicit decision |
-| App baseline | Ragnarok Offline 1.3.1 (`package.json`); `v1.3.2` is the newest tag |
+| App baseline | Ragnarok Offline 1.3.5 (`package.json`); `v1.3.5` is the newest tag - bumped by the upstream merge of 2026-09-28 |
 | rAthena pin | `94919f5a0c309d5fbd1e32897f07644faedf3a30` (`Flux159/rathena`, branch `ragnarokoffline`) |
 | rAthena upstream pin | `e985006171d2eb320ee512a653f4c83aea3d81b6` - the merge base, fetched only by the diagnostics |
-| roBrowserLegacy pin | `7ed31a16df31b57c32f790d848fcc61af5e371e1` |
+| roBrowserLegacy pin | `474b058533f9db25046139fe4087aba8fbdfeec4` - the 2026-09-24 upstream merge; our client patch set was re-applied against it and is still idempotent |
 | ROenglishRE pin | `66cdfec631603fda6a90ba4bbe26ab07b5204c84` |
 
 These are a convenience copy of `config/VENDOR_PINS`; read that file when the two disagree.
