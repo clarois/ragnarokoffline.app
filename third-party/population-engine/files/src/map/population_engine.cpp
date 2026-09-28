@@ -5525,16 +5525,22 @@ void population_engine_shell_dump(int fd)
 		}
 		clif_displaymessage(fd, line);
 
-		// RAGNAROKMAC (homunculus, phase 2): what the driver decided - so "is it fighting" is
-		// read from server state rather than judged from a sprite, which is the one thing a
-		// screenshot cannot settle.
+		// RAGNAROKMAC (homunculus, phase 2/3): what the driver decided and how far the pet has
+		// grown - so "is it fighting" and "is it levelling" are read from server state rather
+		// than judged from a sprite, which is the one thing a screenshot cannot settle.
 		if (sd->hd != nullptr) {
-			snprintf(line, sizeof(line), "@SHELLHOMAI|%u|%u|%d|%d|%d",
+			// Level and exp come from the pet's own s_homunculus, not the shell's status: the
+			// stock kill path pays the pet directly, so this is where growth is readable.
+			snprintf(line, sizeof(line), "@SHELLHOMAI|%u|%u|%d|%d|%d|%d|%lld|%lld|%d",
 				idx,
 				static_cast<uint32>(sd->hd->ud.target),
 				sd->hd->ud.attacktimer != INVALID_TIMER ? 1 : 0,
 				distance_bl(sd, sd->hd),
-				sd->hd->ud.walktimer != INVALID_TIMER ? 1 : 0);
+				sd->hd->ud.walktimer != INVALID_TIMER ? 1 : 0,
+				(int)sd->hd->homunculus.level,
+				static_cast<long long>(sd->hd->homunculus.exp),
+				static_cast<long long>(sd->hd->exp_next),
+				(int)sd->hd->homunculus.skillpts);
 			clif_displaymessage(fd, line);
 		}
 		++n;

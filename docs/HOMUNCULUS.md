@@ -119,6 +119,19 @@ fight should not be picking one.
 Level/exp from kills, written through `cp_companion_persistence`; panel toggle; the v8
 migration.
 
+**Growth — already stock, and verified safe (no award code was written).** `mob.cpp` pays
+`hom_gainexp(tmpsd[i]->hd, base_exp * battle_config.homunculus_exp_gain / 100)` to every exp
+receiver that owns a homunculus, so a companion's in-memory pet is paid on its own kills like a
+player's. Every notify on that path is safe for a shell: `clif_homunculus_updatestatus` sends
+with `clif_send(..., SELF)`, SELF is guarded by `clif_session_isValid(sd)`, and the AREA paths use
+`session_isActive(fd)` — which is built on `session_isValid(fd)`, i.e. `fd > 0 && ...`, so a
+shell's `fd == 0` makes them no-ops rather than writes into `session[0]`. `hom_alloc` already sets
+`hd->homunculusDB` and `hd->exp_next`, which is exactly what `hom_levelup` needs, and the class
+this feature picks (`HM_CLASS_BASE + index % 8`, i.e. 6001-6008) is precisely the block
+`hom_class2mapid` accepts. The engine therefore writes no exp of its own, by design — a second
+award path would double-pay. `@companion dump` carries level, exp, exp_next and skill points so
+growth is readable.
+
 ## Traps
 
 | Trap | Handling |
