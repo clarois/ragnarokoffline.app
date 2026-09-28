@@ -10,7 +10,10 @@
 // sprites render doubled on WebKit (roBrowserLegacy #1350). One engine
 // everywhere is worth ~60 MB of download.
 //
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, clipboard, screen, session, safeStorage, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, clipboard, screen, session, safeStorage, powerMonitor, protocol } = require('electron');
+// Mods' own settings pages are served from a private scheme, which Chromium
+// only accepts if it is declared before the app is ready.
+require('./mod-settings-window').registerScheme(protocol);
 // Quiet launches mute every window for this run, without persisting a setting.
 if (process.argv.includes('--quiet')) {
     app.on('web-contents-created', (_event, contents) => contents.setAudioMuted(true));
@@ -895,6 +898,10 @@ const SETTINGS_DEFAULTS = {
 	// for why raising one writes several keys.
 	max_aspd: 190,
 	max_parameter: 99,
+	// How much of the map the server sends, with the walk limit and monster
+	// sight that have to move alongside it -- see electron/view-distance.js.
+	// 'official' is rAthena's stock numbers.
+	view_distance: 'official',
 	free_kafra_warp: true,
 	// Discord request (Joel): ammo of every kind never runs out. Maps to
 	// rAthena's arrow_decrement (conf/battle/battle.conf): stock is 1 =
@@ -939,6 +946,10 @@ const SETTINGS_DEFAULTS = {
 	// better served reading that. See GameText in stack/src/assets.rs for why
 	// the text and the codepage are one setting rather than two.
 	game_text: 'english',
+	// Which client version the server is built for and the client speaks --
+	// see electron/packetvers.js. null follows the app's default rather than
+	// pinning today's, so a later app that moves the default moves this too.
+	packetver: null,
 };
 
 function getSettings() {
@@ -1053,6 +1064,7 @@ function toBattleConf(s) {
 		// touched nothing.
 		aspdConf(s.max_aspd) +
 		parameterConf(s.max_parameter) +
+		require('./view-distance').viewDistanceConf(s) +
 		// Population keys: one module so the Settings window and the server
 		// share their bounds -- see electron/population-conf.js.
 		require('./population-conf').lines(s)
@@ -1719,7 +1731,7 @@ const handlers = {
 		// the app would not run it, and the difference is the whole point of
 		// having a reason to show.
 		return out.split('\n').filter(Boolean).map(l => {
-			const [state, name, description, reason, origin, version, author, grants, settings, problems] = l.split('\t');
+			const [state, name, description, reason, origin, version, author, grants, settings, problems, settingsPage, dir] = l.split('\t');
 			return {
 				name,
 				enabled: state === 'on',
@@ -1747,6 +1759,10 @@ const handlers = {
 				problems: (() => {
 					try { return JSON.parse(problems || '[]'); } catch { return []; }
 				})(),
+				// The mod's own settings page and its folder, when it has one.
+				// Empty from an older supervisor, which never writes them.
+				settingsPage: settingsPage || '',
+				dir: dir || '',
 			};
 		});
 	},
@@ -1761,6 +1777,9 @@ const handlers = {
 		if (clientComplete(getClientPaths())) await linkClient(getClientPaths());
 		return { applied: true };
 	},
+	// A mod's own settings page, in a window of its own. What that window can
+	// do is decided in mod-settings-window.js, not here.
+	open_mod_settings: ({ name }) => modSettingsWindows().open(String(name), windows.settings),
 	// Install a mod from a folder or a .zip the player chose.
 	//
 	// A mod is not data: it drops scripts and tables into the server's paths and
@@ -1774,6 +1793,50 @@ const handlers = {
 		if (!picked) return 'Cancelled.';
 		const src = Array.isArray(picked) ? picked[0] : picked;
 		return installModFrom(src);
+	},
+	// Remove a mod the player installed.
+	//
+	// To the system trash rather than deleted, so a wrong click costs a trip
+	// to the trash and not a mod. The supervisor then forgets what was chosen
+	// about it -- switched off, options -- so a later install under the same
+	// name starts from its own defaults. A mod that ships with the app is not
+	// in state/mods and has no Remove button; this refuses it anyway, because
+	// the page is not the one who decides what may be deleted.
+	remove_mod: async ({ name }) => {
+		const { modFolder } = require('./mod-remove');
+		const rows = (await runStack(['mods'])).split('\n').filter(Boolean).map(l => l.split('\t'));
+		const row = rows.find(r => r[1] === name);
+		if (row && row[4] === 'bundled') throw new Error(`${name} comes with the app and cannot be removed. Switch it off instead.`);
+		const target = modFolder(path.join(stateDir(), 'mods'), name);
+		const parent = BrowserWindow.getFocusedWindow();
+		const question = {
+			type: 'warning',
+			buttons: ['Remove', 'Cancel'],
+			defaultId: 1,
+			cancelId: 1,
+			message: `Remove ${name}?`,
+			detail: 'Its folder goes to the trash, and its on/off choice and options are forgotten. Characters and items are not touched.',
+		};
+		const { response } = parent ? await dialog.showMessageBox(parent, question) : await dialog.showMessageBox(question);
+		if (response !== 0) return 'Cancelled.';
+		try {
+			await shell.trashItem(target);
+		} catch (e) {
+			throw new Error(`${name} could not be moved to the trash (${(e && e.message) || e}). Nothing was removed; you can delete the folder from Open mods folder.`);
+		}
+		appLog(`removed mod ${name} to the trash`);
+		// The folder is already gone, so a failure past this point is reported
+		// but does not undo anything.
+		try {
+			await runStack(['mod-forget', name]);
+		} catch (e) {
+			appLog(`mod-forget ${name} failed: ${(e && e.message) || e}`);
+		}
+		// Client-side files the mod shipped leave the game with the next
+		// overlay, the same way changed options reach it.
+		if (clientComplete(getClientPaths())) await linkClient(getClientPaths());
+		const wasOn = row && row[0] === 'on';
+		return `Removed ${name} (moved to the trash).${wasOn ? ' Apply to restart the server without it.' : ''}`;
 	},
 	open_mods_folder: () => {
 		const dir = path.join(stateDir(), 'mods');
@@ -2247,6 +2310,7 @@ const handlers = {
 	// this data.grf. Kept out of get_client_paths, whose result the setup screen
 	// hands back to set_client_paths to be saved.
 	client_folders: ({ data_grf }) => require('./client-folders').clientFolders(data_grf),
+	packetvers: () => require('./packetvers').list(projectRoot()),
 	set_client_paths: async ({ paths }) => {
 		const next = { ...getClientPaths(), ...paths };
 		if (next.mode === 'join') {
@@ -2517,6 +2581,34 @@ function queueServerOperation(operation) {
 	const pending = serverOperationQueue.then(operation);
 	serverOperationQueue = pending.catch(() => {});
 	return pending;
+}
+
+// Created on first use: the IPC channels a mod's settings page talks to exist
+// only once a player has opened one.
+let modSettingsController = null;
+function modSettingsWindows() {
+	if (!modSettingsController) {
+		modSettingsController = require('./mod-settings-window').create({
+			BrowserWindow,
+			session,
+			ipcMain,
+			preload: path.join(__dirname, 'mod-settings-preload.js'),
+			listMods: () => handlers.list_mods(),
+			saveSettings: (name, values) => handlers.set_mod_settings({ name, values }),
+			// The same restart as Apply in Settings, through the same queue, and
+			// sharing is offered back afterwards exactly as it is there.
+			apply: async () => {
+				await queueServerOperation(() => handlers.stack_up());
+				resumeSharing('after a mod settings window applied');
+			},
+			context: () => ({
+				era: getSettings().prerenewal ? 'pre-renewal' : 'renewal',
+				appVersion: app.getVersion(),
+			}),
+			log: appLog,
+		});
+	}
+	return modSettingsController;
 }
 
 // Only our exact bundled top-level pages own the host controls. A generic

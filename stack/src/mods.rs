@@ -115,6 +115,14 @@ pub struct Manifest {
     /// is ignored. This is how a mod says "my copy of that table wins" without
     /// having to be named later in the alphabet than somebody else's folder.
     pub after: Vec<String>,
+    /// The mod's own settings page, as a path inside its folder
+    /// (`"settingsPage": "settings/index.html"`). Empty when it has none.
+    ///
+    /// The app opens it in a window of its own that can read and write this
+    /// mod's declared settings and nothing else; the settings above are still
+    /// what is validated and stored. Checked here for shape and existence so a
+    /// typo is a refusal with a reason rather than a button that does nothing.
+    pub settings_page: String,
 }
 
 /// One declared option. Deliberately three scalar types: anything richer is a
@@ -172,6 +180,7 @@ impl Default for Manifest {
             settings: Vec::new(),
             requires_mods: Vec::new(),
             after: Vec::new(),
+            settings_page: String::new(),
         }
     }
 }
@@ -408,7 +417,33 @@ fn read_manifest(dir: &Path) -> Result<Option<Manifest>, String> {
             }
         }
     }
+    if v.get("settingsPage").is_some() {
+        let Some(page) = v.str("settingsPage") else {
+            return Err("mod.json: \"settingsPage\" must be a path like \"settings/index.html\"".into());
+        };
+        m.settings_page = settings_page(dir, page)?;
+    }
     Ok(Some(m))
+}
+
+/// A settings page path, checked: relative, forward slashes, nothing that
+/// climbs out of the mod folder, an `.html` file that is actually there.
+fn settings_page(dir: &Path, page: &str) -> Result<String, String> {
+    let shaped = !page.is_empty()
+        && page.len() <= 200
+        && !page.starts_with('/')
+        && !page.contains(['\\', ':', '\0'])
+        && page.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
+        && (page.ends_with(".html") || page.ends_with(".htm"));
+    if !shaped {
+        return Err(format!(
+            "mod.json: \"settingsPage\" must be an .html file inside the mod folder, like \"settings/index.html\" (got {page:?})"
+        ));
+    }
+    if !dir.join(page).is_file() {
+        return Err(format!("mod.json: the settings page {page:?} is not in the mod folder"));
+    }
+    Ok(page.to_string())
 }
 
 /// Compare a version rule against what this build is.
@@ -610,17 +645,8 @@ fn conditional_conf(dir: &Path, name: &str, settings: &[(String, String)]) -> Ve
     keys.sort();
     for folder in keys {
         let key = folder.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
-        match settings.iter().find(|(k, _)| *k == key).map(|(_, v)| v.as_str()) {
-            Some("true") => {}
-            Some("false") => continue,
-            Some(_) => {
-                eprintln!("mods: {name} has conf/when/{key}/, but \"{key}\" is not a yes/no setting -- ignoring it");
-                continue;
-            }
-            None => {
-                eprintln!("mods: {name} has conf/when/{key}/, but its mod.json declares no setting \"{key}\" -- ignoring it");
-                continue;
-            }
+        if conditional_setting(name, "conf", &key, settings) != Some(true) {
+            continue;
         }
         let Ok(files) = fs::read_dir(&folder) else { continue };
         let mut files: Vec<PathBuf> = files.flatten().map(|e| e.path()).collect();
@@ -640,6 +666,62 @@ fn conditional_conf(dir: &Path, name: &str, settings: &[(String, String)]) -> Ve
         }
     }
     out
+}
+
+fn conditional_setting(name: &str, layer: &str, key: &str, settings: &[(String, String)]) -> Option<bool> {
+    match settings.iter().find(|(k, _)| *k == key).map(|(_, v)| v.as_str()) {
+        Some("true") => Some(true),
+        Some("false") => Some(false),
+        Some(_) => {
+            eprintln!(
+                "mods: {name} has {layer}/when/{key}/, but \"{key}\" is not a yes/no setting -- ignoring it"
+            );
+            None
+        }
+        None => {
+            eprintln!(
+                "mods: {name} has {layer}/when/{key}/, but its mod.json declares no setting \"{key}\" -- ignoring it"
+            );
+            None
+        }
+    }
+}
+
+fn copy_npc_layer(
+    from: &Path,
+    dst: &Path,
+    name: &str,
+    settings: &[(String, String)],
+) -> Result<(), String> {
+    let Ok(rd) = fs::read_dir(from) else { return Ok(()) };
+    let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for path in entries {
+        let file = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        if file == "when" && path.is_dir() {
+            continue;
+        }
+        let target = dst.join(&file);
+        if path.is_dir() {
+            copy_tree(&path, &target)?;
+        } else {
+            fs::create_dir_all(dst).map_err(|e| format!("creating {}: {e}", dst.display()))?;
+            fs::copy(&path, &target).map_err(|e| format!("copying {}: {e}", path.display()))?;
+        }
+    }
+
+    let when = from.join("when");
+    let Ok(rd) = fs::read_dir(&when) else { return Ok(()) };
+    let mut keys: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    keys.sort();
+    for folder in keys {
+        let key = folder.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        if conditional_setting(name, "npc", &key, settings) != Some(true) {
+            continue;
+        }
+        copy_tree(&folder, &dst.join("when").join(&key))?;
+    }
+    Ok(())
 }
 
 /// Where the player's answers live.
@@ -1275,6 +1357,14 @@ pub fn assemble(cfg: &Config) -> Result<Assembled, String> {
         out.db = Some(dst);
     }
 
+    // The player's answers decide which of a mod's conditional fragments
+    // are part of it. A damaged answers file is said, and every mod then gets
+    // its declared defaults rather than the server refusing to start.
+    let saved = read_settings(&cfg.state).unwrap_or_else(|e| {
+        eprintln!("mods: {e}");
+        BTreeMap::new()
+    });
+
     // Stock scripts first, so a mod's own can duplicate or disable them.
     let mut stock: Vec<String> = Vec::new();
     for m in &live {
@@ -1284,13 +1374,27 @@ pub fn assemble(cfg: &Config) -> Result<Assembled, String> {
     if !stock.is_empty() {
         println!("stock scripts: {}", stock.len());
     }
+    // Then F_ModSetting, so any mod's script can read its settings. Written
+    // only when some mod ships scripts, since nothing else could call it. A
+    // file directly in npc/, not a folder, so it cannot collide with a mod's.
+    if live.iter().any(|m| m.dir.join("npc").is_dir()) {
+        let values: Vec<(String, Vec<(String, ScriptValue)>)> = live
+            .iter()
+            .map(|m| (m.name.clone(), script_values(&m.manifest, &effective(&m.manifest, saved.get(&m.name)))))
+            .collect();
+        fs::create_dir_all(build.join("npc")).map_err(|e| format!("mods: npc build folder: {e}"))?;
+        fs::write(build.join("npc").join(SETTINGS_SCRIPT), settings_script(&values))
+            .map_err(|e| format!("mods: {SETTINGS_SCRIPT}: {e}"))?;
+        lines.push_str(&format!("npc: npc/mods/{SETTINGS_SCRIPT}\n"));
+    }
     for m in &live {
         let from = m.dir.join("npc");
         if !from.is_dir() {
             continue;
         }
         let dst = build.join("npc").join(&m.name);
-        copy_tree(&from, &dst)?;
+        let settings = effective(&m.manifest, saved.get(&m.name));
+        copy_npc_layer(&from, &dst, &m.name, &settings)?;
         // One `npc:` line per script. Paths are container-side, under the mount
         // point rather than the host path, and forward-slashed because rAthena
         // parses them itself rather than handing them to the OS.
@@ -1305,18 +1409,116 @@ pub fn assemble(cfg: &Config) -> Result<Assembled, String> {
         out.npc_lines = lines;
     }
 
-    // The player's answers decide which of a mod's conditional conf fragments
-    // are part of it. A damaged answers file is said, and every mod then gets
-    // its declared defaults rather than the server refusing to start.
-    let saved = read_settings(&cfg.state).unwrap_or_else(|e| {
-        eprintln!("mods: {e}");
-        BTreeMap::new()
-    });
     for m in &live {
         let settings = effective(&m.manifest, saved.get(&m.name));
         read_conf(&m.dir, &m.name, &settings, &mut out.conf);
     }
     Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Settings, for scripts
+// ---------------------------------------------------------------------------
+
+/// The generated script that lets an NPC read its mod's settings:
+///
+/// ```text
+/// .@set$  = callfunc("F_ModSetting", "standart-npc", "buffer_set", "");
+/// .@rate  = callfunc("F_ModSetting", "standart-npc", "gramps_rate", 1);
+/// ```
+///
+/// Booleans arrive as 1 or 0 and numbers as whole numbers, because rAthena
+/// scripts have no other kind; strings arrive as strings. A mod or key that is
+/// not there returns the optional fourth argument, so a script can say what
+/// it wants instead of guessing what "nothing" is for its type.
+pub const SETTINGS_SCRIPT: &str = "mod-settings.txt";
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptValue {
+    Int(i64),
+    Text(String),
+}
+
+/// The values `effective` settled on, in the types a script can hold.
+fn script_values(manifest: &Manifest, values: &[(String, String)]) -> Vec<(String, ScriptValue)> {
+    manifest
+        .settings
+        .iter()
+        .zip(values)
+        .map(|(setting, (key, raw))| {
+            let value = match &setting.value {
+                SettingValue::Bool(_) => ScriptValue::Int(i64::from(raw == "true")),
+                // Truncated toward zero and kept inside rAthena's 32-bit int,
+                // which is what older script engines still use.
+                SettingValue::Number(_) => {
+                    let n = raw.parse::<f64>().unwrap_or(0.0);
+                    let n = if n.is_finite() { n.trunc() } else { 0.0 };
+                    ScriptValue::Int(n.clamp(i32::MIN as f64, i32::MAX as f64) as i64)
+                }
+                SettingValue::Text(_) => ScriptValue::Text(match json::parse(raw) {
+                    Ok(json::Value::String(text)) => text,
+                    _ => String::new(),
+                }),
+            };
+            (key.clone(), value)
+        })
+        .collect()
+}
+
+/// A string as an rAthena script literal.
+///
+/// This is the one place a value somebody typed ends up *inside* a script, so
+/// it is the one place that must not be able to end the string early: a quote
+/// or backslash is escaped, and anything that is not printable -- newlines
+/// included, which would end the line the literal is on -- becomes a space.
+fn script_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if c.is_control() => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn settings_script(mods: &[(String, Vec<(String, ScriptValue)>)]) -> String {
+    let mut out = String::from(
+        "//===== Ragnarok Offline ====================================\n\
+         //= Mod settings, for scripts. Written on every server start from\n\
+         //= the answers in Settings -> Mods; do not edit, it is replaced.\n\
+         //=\n\
+         //=   callfunc(\"F_ModSetting\", \"<mod>\", \"<key>\" {, <if missing>})\n\
+         //============================================================\n\
+         function\tscript\tF_ModSetting\t{\n\
+         \t.@mod$ = getarg(0);\n\
+         \t.@key$ = getarg(1);\n",
+    );
+    for (name, values) in mods {
+        if values.is_empty() {
+            continue;
+        }
+        out.push_str(&format!("\tif (.@mod$ == {}) {{\n", script_string(name)));
+        for (key, value) in values {
+            let literal = match value {
+                ScriptValue::Int(n) => n.to_string(),
+                ScriptValue::Text(t) => script_string(t),
+            };
+            out.push_str(&format!("\t\tif (.@key$ == {}) return {literal};\n", script_string(key)));
+        }
+        out.push_str("\t}\n");
+    }
+    out.push_str(
+        "\tif (getargcount() > 2) return getarg(2);\n\
+         \tdebugmes \"F_ModSetting: \" + .@mod$ + \" has no setting \" + .@key$ + \" (pass a fourth argument to say what to use instead)\";\n\
+         \treturn 0;\n\
+         }\n",
+    );
+    out
 }
 
 /// Write the cache and the index a custom map needs, into the `db/import`
@@ -1517,6 +1719,12 @@ pub fn save_settings(cfg: &Config, name: &str, body: &str) -> Result<(), String>
     }
     let mut all = read_settings(&cfg.state)?;
     all.insert(name.to_string(), chosen);
+    write_settings(&cfg.state, &all)
+}
+
+/// The whole of `mod-settings.json`, written to a scratch file and renamed
+/// over the old one, so a crash mid-write leaves the previous answers intact.
+fn write_settings(state: &Path, all: &BTreeMap<String, BTreeMap<String, String>>) -> Result<(), String> {
     let document = all
         .iter()
         .map(|(mod_name, values)| {
@@ -1529,7 +1737,7 @@ pub fn save_settings(cfg: &Config, name: &str, body: &str) -> Result<(), String>
         })
         .collect::<Vec<_>>()
         .join(",\n");
-    let path = settings_path(&cfg.state);
+    let path = settings_path(state);
     let temporary = path.with_extension("json.tmp");
     fs::write(&temporary, format!("{{\n{document}\n}}\n"))
         .map_err(|e| format!("writing mod settings: {e}"))?;
@@ -1852,7 +2060,7 @@ fn load_report(state: &Path) -> BTreeMap<String, Vec<String>> {
     out
 }
 
-pub fn list(cfg: &Config) -> Vec<[String; 10]> {
+pub fn list(cfg: &Config) -> Vec<[String; 12]> {
     let saved = read_settings(&cfg.state).unwrap_or_default();
     let reported = load_report(&cfg.state);
     scan(cfg)
@@ -1891,6 +2099,15 @@ pub fn list(cfg: &Config) -> Vec<[String; 10]> {
                         format!("[{}]", items.join(","))
                     }
                 },
+                // The mod's own settings page, relative to its folder, and the
+                // folder itself -- the window that shows the page is confined
+                // to that folder. Both empty for a mod with no page.
+                one_line(&m.manifest.settings_page),
+                if m.manifest.settings_page.is_empty() {
+                    String::new()
+                } else {
+                    one_line(&m.dir.to_string_lossy())
+                },
             ]
         })
         .collect()
@@ -1906,6 +2123,30 @@ pub fn set_enabled(state: &Path, name: &str, on: bool) -> Result<(), String> {
         "# Mods listed here are installed but switched off.")?;
     write_list(state, "enabled.txt", name, on,
         "# Mods listed here are switched on, including any that ship switched off.")
+}
+
+/// Forget every choice the player made about a mod: its line in either list
+/// and its saved options.
+///
+/// Called after the mod's folder has been removed. Leaving the choices behind
+/// would hand them to whatever is installed under the same name next -- a
+/// fresh download of the mod would come back switched off, or with options
+/// the player set for an older version. Forgetting a mod nobody chose anything
+/// about is not an error.
+pub fn forget(state: &Path, name: &str) -> Result<(), String> {
+    for (file, header) in [
+        ("disabled.txt", "# Mods listed here are installed but switched off."),
+        ("enabled.txt", "# Mods listed here are switched on, including any that ship switched off."),
+    ] {
+        if read_list(state, file).iter().any(|n| n == name) {
+            write_list(state, file, name, false, header)?;
+        }
+    }
+    let mut all = read_settings(state)?;
+    if all.remove(name).is_some() {
+        write_settings(state, &all)?;
+    }
+    Ok(())
 }
 
 fn write_list(state: &Path, file: &str, name: &str, present: bool, header: &str) -> Result<(), String> {
@@ -2269,6 +2510,80 @@ mod tests {
     }
     use super::*;
 
+    // A setting's value is the only thing a player types that lands inside a
+    // script, so it must not be able to end its string and add code.
+    #[test]
+    fn a_script_string_cannot_be_broken_out_of() {
+        assert_eq!(script_string("plain"), "\"plain\"");
+        assert_eq!(script_string("say \"hi\""), "\"say \\\"hi\\\"\"");
+        assert_eq!(script_string("a\\b"), "\"a\\\\b\"");
+        assert_eq!(script_string("line\nnext\r\tend"), "\"line next  end\"");
+        let hostile = "\"; atcommand \"@item 501 100\"; //\n}";
+        let literal = script_string(hostile);
+        assert_eq!(literal, "\"\\\"; atcommand \\\"@item 501 100\\\"; // }\"");
+        // Every quote inside the literal is escaped, so the only ones that
+        // count are the two around it.
+        let unescaped = literal.char_indices().filter(|&(i, c)| c == '"' && (i == 0 || &literal[i - 1..i] != "\\")).count();
+        assert_eq!(unescaped, 2);
+        assert!(!literal.contains('\n'));
+    }
+
+    #[test]
+    fn settings_reach_scripts_in_the_types_scripts_have() {
+        let manifest = Manifest {
+            settings: vec![
+                setting("on", SettingValue::Bool(true), 0.0, 0.0),
+                setting("rate", SettingValue::Number(1.0), -1e12, 1e12),
+                setting("set", SettingValue::Text(String::new()), 0.0, 200.0),
+            ],
+            ..Manifest::default()
+        };
+        let raw = vec![
+            ("on".to_string(), "false".to_string()),
+            ("rate".to_string(), "2.7".to_string()),
+            ("set".to_string(), "\"blessing,agi \\\"x\\\"\"".to_string()),
+        ];
+        assert_eq!(
+            script_values(&manifest, &raw),
+            vec![
+                ("on".to_string(), ScriptValue::Int(0)),
+                ("rate".to_string(), ScriptValue::Int(2)),
+                ("set".to_string(), ScriptValue::Text("blessing,agi \"x\"".to_string())),
+            ]
+        );
+        let huge = vec![
+            ("on".to_string(), "true".to_string()),
+            ("rate".to_string(), "-900000000000".to_string()),
+            ("set".to_string(), "\"\"".to_string()),
+        ];
+        let values = script_values(&manifest, &huge);
+        assert_eq!(values[0].1, ScriptValue::Int(1));
+        assert_eq!(values[1].1, ScriptValue::Int(i32::MIN as i64));
+    }
+
+    #[test]
+    fn the_generated_function_answers_each_mod_and_falls_back() {
+        let script = settings_script(&[
+            (
+                "standart-npc".to_string(),
+                vec![
+                    ("buffer_set".to_string(), ScriptValue::Text("blessing,agi".to_string())),
+                    ("enable_gramps".to_string(), ScriptValue::Int(1)),
+                ],
+            ),
+            ("no-settings".to_string(), vec![]),
+        ]);
+        assert!(script.contains("function\tscript\tF_ModSetting\t{\n"));
+        assert!(script.contains("\tif (.@mod$ == \"standart-npc\") {\n"));
+        assert!(script.contains("\t\tif (.@key$ == \"buffer_set\") return \"blessing,agi\";\n"));
+        assert!(script.contains("\t\tif (.@key$ == \"enable_gramps\") return 1;\n"));
+        assert!(!script.contains("no-settings"));
+        assert!(script.contains("\tif (getargcount() > 2) return getarg(2);\n"));
+        assert!(script.trim_end().ends_with('}'));
+        // Braces balance, so rAthena reads it as one function.
+        assert_eq!(script.matches('{').count(), script.matches('}').count());
+    }
+
     fn setting(key: &str, value: SettingValue, min: f64, max: f64) -> Setting {
         Setting { key: key.into(), label: key.into(), description: String::new(), value, min, max }
     }
@@ -2360,11 +2675,65 @@ mod tests {
         assert!(era_requirement_met("classic", true).is_err());
     }
 
+    // Removing a mod must not leave its choices behind for the next mod
+    // installed under that name, and must not touch anybody else's.
+    #[test]
+    fn forgetting_a_mod_drops_its_list_lines_and_options_only() {
+        let state = tmp("mod-forget");
+        set_enabled(&state, "gone", false).unwrap();
+        set_enabled(&state, "kept", true).unwrap();
+        fs::write(
+            settings_path(&state),
+            "{\n  \"gone\": { \"a\": true },\n  \"kept\": { \"b\": 3 }\n}\n",
+        )
+        .unwrap();
+
+        forget(&state, "gone").unwrap();
+
+        assert!(!read_list(&state, "disabled.txt").contains(&"gone".to_string()));
+        assert_eq!(read_list(&state, "enabled.txt"), vec!["kept".to_string()]);
+        let saved = read_settings(&state).unwrap();
+        assert!(!saved.contains_key("gone"));
+        assert_eq!(saved["kept"]["b"], "3");
+
+        // Nothing recorded at all is not an error.
+        forget(&state, "never-installed").unwrap();
+    }
+
     fn tmp(tag: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("ro-mods-{}-{tag}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    // The settings page is part of the manifest's contract: a path that
+    // leaves the mod folder, or a file that is not there, refuses the mod
+    // with the reason rather than offering a button that opens nothing.
+    #[test]
+    fn a_settings_page_must_be_an_html_file_inside_the_mod() {
+        let dir = tmp("settings-page");
+        fs::create_dir_all(dir.join("settings")).unwrap();
+        fs::write(dir.join("settings/index.html"), "<p>hi</p>").unwrap();
+        let with = |page: &str| {
+            fs::write(dir.join("mod.json"), format!("{{\"settingsPage\": {}}}", crate::json::quote(page))).unwrap();
+            read_manifest(&dir)
+        };
+        assert_eq!(with("settings/index.html").unwrap().unwrap().settings_page, "settings/index.html");
+        for bad in ["", "../x.html", "settings/../../x.html", "/abs.html", "C:/x.html", "settings\\index.html", "settings/index.js", "./settings/index.html"] {
+            assert!(with(bad).is_err(), "{bad:?} should be refused");
+        }
+        assert!(with("settings/missing.html").unwrap_err().contains("not in the mod folder"));
+        fs::write(dir.join("mod.json"), "{\"settingsPage\": 3}").unwrap();
+        assert!(read_manifest(&dir).is_err());
+        fs::write(dir.join("mod.json"), "{}").unwrap();
+        assert_eq!(read_manifest(&dir).unwrap().unwrap().settings_page, "");
+
+        // The example the docs point at reads back as documented.
+        let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/mods/settings-window");
+        let manifest = read_manifest(&example).unwrap().unwrap();
+        assert_eq!(manifest.settings_page, "settings/index.html");
+        assert_eq!(manifest.settings.len(), 2);
     }
 
     #[test]
@@ -2519,6 +2888,44 @@ mod tests {
         fs::remove_file(d.join("conf/groups.yml")).unwrap();
         let m = Installed { name: "pc".into(), dir: d, status: Status::Off, manifest: Manifest::default(), bundled: true };
         assert!(m.grants_commands());
+    }
+
+    #[test]
+    fn conditional_npc_scripts_follow_only_boolean_settings() {
+        let d = tmp("npc-when");
+        fs::create_dir_all(d.join("npc/when/enabled")).unwrap();
+        fs::create_dir_all(d.join("npc/when/disabled")).unwrap();
+        fs::create_dir_all(d.join("npc/when/number")).unwrap();
+        fs::create_dir_all(d.join("npc/when/undeclared")).unwrap();
+        fs::write(d.join("npc/plain.txt"), "plain").unwrap();
+        fs::write(d.join("npc/when/enabled/on.txt"), "on").unwrap();
+        fs::write(d.join("npc/when/disabled/off.txt"), "off").unwrap();
+        fs::write(d.join("npc/when/number/no.txt"), "number").unwrap();
+        fs::write(d.join("npc/when/undeclared/no.txt"), "unknown").unwrap();
+
+        let dst = d.join("build");
+        copy_npc_layer(
+            &d.join("npc"),
+            &dst,
+            "npc-test",
+            &[
+                ("enabled".into(), "true".into()),
+                ("disabled".into(), "false".into()),
+                ("number".into(), "1".into()),
+            ],
+        )
+        .unwrap();
+        let mut lines = String::new();
+        collect_scripts(&dst, "npc/mods/npc-test", &mut lines);
+
+        assert!(dst.join("plain.txt").is_file());
+        assert!(dst.join("when/enabled/on.txt").is_file());
+        assert!(!dst.join("when/disabled/off.txt").exists());
+        assert!(!dst.join("when/number/no.txt").exists());
+        assert!(!dst.join("when/undeclared/no.txt").exists());
+        assert!(lines.contains("npc: npc/mods/npc-test/plain.txt\n"));
+        assert!(lines.contains("npc: npc/mods/npc-test/when/enabled/on.txt\n"));
+        assert!(!lines.contains("off.txt"));
     }
 
     /// Two mods' groups.yml used to resolve last-wins, discarding the first.
