@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Verify every client bitmap the CompanionPanel references actually exists.
 //
 // This is the check that was missing when the panel's tabs disappeared: the HTML
@@ -32,7 +34,7 @@ function discoverPort() {
 	for (const file of ['assets.log', 'app.log']) {
 		const p = path.join(state, file);
 		if (!fs.existsSync(p)) continue;
-		const m = fs.readFileSync(p, 'utf8').match(/http:\/\/localhost:(\d+)/);
+		const m = fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n').match(/http:\/\/localhost:(\d+)/);
 		if (m) return Number(m[1]);
 	}
 	return null;
@@ -58,7 +60,7 @@ function referencedBitmaps(html) {
 	return [...found];
 }
 
-const html = fs.readFileSync(HTML, 'utf8');
+const html = fs.readFileSync(HTML, 'utf8').replace(/\r\n/g, '\n');
 const bitmaps = referencedBitmaps(html);
 const port = Number(process.argv[2]) || discoverPort();
 
@@ -99,7 +101,7 @@ test('the HTML wraps its content in the component-named root div', () => {
 	// match the host - it matches this wrapper. Without it every rule in the
 	// stylesheet is dead and the window renders unstyled and unsized, which is
 	// exactly how it shipped once. CheckAttendance.html and Bank.html wrap the same.
-	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8').replace(/\r\n/g, '\n');
 	const usesId = /#CompanionPanel\b/.test(css);
 	assert.ok(usesId, 'the stylesheet is expected to root its rules at #CompanionPanel');
 	assert.match(html, /<div id="CompanionPanel">/, 'the HTML must wrap its content in <div id="CompanionPanel">');
@@ -108,15 +110,15 @@ test('the HTML wraps its content in the component-named root div', () => {
 test('the window is sized by its content, not a fixed pixel width', () => {
 	// A fixed width is what cropped the right-hand side when a tab's content was
 	// wider than the panel.
-	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8').replace(/\r\n/g, '\n');
 	const panel = css.slice(css.indexOf('#CompanionPanel .panel'));
 	assert.match(panel.slice(0, 400), /width:\s*max-content/, 'the panel should follow its content width');
 });
 
 test('a resize grip exists in both the markup and its stylesheet', () => {
 	assert.match(html, /class="resize-grip"/, 'the markup needs the grip element');
-	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8').replace(/\r\n/g, '\n');
 	assert.match(css, /#CompanionPanel .resize-grip/, 'the grip needs styling to be visible and grabbable');
-	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8');
+	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8').replace(/\r\n/g, '\n');
 	assert.match(js, /resize-grip/, 'the grip needs pointer handling');
 });

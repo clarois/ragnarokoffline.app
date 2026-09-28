@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the companion homunculus driver (phase 2): the pet must pick its own target, fight
 // through the calls rAthena's own homunculus AI commands use, stay leashed to the companion, and
 // run inside the shell's existing combat tick rather than a timer of its own.
@@ -18,8 +20,8 @@ const MAP = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 
 const AI = path.join(MAP, 'population_engine', 'runtime', 'population_engine_combat.cpp');
 const ENGINE = path.join(MAP, 'population_engine.cpp');
 
-const ai = fs.readFileSync(AI, 'utf8');
-const engine = fs.readFileSync(ENGINE, 'utf8');
+const ai = fs.readFileSync(AI, 'utf8').replace(/\r\n/g, '\n');
+const engine = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 // A negative assertion must not be satisfiable by prose: a comment explaining why something is NOT
 // done still names it.

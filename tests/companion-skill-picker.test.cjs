@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the companion skill picker (phase 3: the in-game tick-box UI).
 //
 // The feature's risk is wiring, not logic, and two of these assertions exist because
@@ -29,10 +31,10 @@ const CSS = path.join(ROOT, 'patches', 'CompanionPanel.css');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const PATCH = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0008-companion-skill-selector.patch');
 
-const js = fs.readFileSync(JS, 'utf8');
-const html = fs.readFileSync(HTML, 'utf8');
-const css = fs.readFileSync(CSS, 'utf8');
-const engine = fs.readFileSync(ENGINE, 'utf8');
+const js = fs.readFileSync(JS, 'utf8').replace(/\r\n/g, '\n');
+const html = fs.readFileSync(HTML, 'utf8').replace(/\r\n/g, '\n');
+const css = fs.readFileSync(CSS, 'utf8').replace(/\r\n/g, '\n');
+const engine = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 test('the Skills tab exists with a matching page, beside the other tabs', () => {
 	assert.match(html, /data-tab="skills"/, 'the sidebar must offer a Skills tab');
@@ -160,7 +162,7 @@ test('the toggle verbs ship in the patch that rathena applies', () => {
 	// atcommand.inc is a rathena-side file, so the PATCH is the artifact - and it must
 	// still carry the PHASE 1 hunks too. A rebuild once dropped them silently because
 	// the diff base already contained them, and the test suite caught it.
-	const p = fs.readFileSync(PATCH, 'utf8');
+	const p = fs.readFileSync(PATCH, 'utf8').replace(/\r\n/g, '\n');
 	assert.match(p, /strcmpi\(verb, "toggle"\)/, 'the verb branch must ship');
 	assert.match(p, /population_engine_companion_toggle_skill\(/, 'and call the engine helper');
 	// phase 1 must still be present in the same patch file

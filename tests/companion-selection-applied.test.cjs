@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for "a restored skill selection must actually be APPLIED".
 //
 // The bug this pins, found by reading `@companion dump` rather than by inference:
@@ -31,8 +33,8 @@ const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const COMBAT = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map',
 	'population_engine', 'runtime', 'population_engine_combat.cpp');
-const src = fs.readFileSync(ENGINE, 'utf8');
-const cb = fs.readFileSync(COMBAT, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
+const cb = fs.readFileSync(COMBAT, 'utf8').replace(/\r\n/g, '\n');
 
 test('recall requests a rebuild after restoring the selection', () => {
 	// The restore block must both set the flag AND ask for a rebuild. Without the reseed the

@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the companion skill presets (population_skill_db.yml).
 //
 // Phase 2 filled the curated presets from ground truth: 1057 rows added across 57
@@ -90,7 +92,7 @@ function parse(text) {
 	return jobs;
 }
 
-const text = fs.readFileSync(YAML, 'utf8');
+const text = fs.readFileSync(YAML, 'utf8').replace(/\r\n/g, '\n');
 const jobs = parse(text);
 const byId = new Map(jobs.map(j => [j.jobId, j]));
 
@@ -154,7 +156,7 @@ test('every Condition used is one the engine parser recognises', () => {
 	// An unknown Condition is NOT rejected: population_skill_db.cpp logs
 	// "unknown Condition" and leaves the entry at `always`, so a typo silently turns
 	// a gated skill into an unconditional one - the failure this catches.
-	const src = fs.readFileSync(SRCP, 'utf8');
+	const src = fs.readFileSync(SRCP, 'utf8').replace(/\r\n/g, '\n');
 	const known = new Set([...src.matchAll(/\{\s*"([a-z_]+)"/g)].map(m => m[1]));
 	assert.ok(known.size > 20, 'could not read the condition name map');
 	const used = new Set();

@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for three bugs found from the live server log after the party-membership
 // fix went in. Each was reproduced from log evidence first, and each assertion
 // below fails against the commit that shipped it.
@@ -26,10 +28,10 @@ const HPP = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 
 const STATE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'core', 'population_shell_state.hpp');
 const PATCH6 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0006-companion-gear-return.patch');
 
-const src = fs.readFileSync(ENGINE, 'utf8');
-const hpp = fs.readFileSync(HPP, 'utf8');
-const state = fs.readFileSync(STATE, 'utf8');
-const patch6 = fs.readFileSync(PATCH6, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
+const hpp = fs.readFileSync(HPP, 'utf8').replace(/\r\n/g, '\n');
+const state = fs.readFileSync(STATE, 'utf8').replace(/\r\n/g, '\n');
+const patch6 = fs.readFileSync(PATCH6, 'utf8').replace(/\r\n/g, '\n');
 
 test('recall can target a single companion index', () => {
 	assert.match(hpp, /population_engine_recall_companions\(map_session_data \*owner, uint32_t only_index = 0\)/,
@@ -84,7 +86,7 @@ test('the post-recall resync registers locally instead of asking the char server
 // char server has no companion rows (a shell has no `char` row), so every rebuild
 // dropped them. The companions now have to be re-asserted after each rebuild.
 const PATCH5 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0005-population-companion-persistence.patch');
-const patch5 = fs.readFileSync(PATCH5, 'utf8');
+const patch5 = fs.readFileSync(PATCH5, 'utf8').replace(/\r\n/g, '\n');
 
 test('a drafted companion is added to the shell registry', () => {
 	const draft = src.slice(src.indexOf('uint32_t population_engine_companion_draft'));
@@ -136,7 +138,7 @@ test('roster changes are pushed to the client, not polled', () => {
 });
 
 test('the panel replaces the list from a batch and redraws only on change', () => {
-	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8');
+	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8').replace(/\r\n/g, '\n');
 	// Rows accumulate into a pending batch, swapped in at the sentinel, so a
 	// half-arrived list is never shown.
 	assert.match(js, /_pending\.push\(\{/, 'rows must collect into the pending batch');
@@ -194,8 +196,8 @@ test('removing a companion pushes the updated roster', () => {
 });
 
 test('the panel offers a delete button with an in-window confirmation', () => {
-	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8');
-	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8');
+	const js = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.js'), 'utf8').replace(/\r\n/g, '\n');
+	const css = fs.readFileSync(path.join(ROOT, 'patches', 'CompanionPanel.css'), 'utf8').replace(/\r\n/g, '\n');
 	assert.ok(js.includes('confirmInWindow'), 'the panel needs a confirmation path');
 	// Check for a CALL, not the string: the file explains in a comment why the blocking
 	// dialog is not used, and a naive substring test trips on its own explanation.

@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the second round of companion growth work:
 //   * the 3rd-job gate on the extra point grant (and that it is tunable, not
 //     hard-coded, so the number can be changed without a rebuild)
@@ -15,11 +17,11 @@ const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src
 const STATE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'core', 'population_shell_state.hpp');
 const PATCH7 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0007-companion-growth.patch');
 
-const src = fs.readFileSync(ENGINE, 'utf8');
-const state = fs.readFileSync(STATE, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
+const state = fs.readFileSync(STATE, 'utf8').replace(/\r\n/g, '\n');
 // Tolerate a missing file: run against an earlier commit (patch 0007 did not
 // exist yet) the assertions below must fail on their own terms, not crash here.
-const patch7 = fs.existsSync(PATCH7) ? fs.readFileSync(PATCH7, 'utf8') : '';
+const patch7 = fs.existsSync(PATCH7) ? fs.readFileSync(PATCH7, 'utf8').replace(/\r\n/g, '\n') : '';
 
 test('the extra point grant is a battle config, not a hard-coded constant', () => {
 	// A formula baked into the source means changing the companion economy costs

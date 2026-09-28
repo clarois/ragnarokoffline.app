@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the per-companion skill selector (phase 1: storage + command).
 //
 // The feature's whole risk is a WIRING omission, not a logic error: a skill
@@ -37,7 +39,7 @@ const CMDS = path.join(ROOT, 'stack', 'src', 'cmds.rs');
 const SQL = path.join(PE, 'files', 'sql-files', 'population_engine', 'cp_companion_persistence.sql');
 const PATCH = path.join(PE, 'patches', '0008-companion-skill-selector.patch');
 
-const read = p => fs.readFileSync(p, 'utf8');
+const read = p => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
 
 test('the shell carries a selection AND a flag that distinguishes "none chosen" from "never chosen"', () => {
 	const s = read(STATE);

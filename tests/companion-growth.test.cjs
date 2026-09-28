@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for companion growth (stat/trait spending, job advancement) and the
 // selective gear return. Each assertion fails against the commit before the one
 // that added the behaviour.
@@ -19,11 +21,11 @@ const TYPES = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src'
 const PATCH6 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0006-companion-gear-return.patch');
 const CMDS = path.join(ROOT, 'stack', 'src', 'cmds.rs');
 
-const src = fs.readFileSync(ENGINE, 'utf8');
-const types = fs.readFileSync(TYPES, 'utf8');
-const config = fs.readFileSync(CONFIG, 'utf8');
-const patch6 = fs.readFileSync(PATCH6, 'utf8');
-const cmds = fs.readFileSync(CMDS, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
+const types = fs.readFileSync(TYPES, 'utf8').replace(/\r\n/g, '\n');
+const config = fs.readFileSync(CONFIG, 'utf8').replace(/\r\n/g, '\n');
+const patch6 = fs.readFileSync(PATCH6, 'utf8').replace(/\r\n/g, '\n');
+const cmds = fs.readFileSync(CMDS, 'utf8').replace(/\r\n/g, '\n');
 
 test('the recall SELECT buffer can hold the full column list', () => {
 	// Pull the actual snprintf format string out of the recall function and

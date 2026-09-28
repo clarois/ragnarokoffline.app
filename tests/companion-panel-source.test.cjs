@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guard against the failure mode that shipped once and stopped the client from
 // loading at all: a client component reaching into another module's object at
 // module scope, when that module is imported LATER in the engine's import order.
@@ -44,7 +46,7 @@ function moduleScopeImportedAccess(src) {
 	return { found, names };
 }
 
-const src = fs.readFileSync(COMPONENT, 'utf8');
+const src = fs.readFileSync(COMPONENT, 'utf8').replace(/\r\n/g, '\n');
 
 test('CompanionPanel touches no imported binding at module scope', () => {
 	const { found, names } = moduleScopeImportedAccess(src);
@@ -73,7 +75,7 @@ test('the roster wire format matches what the server writes', () => {
 	const engine = fs.readFileSync(
 		path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp'),
 		'utf8'
-	);
+	).replace(/\r\n/g, '\n');
 	assert.match(engine, /"@CP\|%s\|%s\|%d\|%d\|%d\|%d\|%s"/,
 		'server @CP format changed (expected the 8-field form: the 8th is the live class)');
 	assert.match(engine, /"@CPEND\|%d"/, 'server sentinel changed');
@@ -89,7 +91,7 @@ test('the component is prepared at startup by the engine', () => {
 	// Without this call the component has no _host, and the first button press
 	// dies inside GUIComponent.toggle with a null-_host error that names the
 	// symptom rather than the missing call.
-	const patch = fs.readFileSync(path.join(ROOT, 'scripts', 'patch-client.sh'), 'utf8');
+	const patch = fs.readFileSync(path.join(ROOT, 'scripts', 'patch-client.sh'), 'utf8').replace(/\r\n/g, '\n');
 	assert.match(
 		patch,
 		/CompanionPanel\.prepare\(\)/,

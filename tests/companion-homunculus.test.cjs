@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the companion homunculus (alchemist line): it must exist, be ours alone, and stay
 // out of the char server.
 //
@@ -21,7 +23,7 @@ const { test } = require('node:test');
 
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
-const src = fs.readFileSync(ENGINE, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 const HELPER_SIG = 'static void population_engine_sync_shell_homunculus(map_session_data *sd)\n{';
 

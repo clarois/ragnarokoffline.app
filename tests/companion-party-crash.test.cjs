@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the party_send_xy_timer SIGSEGV (exit 139) that killed the map server
 // when the player teleported to Prontera.
 //
@@ -20,7 +22,7 @@ const { test } = require('node:test');
 
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
-const src = fs.readFileSync(ENGINE, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 test('registering a companion into a party leaves the party it came from', () => {
 	const i = src.indexOf('static void pop_companion_register_local_party(map_session_data *sd, map_session_data *owner)\n{');

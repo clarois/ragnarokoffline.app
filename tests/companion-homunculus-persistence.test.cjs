@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for companion homunculus persistence (phase 3b).
 //
 // The pet's own level and exp cannot live in the char server: `hom_id` stays 0, so nothing stock
@@ -18,8 +20,8 @@ const { test } = require('node:test');
 const ROOT = path.join(__dirname, '..');
 const CMDS = path.join(ROOT, 'stack', 'src', 'cmds.rs');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
-const cmds = fs.readFileSync(CMDS, 'utf8');
-const engine = fs.readFileSync(ENGINE, 'utf8');
+const cmds = fs.readFileSync(CMDS, 'utf8').replace(/\r\n/g, '\n');
+const engine = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 const COLUMNS = {
 	hom_enabled: 'TINYINT NULL DEFAULT NULL',

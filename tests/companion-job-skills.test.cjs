@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for: a companion that changes job keeps using its OLD class's skills.
 //
 // Live evidence (map log + DB): 11 companions advanced from Acolyte
@@ -25,9 +27,9 @@ const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src
 const COMBAT = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'runtime', 'population_engine_combat.cpp');
 const STATE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'core', 'population_shell_state.hpp');
 
-const eng = fs.readFileSync(ENGINE, 'utf8');
-const cb = fs.readFileSync(COMBAT, 'utf8');
-const st = fs.readFileSync(STATE, 'utf8');
+const eng = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
+const cb = fs.readFileSync(COMBAT, 'utf8').replace(/\r\n/g, '\n');
+const st = fs.readFileSync(STATE, 'utf8').replace(/\r\n/g, '\n');
 
 test('a job change requests a skill reseed instead of only clearing cooldowns', () => {
 	const i = eng.indexOf('static void pop_companion_try_job_advance');

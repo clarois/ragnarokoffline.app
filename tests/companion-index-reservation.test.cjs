@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the companion/ambient index reservation.
 //
 // WHY this exists: a companion with every skill disabled kept casting, and three separate
@@ -28,7 +30,7 @@ const { test } = require('node:test');
 
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
-const src = fs.readFileSync(ENGINE, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 test('the allocator has a reserved set sourced from the persistence table', () => {
 	assert.match(src, /static std::unordered_set<uint32_t> g_reserved_companion_indices;/,

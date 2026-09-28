@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for the saved-companion list showing the current job class and tier.
 //
 // The data was already on the wire - the engine emits
@@ -16,8 +18,8 @@ const ROOT = path.join(__dirname, '..');
 const PANEL = path.join(ROOT, 'patches', 'CompanionPanel.js');
 const CSS = path.join(ROOT, 'patches', 'CompanionPanel.css');
 
-const js = fs.readFileSync(PANEL, 'utf8');
-const css = fs.readFileSync(CSS, 'utf8');
+const js = fs.readFileSync(PANEL, 'utf8').replace(/\r\n/g, '\n');
+const css = fs.readFileSync(CSS, 'utf8').replace(/\r\n/g, '\n');
 
 test('the saved list renders the job class on the row, not just a tooltip', () => {
 	const i = js.indexOf('const id = document.createElement');

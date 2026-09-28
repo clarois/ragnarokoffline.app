@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guards for two fixes: the skill-id bound, and shell vehicles/pets.
 //
 // FIX 1 - the bound. Both skill-id parsers used `v > 0 && v < MAX_SKILL`, where MAX_SKILL is
@@ -24,7 +26,7 @@ const { test } = require('node:test');
 
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
-const src = fs.readFileSync(ENGINE, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 test('no skill-id parser is bounded by MAX_SKILL', () => {
 	// The bound must not be MAX_SKILL anywhere a skill ID is parsed from text.

@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guard: every component reference the patch script injects into an engine file
 // must have a matching import in that same file.
 //
@@ -23,7 +25,7 @@ const { test } = require('node:test');
 const ROOT = path.join(__dirname, '..');
 const PATCH = path.join(ROOT, 'scripts', 'patch-client.sh');
 
-const patch = fs.readFileSync(PATCH, 'utf8');
+const patch = fs.readFileSync(PATCH, 'utf8').replace(/\r\n/g, '\n');
 
 // The MapEngine edit section: from the first mention of the file to the end of the
 // script. Everything about the import/prepare coupling must live in here.

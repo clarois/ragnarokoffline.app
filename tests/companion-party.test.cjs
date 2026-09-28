@@ -1,3 +1,5 @@
+// windows-latest checks text files out with CRLF; normalise on read so assertions about file
+// content do not depend on the checkout's newline convention.
 // Guard the companion party-membership invariant.
 //
 // The bug this exists for: companions were registered through the char server,
@@ -20,7 +22,7 @@ const { test } = require('node:test');
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 
-const src = fs.readFileSync(ENGINE, 'utf8');
+const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 test('companion party membership is registered map-locally', () => {
 	// The helper must exist and be the thing recall/draft call.
