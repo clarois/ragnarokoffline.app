@@ -119,6 +119,20 @@ fight should not be picking one.
 Level/exp from kills, written through `cp_companion_persistence`; panel toggle; the v8
 migration.
 
+**Persistence — implemented (v8).** The pet's class, level and exp live in
+`cp_companion_persistence` as `hom_class` / `hom_level` / `hom_exp`, alongside `hom_enabled` for the
+toggle: NULL means "never chosen", which is ON for this class because the pet is part of an
+alchemist-line companion, while 0 is an explicit no - so an upgrade can never re-enable a pet a
+player switched off. The columns are declared in both the CREATE TABLE literal and the ALTER list,
+as `skill_preset` (v7) is, so a fresh install and an upgraded one cannot disagree. The attach reads
+the row and resumes the stored class and level; restoring the level also restores `exp_next`, since
+`hom_alloc` derives it from the level - a pet restored at 1 with a level-40 threshold would look
+permanently stalled. A stored class the data set no longer has falls back to the derived one rather
+than costing the companion its pet. The recurring gear snapshot writes the pet's live state only
+while the pet exists, so a switched-off companion cannot have its stored level overwritten with 0.
+Outstanding: the panel control (the column can be set by hand today, and is honoured at the next
+summon).
+
 **Growth — already stock, and verified safe (no award code was written).** `mob.cpp` pays
 `hom_gainexp(tmpsd[i]->hd, base_exp * battle_config.homunculus_exp_gain / 100)` to every exp
 receiver that owns a homunculus, so a companion's in-memory pet is paid on its own kills like a

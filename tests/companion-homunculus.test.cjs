@@ -25,10 +25,19 @@ const src = fs.readFileSync(ENGINE, 'utf8');
 
 const HELPER_SIG = 'static void population_engine_sync_shell_homunculus(map_session_data *sd)\n{';
 
+// Slice a function by matching the brace that closes it, NOT by a character count: a fixed window
+// silently drops whatever a later, legitimate change pushes past it, and the test then fails for a
+// reason that has nothing to do with the behaviour it guards.
+function functionBody(text, signature) {
+	const i = text.indexOf(signature);
+	assert.ok(i > 0, `expected to find ${signature}`);
+	const rest = text.slice(i);
+	const end = rest.indexOf('\n}\n');
+	return end > 0 ? rest.slice(0, end + 3) : rest;
+}
+
 function helperBody() {
-	const i = src.indexOf(HELPER_SIG);
-	assert.ok(i > 0, 'the homunculus helper must be defined');
-	return src.slice(i, i + 3200);
+	return functionBody(src, HELPER_SIG);
 }
 
 // A negative assertion must not be satisfiable by prose: a comment explaining why something is

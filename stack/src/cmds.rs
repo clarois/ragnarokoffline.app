@@ -1534,6 +1534,10 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
            `heal_at`          TINYINT       NOT NULL DEFAULT 75, -- support heal threshold HP% (v6)
            `emergency_at`     TINYINT       NOT NULL DEFAULT 35, -- support emergency heal HP% (v6)
            `skill_preset`     TEXT          NULL DEFAULT NULL,   -- chosen skill ids, comma separated (v7); NULL = the class preset list, '' = none chosen
+           `hom_enabled`      TINYINT       NULL DEFAULT NULL,   -- the pet's switch (v8); NULL = never chosen, i.e. ON for an alchemist-line companion, 0 = the player turned it off
+           `hom_class`        INT           NOT NULL DEFAULT 0,  -- the pet's class id (v8), 0 = not attached yet
+           `hom_level`        SMALLINT      NOT NULL DEFAULT 0,  -- the pet's level (v8)
+           `hom_exp`          BIGINT        NOT NULL DEFAULT 0,  -- the pet's exp toward the next level (v8)
            `map_id`           SMALLINT      NOT NULL DEFAULT 0, -- mapindex id of owner at recruit (recall target)
            `active`           TINYINT       NOT NULL DEFAULT 1, -- 1 = recalled on login; 0 = released (Goal 3 sets this)
            `favorite`         TINYINT       NOT NULL DEFAULT 0, -- 1 = owner favorited (friend list sort)
@@ -1582,6 +1586,13 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
         // "never chosen" so an upgrade keeps every existing companion on the
         // class preset list, which is the behaviour it had before the selector.
         ("skill_preset", "TEXT NULL DEFAULT NULL"),
+        // v8: the companion's homunculus. hom_enabled NULL means "never chosen", which
+        // is ON for the alchemist line because the pet is part of the class; 0 is an
+        // explicit no, so an upgrade cannot re-enable a pet a player switched off.
+        ("hom_enabled", "TINYINT NULL DEFAULT NULL"),
+        ("hom_class", "INT NOT NULL DEFAULT 0"),
+        ("hom_level", "SMALLINT NOT NULL DEFAULT 0"),
+        ("hom_exp", "BIGINT NOT NULL DEFAULT 0"),
     ] {
         let _ = dk.exec_sql(&format!(
             "ALTER TABLE `cp_companion_persistence` ADD COLUMN IF NOT EXISTS `{column}` {definition}"

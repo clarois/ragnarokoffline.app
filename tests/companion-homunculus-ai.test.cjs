@@ -27,10 +27,19 @@ function codeOnly(text) {
 	return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 }
 
-function bodyOf(signature, span = 3000) {
-	const i = ai.indexOf(signature);
+// Slice a function by matching the brace that closes it, NOT by a character count: a fixed window
+// silently drops whatever a later, legitimate change pushes past it, and the test then fails for a
+// reason that has nothing to do with the behaviour it guards.
+function functionBody(text, signature) {
+	const i = text.indexOf(signature);
 	assert.ok(i > 0, `expected to find ${signature}`);
-	return ai.slice(i, i + span);
+	const rest = text.slice(i);
+	const end = rest.indexOf('\n}\n');
+	return end > 0 ? rest.slice(0, end + 3) : rest;
+}
+
+function bodyOf(signature) {
+	return functionBody(ai, signature);
 }
 
 const DRIVER_SIG = 'static void population_engine_homunculus_per_tick(map_session_data *sd)\n{';

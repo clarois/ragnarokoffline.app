@@ -26,12 +26,21 @@ function codeOnly(text) {
 	return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 }
 
-// bodyOf asserts the function exists first, so the negative assertions below cannot pass
+// Slice a function by matching the brace that closes it, NOT by a character count: a fixed window
+// silently drops whatever a later, legitimate change pushes past it, and the test then fails for a
+// reason that has nothing to do with the behaviour it guards.
+function functionBody(text, signature) {
+	const i = text.indexOf(signature);
+	assert.ok(i > 0, `expected to find ${signature}`);
+	const rest = text.slice(i);
+	const end = rest.indexOf('\n}\n');
+	return end > 0 ? rest.slice(0, end + 3) : rest;
+}
+
+// attachBody asserts the function exists first, so the negative assertions below cannot pass
 // vacuously against a tree where the attach does not exist at all.
 function attachBody() {
-	const i = engine.indexOf(HELPER_SIG);
-	assert.ok(i > 0, 'the attach must exist for its invariants to mean anything');
-	return engine.slice(i, i + 3200);
+	return functionBody(engine, HELPER_SIG);
 }
 
 test('the dump carries the pet\'s own level and exp, so growth is readable', () => {
@@ -66,12 +75,20 @@ test('the attach goes through hom_alloc, which is what initialises growth', () =
 		'homunculusDB is hom_alloc\'s to set');
 });
 
-test('a summoned pet starts at the bottom and is not pre-levelled', () => {
+test('a new pet starts at the bottom, and only a remembered one resumes higher', () => {
 	const body = attachBody();
-	assert.match(body, /homun\.level = 1;/,
-		'a pet that appears already levelled would make growth meaningless');
-	assert.ok(!/homun\.exp\s*=/.test(codeOnly(body)),
-		'the struct is zeroed; exp must stay 0 so the first kill is what advances it');
+	// Superseded by phase 3b: the level used to be hardcoded to 1. It is now the stored level when
+	// there is one, and 1 otherwise - the branch that matters is still the default, because a pet
+	// that appeared pre-levelled would make growth meaningless.
+	assert.match(body, /homun\.level = \(stored_level > 0\) \? static_cast<int32_t>\(stored_level\) : 1;/,
+		'level is the stored value, or 1 for a pet that has never been out before');
+	// Superseded too: exp is restored from the row. What must hold is that it comes from the row
+	// and not from a literal, and that the loader defaults it to 0, so a new pet starts empty.
+	assert.match(body, /homun\.exp = static_cast<t_exp>\(stored_exp\);/,
+		'exp is restored from the persisted value');
+	assert.match(functionBody(engine, 'static void population_engine_load_shell_homunculus'),
+		/\*exp_ = 0;/,
+		'the loader must default exp to 0, which is what makes a new pet start empty');
 	assert.ok(!/homun\.skillpts\s*=/.test(codeOnly(body)),
 		'skill points are granted by hom_levelup, not by the attach');
 });

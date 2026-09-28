@@ -487,6 +487,56 @@ static bool g_reserved_companion_indices_loaded = false;
 /// before its definition, which sits with spawn_shell further down.
 static void population_engine_sync_shell_vehicle(map_session_data *sd);
 static void population_engine_sync_shell_homunculus(map_session_data *sd);
+/// RAGNAROKMAC (homunculus, phase 3): this companion's stored pet state.
+///
+/// The pet's own level and exp have to live here rather than in the char server: `hom_id` stays 0
+/// (see the attach), so nothing stock can ever load or save this pet.
+///
+/// Absent columns or an absent row leave the defaults - enabled = -1 ("never chosen", which means
+/// on for this class), class 0 (derive it), level 0 (a new pet starts at 1), exp 0. That is
+/// deliberate: an install whose table predates the v8 columns must behave exactly as it did
+/// before, not lose its pet.
+static void population_engine_load_shell_homunculus(map_session_data *sd, int *enabled,
+	uint32_t *class_, uint32_t *level, long long *exp_)
+{
+	*enabled = -1;
+	*class_ = 0;
+	*level = 0;
+	*exp_ = 0;
+
+	if (sd == nullptr || mmysql_handle == nullptr)
+		return;
+	const uint32_t owner = sd->pop.companion_owner_account;
+	if (owner == 0)
+		return; // not a recruited companion: nothing can be stored against it
+	const uint32_t index_ = sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE;
+
+	char q[320];
+	snprintf(q, sizeof(q),
+		"SELECT hom_enabled, hom_class, hom_level, hom_exp FROM `cp_companion_persistence`"
+		" WHERE owner_account_id=%u AND shell_index=%u", owner, index_);
+	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+		Sql_ShowDebug(mmysql_handle);
+		return;
+	}
+	if (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+		char *data = nullptr;
+		Sql_GetData(mmysql_handle, 0, &data, nullptr);
+		if (data != nullptr && data[0] != '\0')
+			*enabled = atoi(data); // NULL arrives as an empty string, which must stay "never chosen"
+		Sql_GetData(mmysql_handle, 1, &data, nullptr);
+		if (data != nullptr)
+			*class_ = static_cast<uint32_t>(atoi(data));
+		Sql_GetData(mmysql_handle, 2, &data, nullptr);
+		if (data != nullptr)
+			*level = static_cast<uint32_t>(atoi(data));
+		Sql_GetData(mmysql_handle, 3, &data, nullptr);
+		if (data != nullptr)
+			*exp_ = atoll(data);
+	}
+	Sql_FreeResult(mmysql_handle);
+}
+
 /// RAGNAROKMAC (homunculus): give an alchemist-line shell the homunculus its class entitles it
 /// to, driven by the engine rather than by a client.
 ///
@@ -524,17 +574,42 @@ static void population_engine_sync_shell_homunculus(map_session_data *sd)
 	if (sd->status.char_id < POPULATION_ENGINE_CHAR_ID_BASE)
 		return; // not a population shell
 	const uint32_t index = sd->status.char_id - POPULATION_ENGINE_CHAR_ID_BASE;
-	const int32_t hom_class = HM_CLASS_BASE + static_cast<int32_t>(index % 8);
+
+	// What this companion had last session, and whether it wants a pet at all.
+	int wanted = -1;
+	uint32_t stored_class = 0, stored_level = 0;
+	long long stored_exp = 0;
+	population_engine_load_shell_homunculus(sd, &wanted, &stored_class, &stored_level, &stored_exp);
+
+	// Only an explicit 0 means no: NULL is "never chosen", and for this class that is on.
+	if (wanted == 0)
+		return;
+
+	// Deterministic class per companion, unless the row already remembers a better answer.
+	int32_t hom_class = (stored_class > 0)
+		? static_cast<int32_t>(stored_class)
+		: HM_CLASS_BASE + static_cast<int32_t>(index % 8);
 
 	std::shared_ptr<s_homunculus_db> homun_db = homunculus_db.homun_search(hom_class);
-	if (homun_db == nullptr)
-		return; // unknown class: do not hand hom_alloc something it would request a delete for
+
+	if (homun_db == nullptr) {
+		// A stored class the current data set no longer has must not cost the companion its pet:
+		// fall back to the derived class and let the next snapshot correct the row.
+		hom_class = HM_CLASS_BASE + static_cast<int32_t>(index % 8);
+		homun_db = homunculus_db.homun_search(hom_class);
+		if (homun_db == nullptr)
+			return; // unknown class: do not hand hom_alloc something it would request a delete for
+	}
 
 	struct s_homunculus homun;
 	memset(&homun, 0, sizeof(homun));
 	safestrncpy(homun.name, homun_db->name, NAME_LENGTH - 1);
 	homun.class_ = hom_class;
-	homun.level = 1;   // growth is a later change; a pet that exists comes first
+	// A new pet starts at level 1; a returning one resumes where it was. Level is what hom_alloc
+	// turns into exp_next, so restoring it also restores the threshold the next kill is measured
+	// against - a pet restored at level 1 with a level-40 threshold would look permanently stalled.
+	homun.level = (stored_level > 0) ? static_cast<int32_t>(stored_level) : 1;
+	homun.exp = static_cast<t_exp>(stored_exp);
 	homun.hunger = 32; // stock newborn values, as hom_create_request sets them
 	homun.intimacy = 2100;
 	homun.char_id = sd->status.char_id;
@@ -4927,6 +5002,19 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 	// looks) never changes after recruit, and map_id tracks the owner anyway.
 	if (mmysql_handle == nullptr) return;
 	char q[1024];
+
+	// The pet's own state is ours to keep - hom_id stays 0, so nothing stock can save it. Written
+	// ONLY while the pet exists: a companion whose pet is switched off, or that is not an
+	// alchemist, must not have a stored level wiped by a snapshot with nothing to snapshot.
+	char hom_frag[160];
+	hom_frag[0] = '\0';
+	if (sd->hd != nullptr) {
+		snprintf(hom_frag, sizeof(hom_frag), ", hom_class=%d, hom_level=%d, hom_exp=%lld",
+			(int)sd->hd->homunculus.class_,
+			(int)sd->hd->homunculus.level,
+			(long long)sd->hd->homunculus.exp);
+	}
+
 	snprintf(q, sizeof(q),
 		"UPDATE `cp_companion_persistence` SET weapon_nameid=%u, shield_nameid=%u,"
 		" head_top_nameid=%u, head_mid_nameid=%u, head_bottom_nameid=%u,"
@@ -4937,7 +5025,7 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		" shadow_shoes_nameid=%u, shadow_acc_l_nameid=%u, shadow_acc_r_nameid=%u,"
 		" base_level=%d, job_level=%d, job_id=%d, str_=%d, agi_=%d, vit_=%d, intl_=%d,"
 		" dex_=%d, luk_=%d, pow_=%d, sta_=%d, wis_=%d, spl_=%d, con_=%d, crt_=%d,"
-		" mode=%d, duty=%d, heal_at=%d, emergency_at=%d"
+		" mode=%d, duty=%d, heal_at=%d, emergency_at=%d%s"
 		" WHERE owner_account_id=%u AND shell_index=%u",
 		weapon, shield, sd->status.head_top, sd->status.head_mid, sd->status.head_bottom,
 		armor, shoes, acc_l, acc_r,
@@ -4948,6 +5036,7 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		sd->status.pow, sd->status.sta, sd->status.wis, sd->status.spl, sd->status.con, sd->status.crt,
 		(int)sd->pop.companion_mode, (int)sd->pop.role,
 		(int)sd->pop.companion_heal_at, (int)sd->pop.companion_emergency_at,
+		hom_frag,
 		owner, index_);
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
