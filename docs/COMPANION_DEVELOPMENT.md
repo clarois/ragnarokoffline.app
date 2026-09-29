@@ -247,6 +247,9 @@ idempotent application, and a clean Population Engine data validation.
   always consent if the party has room.
 - Behaviour coverage is only as good as each class's generated resources and
   configured skill lists.
+- Four issues reported against the beta build are queued as items 9-12 below: merchant-line
+  companions opening a stall, companions appearing to vanish after a party wipe, the party window's
+  location column, and the window's presentation.
 
 ## Planned fixes and features
 
@@ -527,6 +530,95 @@ Acceptance criteria:
   sprite.
 - No `intif_homunculus_*` call is reachable for a shell, and `sd->status.hom_id` stays 0.
 - The toggle is per companion and persists, so two alchemist companions can differ.
+
+### 9. A recruited Blacksmith or Alchemist opens a vending stall instead of following
+
+Observed concern (community feedback on the beta build, 2026-09-28): summoning a Blacksmith or
+Alchemist companion puts it into vending mode, so it stands there with a shop instead of fighting.
+
+Investigation:
+
+- The engine does this to itself. In the spawn path it resolves a vendor profile for the shell
+  (`vendor_cfg`, from `db/population_vendors.yml` / `db/population_vendor_pop.yml`), and when one
+  applies it grants `MC_VENDING` 10, calls `pc_setcart(sd, 1)`, then at
+  `population_engine.cpp:4775` runs `vending_openvending(*sd, vend_title, vend_data, vend_count, nullptr)`
+  and sets `sd->state.prevend = 1`. A built-in default stock list (Red/Orange/Yellow/White/Green
+  Potion, Wings, Anodyne, Aloevera, Concentration/Awakening Potion) is used when the profile resolves
+  no entries, so a vendor-behaving shell always has something to sell.
+- Nothing in that path asks whether the shell is a **recruited companion**. The decision is made
+  from the profile, which the merchant-line classes satisfy, and being recruited does not override it.
+- So this is not a data problem to paper over: the engine should not leave a companion in a state
+  whose whole purpose is to stand still.
+
+Workaround until fixed (given by the reporter, works today): summon a **Merchant** companion and
+level it up into Blacksmith or Alchemist.
+
+Acceptance criteria:
+
+- A recruited companion never opens a stall: either the vendor block is skipped for a companion
+  (gate it on `pop_is_companion(sd)` / an owner being set), or recruiting closes an open stall and
+  clears `state.prevend`.
+- Re-summoning a benched Blacksmith/Alchemist companion does not re-open one either.
+- A test pins that a recruited merchant-line companion keeps `state.prevend == 0`.
+
+### 10. After a party wipe, the companions look gone until the character is re-selected
+
+Observed concern: when the player dies and the party is wiped, they respawn at the save point and the
+party window shows none of their companions.
+
+Investigation:
+
+- The companions are not lost - they come back after exiting to the character select and re-entering.
+  That means the shell exists the whole time and only the PARTY association is dropped, which is the
+  known shape of this family of bugs (`reference`: a party rebuild transiently zeroes the shells'
+  `party_id`, and `pop_is_companion()` keys on `party_id`).
+- `void population_engine_reassert_companions(int32_t party_id)` already exists in the engine header
+  and is the natural place to hook a wipe/respawn path; the current call sites evidently do not cover
+  it, or cover it before the party id is restored.
+- Established by report, not yet by reading the death/respawn path - start there before changing
+  anything, and instrument the shells' `party_id` across a wipe rather than inferring it.
+
+Workaround until fixed (given by the reporter, works today): exit to character select and re-enter;
+the companions return to the party.
+
+Acceptance criteria:
+
+- After a wipe and a respawn at the save point, the companions are still in the party and resume
+  following, without a character re-select.
+- No duplicate shells: the companion count matches `cp_companion_persistence` rows with `active=1`.
+
+### 11. The party window's location information is wrong for companions
+
+Observed concern: the party window's location column is broken for companion rows (reporter's own
+verdict: cosmetic, "who cares since they stick close to you anyway").
+
+Investigation:
+
+- The party window renders location from the party member packet. A shell carries a synthetic
+  identity (`char_id == POPULATION_ENGINE_CHAR_ID_BASE + index`) with no `char` row behind it, so
+  whatever the client is shown there is either absent or stale - read what the server sends for a
+  shell before proposing a fix.
+- Low severity: no gameplay effect. Worth fixing only alongside other party-window work.
+
+Acceptance criteria:
+
+- Either the location is correct for companions, or it is deliberately blank rather than wrong.
+
+### 12. The companion window's presentation needs a pass
+
+Observed concern: the UI is "still garbage" in the reporter's words; planned to be improved.
+
+Investigation:
+
+- It is a native `GUIComponent` styled to RO metrics, built for function first: a five-tab window
+  (Party / Summon / Battle / Skills / Gear) plus per-row buttons. Nothing here is broken; it is
+  unfinished rather than wrong.
+- Any pass should follow the existing constraints (shipped CSS, no web-styled controls, `_panelMount()`
+  for overlays, buttons that stop propagation into the game world) rather than a redesign.
+
+Acceptance criteria:
+
+- A usability pass with the reporter's own list, in a build they can look at.
 
 ## Recommended next sequence
 
