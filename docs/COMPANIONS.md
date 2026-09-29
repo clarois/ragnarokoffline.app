@@ -1,6 +1,6 @@
 # AI companions
 
-Population Engine characters can join a real party as temporary AI companions.
+Population Engine characters can join a real party as AI companions.
 They follow their recruiter between maps, fight and support the party, and obey
 combat orders from the party leader. Four to eleven companions can be
 recruited into one party; **Settings → Population → Party invitations** in
@@ -26,8 +26,10 @@ they fall outside the visible area or when their owner changes maps. When the
 party stops, companions use separate formation cells around their owner rather
 than standing on top of one another.
 
-Removing a companion from the party releases it. Companions are temporary and
-are not restored after the local server or app is shut down.
+Removing a companion from the party releases it, but does not delete it: it goes back to your
+saved list. A companion's name, job, level, equipment, duty and skill selection are stored, so they
+survive a full server and app shutdown. Party membership does not survive - after a restart, open
+the companion window's **Party** tab and press **Summon** to bring it back out.
 
 ## Loot
 
