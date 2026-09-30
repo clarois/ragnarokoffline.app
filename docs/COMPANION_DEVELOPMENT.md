@@ -247,9 +247,9 @@ idempotent application, and a clean Population Engine data validation.
   always consent if the party has room.
 - Behaviour coverage is only as good as each class's generated resources and
   configured skill lists.
-- Four issues reported against the beta build are queued as items 9-12 below: merchant-line
-  companions opening a stall, companions appearing to vanish after a party wipe, the party window's
-  location column, and the window's presentation.
+- Issues reported against the beta build are tracked as items 9-12 below. Item 9 (merchant-line
+  companions opening a stall) is fixed; the rest are open: companions appearing to vanish after a
+  party wipe, the party window's location column, and the window's presentation.
 
 ## Planned fixes and features
 
@@ -550,16 +550,35 @@ Investigation:
 - So this is not a data problem to paper over: the engine should not leave a companion in a state
   whose whole purpose is to stand still.
 
-Workaround until fixed (given by the reporter, works today): summon a **Merchant** companion and
-level it up into Blacksmith or Alchemist.
+Implementation status: **fixed**, by closing the stall rather than gating the vendor block.
+
+- `population_engine_shell_close_stall()` (engine TU) closes the shop with stock's own
+  `vending_closevending()` and clears `state.prevend`. `state.vending` is the LIVE flag that
+  matters: `vending_openvending()` consumes `prevend` and sets it, and the engine's own shell
+  drivers skip vending shells - which is exactly why the companion stood still with a shop.
+- It is called from **`pop_companion_register_local_party()`**, the funnel every draft, recall,
+  re-sync and repair sweep already passes through, and from
+  **`population_engine_persist_recruited_companion()`**, which covers an ambient town vendor adopted
+  by an invite (that one vendored at its own spawn, before anyone invited it).
+- Gating the vendor block inside `population_engine_spawn_shell()` - the obvious fix - **cannot
+  work**: the draft and recall paths call `spawn_shell()` first and assign
+  `companion_owner_account` only afterwards, so a companion test there would never fire. A test
+  asserts the close is NOT in the spawn path, so nobody re-adds it there.
+- Town vendors are deliberately unaffected: the vendor block still grants `MC_VENDING`, builds the
+  cart and calls `vending_openvending()` for ambient shells, and a test pins that.
+
+Verified by `tests/companion-no-vending.test.cjs` (5 assertions, calibrated: 5 passes with the
+change, 4 failures without it). **Not verified in play** - the reporter's workaround (summon a
+Merchant and level it) is no longer needed, but that is their word to give on the next build.
 
 Acceptance criteria:
 
-- A recruited companion never opens a stall: either the vendor block is skipped for a companion
-  (gate it on `pop_is_companion(sd)` / an owner being set), or recruiting closes an open stall and
-  clears `state.prevend`.
-- Re-summoning a benched Blacksmith/Alchemist companion does not re-open one either.
-- A test pins that a recruited merchant-line companion keeps `state.prevend == 0`.
+- A recruited or drafted merchant-line companion does not STAY in vending mode: it follows and
+  fights like any other companion. (The stall is still built and opened by the profile-driven spawn
+  path, then closed the moment the shell becomes a companion's party member - the shell has no
+  client, so nothing is drawn in between.)
+- Re-summoning a benched Blacksmith/Alchemist companion does not leave it vending either: the close
+  runs on every recall, not just the first.
 
 ### 10. After a party wipe, the companions look gone until the character is re-selected
 

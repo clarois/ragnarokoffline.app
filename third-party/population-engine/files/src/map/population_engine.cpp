@@ -929,6 +929,9 @@ void population_engine_shell_release(map_session_data* sd)
 static bool pop_is_companion(const map_session_data *sd);
 static map_session_data *pop_companion_owner(map_session_data *sd);
 static void pop_companion_register_local_party(map_session_data *sd, map_session_data *owner);
+/// Item 9: close a vending stall so a companion can follow and fight (helper is defined
+/// next to pop_companion_register_local_party, which is after the recruit hook that needs it).
+static void population_engine_shell_close_stall(map_session_data *sd);
 bool population_engine_persist_companion_row(map_session_data *sd, uint32_t owner_account);
 
 /// Removes stale shells from g_population_engine_pcs and returns them.
@@ -5070,6 +5073,9 @@ void population_engine_persist_recruited_companion(map_session_data *sd, map_ses
 	if (!sd || !sd->state.active) return;
 	const uint32_t char_id = sd->status.char_id;
 	if (char_id < POPULATION_ENGINE_CHAR_ID_BASE) return; // not a population shell
+	// An invited shell may have been an ambient town VENDOR, vendored at its own spawn. It is a
+	// companion now, so the stall has to go.
+	population_engine_shell_close_stall(sd);
 
 	// Ownership: Case C already set companion_owner_account in-engine. Otherwise the
 	// recruiting player is `peer` — resolved from party_invite_account in
@@ -5395,10 +5401,43 @@ void population_engine_companion_list(uint32_t owner_account, int fd)
 // the party window and what the engine's own checks read. Durability across a
 // restart comes from the login recall re-registering it, exactly as the
 // companions themselves are restored.
+/// RAGNAROKMAC (item 9): a companion must not stand in vending mode.
+///
+/// The vendor block in population_engine_spawn_shell() decides from the PROFILE, not from play
+/// state: a merchant-line shell resolves a vendor config (or the built-in default stock) and opens
+/// a stall, whatever it is for. A companion drafted or summoned as a Blacksmith/Alchemist therefore
+/// stands there with a shop instead of following - the reported workaround was to summon a Merchant
+/// and level it up, which is data dodging a code bug.
+///
+/// Closing the stall here rather than gating that block is deliberate: the block runs BEFORE the
+/// caller knows the shell is a companion. population_engine_companion_draft() and the recall path
+/// both call spawn_shell() and only then assign companion_owner_account, so a companion test inside
+/// spawn would never fire for them. Both of those paths reach this function, and so does a repair
+/// sweep - and the recruit hook covers an ambient town VENDOR adopted by an invite, which vendored
+/// at its own spawn long before anyone invited it.
+///
+/// `state.vending` is the LIVE flag (`vending_openvending` consumes `state.prevend` and sets it);
+/// the engine's own shell drivers skip vending shells, which is why the companion stands there.
+static void population_engine_shell_close_stall(map_session_data *sd)
+{
+	if (sd == nullptr)
+		return;
+	if (sd->state.vending)
+		vending_closevending(sd); // clears state.vending, vender_id, the board and vending_db
+	// The intent flag the spawn path sets before calling vending_openvending. openvending normally
+	// clears it itself, including on its early returns, so this is belt-and-braces for a shell that
+	// never got that far.
+	sd->state.prevend = 0;
+}
+
 static void pop_companion_register_local_party(map_session_data *sd, map_session_data *owner)
 {
 	if (!sd || !owner)
 		return;
+	// A companion that arrives with a stall open (drafted or summoned merchant-line job) must not
+	// stay in vending mode; close it before the early returns, so it happens even when the owner has
+	// no usable party yet.
+	population_engine_shell_close_stall(sd);
 	if (owner->status.party_id <= 0 || owner->status.party_id >= 0x70000000)
 		return;
 
