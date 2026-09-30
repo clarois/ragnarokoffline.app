@@ -594,8 +594,25 @@ Investigation:
 - `void population_engine_reassert_companions(int32_t party_id)` already exists in the engine header
   and is the natural place to hook a wipe/respawn path; the current call sites evidently do not cover
   it, or cover it before the party id is restored.
-- Established by report, not yet by reading the death/respawn path - start there before changing
-  anything, and instrument the shells' `party_id` across a wipe rather than inferring it.
+- Read now, and the handling already exists. `population_engine_collect_stale_shells()` (called
+  from the global combat timer) keeps a dead recruited companion as a placed corpse while its owner
+  is on the same map, and otherwise **respawns it beside its owner** via
+  `population_engine_respawn_shell_timer` (2 s later), which uses the OWNER's current map, so a
+  save-point respawn on another map is covered. It also heals the party link when
+  `pop_companion_owner()` returns null but the shell still carries
+  `pop.companion_owner_account` - the case a char-server party rebuild creates, since the replayed
+  party has no row for a shell - by calling `pop_companion_register_local_party()` and retrying.
+  No release site is death-triggered (they are: abandoned maps, the stale sweep, a failed combat
+  start, a failed recall spawn, engine restart/stop).
+- **So this cannot be fixed from the source alone: the branches are guarded and the guards pass.**
+  The engine already logs which one ran, and those three lines discriminate the possible causes:
+  `companion <name> left behind; respawning beside owner <owner>` (the sweep saw it - so the symptom
+  would be a CLIENT/stale-window one), `re-registered companion <name> into <owner>'s party after a
+  party rebuild` (the heal ran), or `dead companion <name> left behind by its owner; releasing it`
+  (the owner was judged absent - the real bug, and the one that would need a leave-type or ordering
+  fix). Capture those three lines from one wipe, plus `SELECT shell_index,name,active FROM
+  cp_companion_persistence` while it is broken. Do not change this path before one of them is in
+  hand: every guard here was written against a real failure.
 
 Workaround until fixed (given by the reporter, works today): exit to character select and re-enter;
 the companions return to the party.
@@ -613,11 +630,20 @@ verdict: cosmetic, "who cares since they stick close to you anyway").
 
 Investigation:
 
-- The party window renders location from the party member packet. A shell carries a synthetic
-  identity (`char_id == POPULATION_ENGINE_CHAR_ID_BASE + index`) with no `char` row behind it, so
-  whatever the client is shown there is either absent or stale - read what the server sends for a
-  shell before proposing a fix.
-- Low severity: no gameplay effect. Worth fixing only alongside other party-window work.
+- Read now. `pop_companion_register_local_party()` builds a COMPLETE `party_member` row for the
+  shell (name, class, `map = mapindex_id2name(sd->mapindex)`, level, `online = 1`) and broadcasts it
+  with `clif_party_info()`, so the client is told a location at registration. `party_send_xy_timer`
+  then refreshes coordinates from the live session automatically for any slot with `sd` set
+  (it compares `p->data[i].x != sd->x` and calls `clif_party_xy`), which needs no shell-specific
+  work. The engine calls `party_send_movemap(sd)` + `clif_party_xy(*sd)` in the ambient spawn path
+  (population_engine.cpp ~1672).
+- **The open question is therefore narrow and observable**: the member row's `map` is written at
+  registration, and a companion that FOLLOWS its owner to another map needs that row refreshed -
+  real players get it from the char server's `party_recv_movemap`, which a shell has no row for.
+  Whether the follow/warp path refreshes it is what to check; capture the window next to
+  `@companion list` after a map change, or read `p->party.member[i].map` for the shell in a dump.
+- Low severity: no gameplay effect, and the reporter's own verdict is "who cares". Do it alongside
+  other party-window work, not on its own.
 
 Acceptance criteria:
 
