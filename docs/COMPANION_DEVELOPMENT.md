@@ -19,10 +19,10 @@ Snapshot date: **2026-09-28**.
 | Branch | `main` - companion work lands there directly now; the commit history is the sequence |
 | Upstream base | `upstream/main`; resolve it with `git log upstream/main -1` rather than trusting a SHA written here |
 | Upstream PR | `Flux159/ragnarokoffline.app#128` - deliberately on hold; nothing goes upstream without an explicit decision |
-| App baseline | Ragnarok Offline 1.3.7 (`package.json`); `v1.3.7` is the newest tag - bumped by the upstream merge of 2026-09-29 |
-| rAthena pin | `94919f5a0c309d5fbd1e32897f07644faedf3a30` (`Flux159/rathena`, branch `ragnarokoffline`) |
+| App baseline | Ragnarok Offline 1.3.9 (`package.json`); `v1.3.9` is the newest tag - bumped by the upstream merge of 2026-09-30 |
+| rAthena pin | `c3231aa87c39984c629ad093d7acb8465e80e926` (`Flux159/rathena`, branch `ragnarokoffline`) - our whole patch set re-verified against it: 0 rejected hunks |
 | rAthena upstream pin | `e985006171d2eb320ee512a653f4c83aea3d81b6` - the merge base, fetched only by the diagnostics |
-| roBrowserLegacy pin | `5b4d0e9bd357d61e9822ecf4f0516683239f716e` - upstream's storage-search, guild-checkbox, market-shop and skill-effect pins; our client patch set was re-applied against it and is still idempotent |
+| roBrowserLegacy pin | `d73430c7e1f10b553b85e20cbcb1d0fec8d52434` - our client patch set was re-applied against it: 0 rejected hunks and still idempotent |
 | ROenglishRE pin | `66cdfec631603fda6a90ba4bbe26ab07b5204c84` |
 
 These are a convenience copy of `config/VENDOR_PINS`; read that file when the two disagree.
@@ -247,6 +247,12 @@ idempotent application, and a clean Population Engine data validation.
   always consent if the party has room.
 - Behaviour coverage is only as good as each class's generated resources and
   configured skill lists.
+- **Upstream now ships its own population-engine patch series** (`0001`-`0005`, including
+  `0005-companion-kill-events.patch`) and a restructured population data set with new tiers. Our fork
+  keeps its own `0001`-`0010` series and its own profiles/GearSets, so the two coexist: at the 1.3.9
+  merge our data files were kept as ours (upstream changed data, not engine code) and both patch
+  series applied cleanly to the new rAthena pin. Two follow-ups: renumber our series to follow
+  theirs, and adopt their tier/spawn work deliberately on top of ours.
 - Issues reported against the beta build are tracked as items 9-12 below. Item 9 (merchant-line
   companions opening a stall) is fixed; the rest are open: companions appearing to vanish after a
   party wipe, the party window's location column, and the window's presentation.
