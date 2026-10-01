@@ -1,3 +1,12 @@
+# Shell and Python scripts run under bash/python3 on Linux and macOS (and inside
+# WSL from Windows), which reject CR bytes: a `\r` after `pipefail` on line 14
+# of scripts/patch-client.sh turns `set -o pipefail` into `-o pipefail\r` and
+# bails with `invalid option name`. Force LF regardless of the checkout's
+# core.autocrlf, so a Windows clone can still run scripts/patch-client.sh via
+# `wsl bash` (the .vscode "Patch webclient" task).
+*.sh text eol=lf
+*.py text eol=lf
+
 # How GitHub counts this repository.
 #
 # The language bar was reporting JavaScript, which is not what this project

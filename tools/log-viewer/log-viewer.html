@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Log viewer</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --hit: #fde68a;
+    --row-hover: #f3f4f6;
+    --error: #dc2626;
+    --error-bg: #fef2f2;
+    --warning: #b45309;
+    --warning-bg: #fffbeb;
+    --marker: #6b7280;
+    --s-client: #2563eb; --s-map: #16a34a; --s-char: #0d9488; --s-login: #7c3aed;
+    --s-db: #a16207; --s-app: #db2777; --s-assets: #ea580c; --s-engine: #475569;
+    --a0: #111827; --a1: #b91c1c; --a2: #15803d; --a3: #a16207; --a4: #1d4ed8; --a5: #a21caf; --a6: #0e7490; --a7: #6b7280;
+    --a8: #4b5563; --a9: #ef4444; --a10: #22c55e; --a11: #ca8a04; --a12: #3b82f6; --a13: #d946ef; --a14: #06b6d4; --a15: #111827;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --border: #262b36;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --hit: #854d0e;
+      --row-hover: #1b1f28;
+      --error: #f87171;
+      --error-bg: #2a1215;
+      --warning: #fbbf24;
+      --warning-bg: #261d0a;
+      --marker: #9ca3af;
+      --s-client: #60a5fa; --s-map: #4ade80; --s-char: #2dd4bf; --s-login: #a78bfa;
+      --s-db: #facc15; --s-app: #f472b6; --s-assets: #fb923c; --s-engine: #94a3b8;
+      --a0: #9ca3af; --a1: #f87171; --a2: #4ade80; --a3: #facc15; --a4: #60a5fa; --a5: #e879f9; --a6: #22d3ee; --a7: #e5e7eb;
+      --a8: #6b7280; --a9: #fca5a5; --a10: #86efac; --a11: #fde047; --a12: #93c5fd; --a13: #f0abfc; --a14: #67e8f9; --a15: #ffffff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; font-size: 14px; line-height: 1.45;
+  }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .status { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+  .status.error { color: var(--error); }
+  .spacer { flex: 1; }
+  .btn {
+    padding: 5px 11px; background: transparent; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seg { display: inline-flex; }
+  .seg .btn { border-radius: 0; margin-left: -1px; }
+  .seg .btn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .seg .btn:last-child { border-radius: 0 6px 6px 0; }
+  input[type=search], select {
+    padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+    color: var(--text); font: inherit; font-size: 13px;
+  }
+  input[type=search] { width: 220px; }
+  input[type=search].bad { border-color: var(--error); }
+  label.check { font-size: 13px; color: var(--muted); display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+  .sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: 12.5px; cursor: pointer; user-select: none; color: var(--muted);
+  }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); opacity: .35; }
+  .chip.on { color: var(--text); border-color: var(--c); }
+  .chip.on .dot { opacity: 1; }
+  .chip .count { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11.5px; }
+  main { flex: 1; min-height: 0; display: flex; position: relative; }
+  .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+  .pane:last-child { border-right: 0; }
+  .pane h2 { margin: 0; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--c); border-bottom: 1px solid var(--border); background: var(--panel); }
+  .log {
+    flex: 1; overflow: auto; padding: 4px 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5;
+  }
+  .row { display: flex; gap: 8px; padding: 0 12px; white-space: pre-wrap; word-break: break-word; }
+  .row:hover { background: var(--row-hover); }
+  .row.error { background: var(--error-bg); }
+  .row.warning { background: var(--warning-bg); }
+  .row.marker { color: var(--marker); font-style: italic; justify-content: center; }
+  .t { color: var(--muted); flex: none; user-select: text; }
+  .src { flex: none; width: 5.5em; color: var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lv { flex: none; width: 1.2em; font-weight: 700; }
+  .row.error .lv { color: var(--error); }
+  .row.warning .lv { color: var(--warning); }
+  .msg { flex: 1; min-width: 0; }
+  .mod {
+    display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px;
+    background: var(--accent); color: #fff; cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  mark { background: var(--hit); color: inherit; border-radius: 2px; }
+  .empty { color: var(--muted); padding: 24px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #resume {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #fff; border: 0; border-radius: 999px; padding: 6px 16px; font: inherit; font-size: 13px;
+    cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.25);
+  }
+  .b { font-weight: 700; } .dim { opacity: .7; } .i { font-style: italic; } .u { text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Log viewer</h1>
+  <span class="status" id="status">Connecting…</span>
+  <span class="spacer"></span>
+  <span class="seg" id="levels" title="Which lines to show">
+    <button class="btn on" data-level="all">All</button>
+    <button class="btn" data-level="warning">Warnings + errors</button>
+    <button class="btn" data-level="error">Errors</button>
+  </span>
+  <input type="search" id="search" placeholder="Search" spellcheck="false">
+  <label class="check"><input type="checkbox" id="regex"> Regex</label>
+  <select id="modFilter" title="Only lines naming this mod"><option value="">All lines</option></select>
+  <span class="seg">
+    <button class="btn on" id="merged" title="One timeline">Merged</button>
+    <button class="btn" id="split" title="A column per source">Split</button>
+  </span>
+  <button class="btn" id="pause" title="Freeze the view; lines keep arriving">Pause</button>
+  <button class="btn" id="clear" title="Empty the view. The log files are not touched.">Clear</button>
+  <button class="btn" id="save" title="Save what is shown to a file">Save…</button>
+  <button class="btn" id="devtools" title="Chromium's inspector for your game window, for stepping through a mod's client script">Open the game's DevTools</button>
+</header>
+<div class="sources" id="sources"></div>
+<main id="main"></main>
+<button id="resume" hidden></button>
+
+<script>
+'use strict';
+const PER_SOURCE = 5000;   // lines kept per source
+const SHOWN_MAX = 10000;   // rows in the view at once
+const COLORS = { client: 'var(--s-client)', map: 'var(--s-map)', char: 'var(--s-char)', login: 'var(--s-login)', db: 'var(--s-db)', app: 'var(--s-app)', assets: 'var(--s-assets)', engine: 'var(--s-engine)' };
+const DEFAULT_ON = ['client', 'map', 'app'];
+
+const $ = id => document.getElementById(id);
+let sources = [];                 // [{id, name}]
+const enabled = new Set(loadPref('sources', DEFAULT_ON));
+const store = new Map();          // id -> [line]
+const recent = new Map();         // id -> Set of keys, for replayed backlog after a reconnect
+let seq = 0;
+let level = 'all';
+let search = null;                // RegExp or null
+let modFilter = '';
+let mods = [];
+let modPattern = null;
+let split = false;
+let paused = false;
+let pending = 0;
+let abort = null;
+let reconnectTimer = null;
+
+function loadPref(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem('logviewer.' + key)); return v ?? fallback; } catch { return fallback; }
+}
+function savePref(key, value) { try { localStorage.setItem('logviewer.' + key, JSON.stringify(value)); } catch {} }
+function setStatus(text, error) { $('status').textContent = text; $('status').className = 'status' + (error ? ' error' : ''); }
+
+// ---- ANSI: rAthena colours its output; turn the codes into styles.
+function ansiSegments(text) {
+  const out = [];
+  let style = {};
+  const re = /\x1b\[([0-9;]*)m/g;
+  let at = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > at) out.push({ text: text.slice(at, m.index), style: { ...style } });
+    at = re.lastIndex;
+    const codes = m[1] === '' ? [0] : m[1].split(';').map(Number);
+    for (let i = 0; i < codes.length; i++) {
+      const c = codes[i];
+      if (c === 0) style = {};
+      else if (c === 1) style.b = true;
+      else if (c === 2) style.dim = true;
+      else if (c === 3) style.i = true;
+      else if (c === 4) style.u = true;
+      else if (c === 22) { style.b = false; style.dim = false; }
+      else if (c === 23) style.i = false;
+      else if (c === 24) style.u = false;
+      else if (c >= 30 && c <= 37) style.fg = c - 30;
+      else if (c >= 90 && c <= 97) style.fg = c - 90 + 8;
+      else if (c === 39) delete style.fg;
+      else if (c >= 40 && c <= 47) style.bg = c - 40;
+      else if (c >= 100 && c <= 107) style.bg = c - 100 + 8;
+      else if (c === 49) delete style.bg;
+      else if ((c === 38 || c === 48) && codes[i + 1] === 5) { const n = codes[i + 2]; if (n < 16) style[c === 38 ? 'fg' : 'bg'] = n; i += 2; }
+      else if ((c === 38 || c === 48) && codes[i + 1] === 2) i += 4;
+    }
+  }
+  if (at < text.length) out.push({ text: text.slice(at), style: { ...style } });
+  // Any other escape (cursor movement, erase) is dropped.
+  for (const s of out) s.text = s.text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b/g, '');
+  return out;
+}
+function plain(text) { return text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b/g, ''); }
+
+// Text into a parent, with search matches marked. Never innerHTML.
+function appendMarked(parent, text) {
+  if (!search || !text) { parent.appendChild(document.createTextNode(text)); return; }
+  search.lastIndex = 0;
+  let at = 0, m;
+  while ((m = search.exec(text))) {
+    if (m[0] === '') { search.lastIndex++; continue; }
+    if (m.index > at) parent.appendChild(document.createTextNode(text.slice(at, m.index)));
+    const mark = document.createElement('mark');
+    mark.textContent = m[0];
+    parent.appendChild(mark);
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) parent.appendChild(document.createTextNode(text.slice(at)));
+}
+
+// ---- Lines
+function keyOf(e) { return e.time + '\u0000' + e.text; }
+function add(e) {
+  if (!store.has(e.source)) { store.set(e.source, []); recent.set(e.source, new Set()); }
+  const seen = recent.get(e.source);
+  const key = keyOf(e);
+  if (seen.has(key)) return;             // replayed by a reconnect
+  seen.add(key);
+  if (seen.size > 2000) { const drop = [...seen].slice(0, 1000); for (const k of drop) seen.delete(k); }
+  const line = { ...e, seq: seq++, plain: plain(e.text) };
+  line.mods = modsIn(line.plain);
+  const list = store.get(e.source);
+  list.push(line);
+  if (list.length > PER_SOURCE) list.splice(0, list.length - PER_SOURCE);
+  updateCount(e.source);
+  if (!enabled.has(e.source)) return;
+  if (paused) { if (visible(line)) { pending++; showResume(); } return; }
+  queue.push(line);
+  if (!frame) frame = requestAnimationFrame(flush);
+}
+
+function modsIn(text) {
+  if (!modPattern) return [];
+  return [...new Set((text.match(modPattern) || []).map(m => m.replace(/^npc\/mods\//, '').replace(/\/$/, '')))];
+}
+
+function visible(line) {
+  if (!enabled.has(line.source)) return false;
+  if (level === 'error' && line.level !== 'error') return false;
+  if (level === 'warning' && line.level !== 'error' && line.level !== 'warning') return false;
+  if (modFilter && !line.mods.includes(modFilter)) return false;
+  if (search) { search.lastIndex = 0; if (!search.test(line.plain)) return false; }
+  return true;
+}
+
+function time(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
+function rowFor(line) {
+  const row = document.createElement('div');
+  row.className = 'row ' + line.level;
+  row.style.setProperty('--c', COLORS[line.source] || 'var(--muted)');
+  if (line.level === 'marker') {
+    row.textContent = `${time(line.time)}  ${nameOf(line.source)}  ${line.plain}`;
+    return row;
+  }
+  const t = document.createElement('span'); t.className = 't'; t.textContent = time(line.time); row.appendChild(t);
+  if (!split) { const s = document.createElement('span'); s.className = 'src'; s.textContent = nameOf(line.source); s.title = nameOf(line.source); row.appendChild(s); }
+  const lv = document.createElement('span'); lv.className = 'lv';
+  lv.textContent = line.level === 'error' ? 'E' : line.level === 'warning' ? 'W' : '';
+  row.appendChild(lv);
+  const msg = document.createElement('span'); msg.className = 'msg';
+  for (const mod of line.mods) {
+    const b = document.createElement('span'); b.className = 'mod'; b.textContent = mod; b.title = `Show only lines naming ${mod}`;
+    b.onclick = () => { $('modFilter').value = mod; modFilter = mod; render(); };
+    msg.appendChild(b);
+  }
+  for (const seg of ansiSegments(line.text)) {
+    const st = seg.style;
+    if (!Object.keys(st).some(k => st[k] !== undefined && st[k] !== false)) { appendMarked(msg, seg.text); continue; }
+    const span = document.createElement('span');
+    span.className = [st.b && 'b', st.dim && 'dim', st.i && 'i', st.u && 'u'].filter(Boolean).join(' ');
+    if (st.fg !== undefined) span.style.color = `var(--a${st.fg})`;
+    if (st.bg !== undefined) { span.style.background = `var(--a${st.bg})`; span.style.color = 'var(--bg)'; }
+    appendMarked(span, seg.text);
+    msg.appendChild(span);
+  }
+  row.appendChild(msg);
+  return row;
+}
+
+function nameOf(id) { return (sources.find(s => s.id === id) || { name: id }).name; }
+
+// ---- The view
+let queue = [];
+let frame = 0;
+let programmatic = false;
+
+function panes() { return [...$('main').querySelectorAll('.log')]; }
+function paneFor(source) { return split ? $('main').querySelector(`.log[data-source="${source}"]`) : $('main').querySelector('.log'); }
+
+function flush() {
+  frame = 0;
+  const lines = queue.filter(visible);
+  queue = [];
+  const touched = new Set();
+  for (const line of lines) {
+    const pane = paneFor(line.source);
+    if (!pane) continue;
+    const empty = pane.querySelector('.empty'); if (empty) empty.remove();
+    pane.appendChild(rowFor(line));
+    touched.add(pane);
+  }
+  for (const pane of touched) {
+    while (pane.childElementCount > SHOWN_MAX) pane.firstElementChild.remove();
+    toBottom(pane);
+  }
+}
+
+function toBottom(pane) {
+  programmatic = true;
+  pane.scrollTop = pane.scrollHeight;
+  requestAnimationFrame(() => { programmatic = false; });
+}
+
+function render() {
+  queue = [];
+  const main = $('main');
+  main.textContent = '';
+  const ids = sources.map(s => s.id).filter(id => enabled.has(id));
+  const groups = split ? ids.map(id => [id]) : [ids];
+  for (const group of groups) {
+    const pane = document.createElement('div'); pane.className = 'pane';
+    if (split) {
+      pane.style.setProperty('--c', COLORS[group[0]]);
+      const h = document.createElement('h2'); h.textContent = nameOf(group[0]); pane.appendChild(h);
+    }
+    const log = document.createElement('div'); log.className = 'log'; log.tabIndex = 0;
+    if (split) log.dataset.source = group[0];
+    const lines = group.flatMap(id => store.get(id) || []).filter(visible)
+      .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.seq - b.seq)).slice(-SHOWN_MAX);
+    const frag = document.createDocumentFragment();
+    for (const line of lines) frag.appendChild(rowFor(line));
+    if (!lines.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = ids.length ? 'Nothing yet. Lines appear here as they are written.' : 'Choose a source above.';
+      frag.appendChild(e);
+    }
+    log.appendChild(frag);
+    log.addEventListener('scroll', () => onScroll(log));
+    pane.appendChild(log);
+    main.appendChild(pane);
+    toBottom(log);
+  }
+  pending = 0;
+  showResume();
+}
+
+function onScroll(log) {
+  if (programmatic) return;
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 8;
+  if (!atBottom && !paused) setPaused(true);
+  else if (atBottom && paused && pending === 0 && panes().length === 1) setPaused(false);
+}
+
+function setPaused(p) {
+  paused = p;
+  $('pause').classList.toggle('on', p);
+  $('pause').textContent = p ? 'Paused' : 'Pause';
+  if (!p) render(); else showResume();
+}
+function showResume() {
+  const b = $('resume');
+  b.hidden = !paused;
+  b.textContent = pending ? `Paused — ${pending} new line${pending === 1 ? '' : 's'}. Follow the log` : 'Paused. Follow the log';
+}
+
+// ---- Sources
+function paintSources() {
+  const box = $('sources');
+  box.textContent = '';
+  for (const s of sources) {
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (enabled.has(s.id) ? ' on' : '');
+    chip.style.setProperty('--c', COLORS[s.id]);
+    chip.dataset.source = s.id;
+    chip.title = 'Show or hide this source. Alt-click to show only this one.';
+    const dot = document.createElement('span'); dot.className = 'dot';
+    const name = document.createElement('span'); name.textContent = s.name;
+    const count = document.createElement('span'); count.className = 'count';
+    chip.append(dot, name, count);
+    chip.onclick = e => {
+      if (e.altKey) { enabled.clear(); enabled.add(s.id); }
+      else if (enabled.has(s.id)) enabled.delete(s.id); else enabled.add(s.id);
+      savePref('sources', [...enabled]);
+      paintSources();
+      render();
+      connect();
+    };
+    box.appendChild(chip);
+    updateCount(s.id);
+  }
+}
+function updateCount(id) {
+  const chip = $('sources').querySelector(`.chip[data-source="${id}"] .count`);
+  if (!chip) return;
+  const list = store.get(id) || [];
+  const errors = list.filter(l => l.level === 'error').length;
+  chip.textContent = list.length ? `${list.length}${errors ? ` · ${errors} err` : ''}` : '';
+}
+
+// ---- The stream: fetch + a reader, since EventSource wants http(s).
+async function connect() {
+  clearTimeout(reconnectTimer);
+  if (abort) abort.abort();
+  const ids = sources.map(s => s.id).filter(id => enabled.has(id));
+  if (!ids.length) { setStatus('No sources chosen'); return; }
+  const controller = new AbortController();
+  abort = controller;
+  try {
+    const res = await fetch('stream?sources=' + encodeURIComponent(ids.join(',')), { signal: controller.signal, cache: 'no-store' });
+    if (!res.ok || !res.body) throw new Error(`the app answered ${res.status}`);
+    setStatus('Live');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, cut);
+        buffer = buffer.slice(cut + 2);
+        const data = block.split('\n').filter(l => l.startsWith('data: ')).map(l => l.slice(6)).join('\n');
+        if (!data) continue;
+        try { add(JSON.parse(data)); } catch { /* one bad event, not a broken stream */ }
+      }
+    }
+    throw new Error('the stream ended');
+  } catch (e) {
+    if (controller.signal.aborted) return;
+    setStatus(`Reconnecting… (${e.message || e})`, true);
+    reconnectTimer = setTimeout(connect, 2000);
+  }
+}
+
+// ---- Controls
+$('levels').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  level = b.dataset.level;
+  for (const x of $('levels').children) x.classList.toggle('on', x === b);
+  render();
+});
+let searchTimer = 0;
+function updateSearch() {
+  const q = $('search').value;
+  $('search').classList.remove('bad');
+  search = null;
+  if (q) {
+    try { search = $('regex').checked ? new RegExp(q, 'gi') : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); }
+    catch { $('search').classList.add('bad'); }
+  }
+  render();
+}
+$('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(updateSearch, 150); });
+$('regex').addEventListener('change', updateSearch);
+$('modFilter').addEventListener('change', () => { modFilter = $('modFilter').value; render(); });
+$('merged').onclick = () => { split = false; $('merged').classList.add('on'); $('split').classList.remove('on'); render(); };
+$('split').onclick = () => { split = true; $('split').classList.add('on'); $('merged').classList.remove('on'); render(); };
+$('pause').onclick = () => setPaused(!paused);
+$('resume').onclick = () => setPaused(false);
+$('clear').onclick = () => {
+  // The view only: the files, and what the app keeps, are untouched.
+  for (const id of store.keys()) { store.set(id, []); updateCount(id); }
+  render();
+};
+$('save').onclick = () => {
+  const ids = sources.map(s => s.id).filter(id => enabled.has(id));
+  const lines = ids.flatMap(id => store.get(id) || []).filter(visible)
+    .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.seq - b.seq));
+  const text = lines.map(l => `${l.time}\t${nameOf(l.source)}\t${l.level}\t${l.plain}`).join('\n') + '\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = `ragnarok-offline-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+};
+$('devtools').onclick = async () => {
+  try {
+    const res = await fetch('api/devtools', { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (e) { setStatus(String(e.message || e), true); }
+};
+
+// ---- Start
+(async () => {
+  try { sources = await (await fetch('sources.json')).json(); } catch { setStatus('The app did not answer.', true); return; }
+  paintSources();
+  render();
+  connect();
+  // Mods, for the badges. A script path under a mod's npc/ names it too.
+  try {
+    mods = await (await fetch('mods.json')).json();
+    if (mods.length) {
+      const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      modPattern = new RegExp(`npc/mods/(?:${mods.map(esc).join('|')})/|(?<![\\w-])(?:${mods.map(esc).join('|')})(?![\\w-])`, 'g');
+      for (const m of mods) { const o = document.createElement('option'); o.value = m; o.textContent = `Mod: ${m}`; $('modFilter').appendChild(o); }
+      for (const list of store.values()) for (const line of list) line.mods = modsIn(line.plain);
+      render();
+    }
+  } catch { /* no badges, then */ }
+})();
+</script>
+</body>
+</html>

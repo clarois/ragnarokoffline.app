@@ -31,6 +31,15 @@ function validate(settings) {
       typeof settings.instant_character_deletion !== 'boolean') {
     throw new Error('Cannot read the character deletion setting. Repair settings.json before starting the server; the deletion delay was left in place.');
   }
+  if (Object.hasOwn(settings, 'agent_count') &&
+      !(Number.isInteger(settings.agent_count) && settings.agent_count >= 1 && settings.agent_count <= 4)) {
+    throw new Error('Cannot read the AI agent setting. Choose how many agents again in Settings.');
+  }
+  for (const key of ['agent_play', 'agent_window']) {
+    if (Object.hasOwn(settings, key) && typeof settings[key] !== 'boolean') {
+      throw new Error('Cannot read the AI agent setting. Turn it off and on again in Settings.');
+    }
+  }
   return settings;
 }
 

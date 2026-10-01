@@ -24,8 +24,13 @@ pub struct Docker {
 /// the microVM and neither has a caller who benefits from an unbounded one.
 pub const SQL_INPUT_LIMIT: usize = 16 * 1024;
 pub const SQL_OUTPUT_LIMIT: usize = 64 * 1024;
+const SQL_LIMITS: (usize, usize) = (SQL_INPUT_LIMIT, SQL_OUTPUT_LIMIT);
 const TOO_LONG: &str = "That is more than 16 KiB of SQL. Send it as fewer, shorter statements.";
 const TOO_MUCH: &str = "That returned more than 64 KiB. Narrow it with a LIMIT, or ask for fewer columns.";
+
+/// The database browser in Settings -> Tools (#200) reads a page of rows and
+/// saves a batch of edits at a time, both hex-encoded. Larger, still bounded.
+pub const TOOL_SQL_LIMIT: usize = 8 * 1024 * 1024;
 
 /// Storage attached to a container.
 ///
@@ -234,6 +239,18 @@ impl Docker {
         }
     }
 
+    /// `logs -f -t`: the container's log as it is written, timestamped, onto
+    /// this process's own stdout and stderr, until the container stops. For
+    /// the log viewer in Settings -> Tools (#202).
+    pub fn follow_logs(&self, name: &str, tail: &str) -> Result<(), String> {
+        let status = self.base()
+            .args(["logs", "-f", "-t", "--tail", tail, name])
+            .stdin(Stdio::null())
+            .status()
+            .map_err(|e| format!("following {name}: {e}"))?;
+        if status.success() { Ok(()) } else { Err(format!("{name} has no log to follow")) }
+    }
+
     pub fn started_at(&self, name: &str) -> Option<String> {
         let output = self.output(["inspect", name]).ok()?;
         let crate::json::Value::Array(containers) = crate::json::parse(&output).ok()? else { return None; };
@@ -264,7 +281,7 @@ impl Docker {
     }
 
     pub fn exec_sql(&self, sql: &str) -> Result<String, String> {
-        self.sql(sql, &self.sql_auth()?, true, false)
+        self.sql(sql, &self.sql_auth()?, true, false, SQL_LIMITS)
     }
 
     /// The one caller whose statements a person wrote, so the one caller that
@@ -272,24 +289,32 @@ impl Docker {
     /// syntax error it is; "the private database operation failed" sends
     /// someone hunting a broken install for a missing comma.
     pub fn console_sql(&self, sql: &str) -> Result<String, String> {
-        self.sql(sql, &self.sql_auth()?, true, true)
+        self.sql(sql, &self.sql_auth()?, true, true, SQL_LIMITS)
+    }
+
+    /// For the database browser: no header row, errors reported (they name
+    /// the failing line, which is how a save says which change failed), and
+    /// room for a page of rows or a batch of edits. Every value in the SQL it
+    /// is given is built by `database`, never typed.
+    pub fn tool_sql(&self, sql: &str) -> Result<String, String> {
+        self.sql(sql, &self.sql_auth()?, false, true, (TOOL_SQL_LIMIT, TOOL_SQL_LIMIT))
     }
 
     /// No query or generated password enters argv, logs or raw error text.
     pub fn private_sql(&self, sql: &str) -> Result<String, String> {
-        self.sql(sql, &self.sql_auth()?, false, false)
+        self.sql(sql, &self.sql_auth()?, false, false, SQL_LIMITS)
     }
 
     pub fn root_sql(&self, sql: &str, legacy: bool) -> Result<String, String> {
         let auth = if legacy { vec!["-uroot".into(), "-pragnarok".into()] }
             else { vec!["--defaults-extra-file=/run/ragnarok-private/root.cnf".into()] };
-        self.sql(sql, &auth, false, false)
+        self.sql(sql, &auth, false, false, SQL_LIMITS)
     }
 
-    fn sql(&self, sql: &str, auth: &[String], headers: bool, report: bool) -> Result<String, String> {
+    fn sql(&self, sql: &str, auth: &[String], headers: bool, report: bool, (input_limit, output_limit): (usize, usize)) -> Result<String, String> {
         self.require_private_sql()?;
         let failure = || "The private database operation failed. Start the server to finish any pending credential migration, or restore its matching credential journal and backup.".to_string();
-        if sql.len() > SQL_INPUT_LIMIT { return Err(TOO_LONG.into()); }
+        if sql.len() > input_limit { return Err(TOO_LONG.into()); }
         let mut args: Vec<String> = ["exec", "-i", "ragnarok-db", "mariadb"].iter().map(|s| s.to_string()).collect();
         args.extend(auth.iter().cloned());
         args.extend(["--protocol=TCP", "-h127.0.0.1", "--batch", "--raw"].iter().map(|s| s.to_string()));
@@ -305,7 +330,7 @@ impl Docker {
         let stdout = child.stdout.take().ok_or_else(failure)?;
         let reader = std::thread::spawn(move || {
             let mut bytes = Vec::new();
-            stdout.take(SQL_OUTPUT_LIMIT as u64 + 1).read_to_end(&mut bytes).map(|_| bytes)
+            stdout.take(output_limit as u64 + 1).read_to_end(&mut bytes).map(|_| bytes)
         });
         // Drained on its own thread for the same reason stdout is: a client
         // that fills the pipe and blocks would never reach the wait below.
@@ -327,7 +352,7 @@ impl Docker {
         let wrote = writer.join().ok().and_then(Result::ok).is_some();
         let bytes = reader.join().ok().and_then(Result::ok).ok_or_else(failure)?;
         let said = complaint.and_then(|t| t.join().ok()).unwrap_or_default();
-        if bytes.len() > SQL_OUTPUT_LIMIT { return Err(TOO_MUCH.into()); }
+        if bytes.len() > output_limit { return Err(TOO_MUCH.into()); }
         if !wrote || !status.map(|s| s.success()).unwrap_or(false) {
             let said = String::from_utf8_lossy(&said).trim().to_string();
             return Err(if report && !said.is_empty() { said } else { failure() });

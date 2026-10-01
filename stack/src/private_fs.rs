@@ -268,6 +268,18 @@ mod windows {
             acl: *mut Handle,
             defaulted: *mut i32,
         ) -> i32;
+        fn GetNamedSecurityInfoW(
+            name: *const u16,
+            kind: u32,
+            info: u32,
+            owner: *mut Handle,
+            group: *mut Handle,
+            dacl: *mut Handle,
+            sacl: *mut Handle,
+            descriptor: *mut Handle,
+        ) -> u32;
+        fn EqualSid(first: Handle, second: Handle) -> i32;
+        fn CheckTokenMembership(token: Handle, sid: Handle, member: *mut i32) -> i32;
         fn SetNamedSecurityInfoW(
             name: *mut u16,
             kind: u32,
@@ -422,6 +434,35 @@ mod windows {
         }
         Ok(())
     }
+    /// Whether `name` (NUL-terminated) is owned by `sid`, or by a group enabled
+    /// in this process's token -- an administrator's new files are owned by
+    /// Administrators rather than by the user. Either way the owner's implied
+    /// WRITE_DAC is ours.
+    fn owned_by(name: &[u16], sid: Handle) -> bool {
+        unsafe {
+            let (mut owner, mut sd) = (null_mut(), null_mut());
+            if GetNamedSecurityInfoW(
+                name.as_ptr(),
+                1,
+                1, // OWNER_SECURITY_INFORMATION
+                &mut owner,
+                null_mut(),
+                null_mut(),
+                null_mut(),
+                &mut sd,
+            ) != 0
+            {
+                return false;
+            }
+            let sd = Local(sd);
+            let mut member = 0;
+            let ours = !owner.is_null()
+                && (EqualSid(owner, sid) != 0
+                    || (CheckTokenMembership(null_mut(), owner, &mut member) != 0 && member != 0));
+            drop(sd);
+            ours
+        }
+    }
     pub fn protect(path: &Path, directory: bool) -> Result<(), String> {
         let sd = descriptor(directory)?;
         let mut name: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -438,16 +479,18 @@ mod windows {
             }
             // Explicit owner and protected DACL; existing inherited grants are
             // replaced and newly created children inherit only owner + SYSTEM.
-            if SetNamedSecurityInfoW(
-                name.as_mut_ptr(),
-                1,
-                0x80000005,
-                owner,
-                null_mut(),
-                acl,
-                null_mut(),
-            ) != 0
-            {
+            //
+            //
+            // Setting the owner needs WRITE_OWNER, which a data drive that grants
+            // users only Modify does not give (the profile folder does, which is
+            // why this only failed off it, #154). When the path is already ours,
+            // the owner's implied WRITE_DAC is all the protected DACL needs, so
+            // write that alone rather than fail.
+            let set = |name: &mut [u16], info: u32| {
+                SetNamedSecurityInfoW(name.as_mut_ptr(), 1, info, owner, null_mut(), acl, null_mut()) == 0
+            };
+            // PROTECTED_DACL | DACL | OWNER, then PROTECTED_DACL | DACL.
+            if !set(&mut name, 0x80000005) && !(owned_by(&name, owner) && set(&mut name, 0x80000004)) {
                 return Err(ERROR.into());
             }
         }

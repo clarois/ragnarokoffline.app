@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>rAthena Item Browser</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --hit: #eff6ff;
+    --code: #f3f4f6;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --border: #262b36;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --hit: #1e293b;
+      --code: #0d1017;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    box-shadow: var(--shadow);
+    z-index: 2;
+  }
+  h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .status {
+    color: var(--muted);
+    font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 320px;
+  }
+  .status.error { color: #ef4444; }
+  .status.ok { color: #10b981; }
+  input[type=file] { display: none; }
+  .btn {
+    padding: 6px 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border);
+  }
+  .btn.ghost:hover { background: var(--hit); }
+  #search {
+    flex: 1;
+    min-width: 220px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  #search:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+  }
+  #search:disabled { opacity: 0.5; cursor: not-allowed; }
+  #cat-filter {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    max-width: 220px;
+    cursor: pointer;
+  }
+  #cat-filter:disabled { opacity: 0.5; cursor: not-allowed; }
+  #cat-filter:focus { outline: none; border-color: var(--accent); }
+  .preview-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .preview {
+    background: var(--code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    image-rendering: pixelated;
+    position: relative;
+  }
+  .preview.collection { width: 130px; height: 172px; }
+  .preview.drop       { width: 64px;  height: 64px;  }
+  .preview img {
+    max-width: 100%;
+    max-height: 100%;
+    image-rendering: pixelated;
+  }
+  .preview .placeholder {
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+    padding: 8px;
+    line-height: 1.35;
+  }
+  .preview-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .preview-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .preview-row .preview-label { margin: 0; }
+  .detail-head {
+    display: flex;
+    gap: 22px;
+    align-items: flex-start;
+  }
+  .detail-title { flex: 1; min-width: 0; }
+  .chip {
+    display: inline-block;
+    background: var(--code);
+    color: var(--muted);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .chip.type { color: var(--accent); font-weight: 500; }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    overflow: hidden;
+    min-height: 0;
+  }
+  #results {
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+  }
+  #results-info {
+    padding: 8px 16px;
+    color: var(--muted);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    z-index: 1;
+  }
+  .row {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    transition: background 0.08s;
+  }
+  .row:hover { background: var(--hit); }
+  .row.selected {
+    background: var(--hit);
+    border-left: 3px solid var(--accent);
+    padding-left: 13px;
+  }
+  .row-thumb {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--code);
+    border-radius: 4px;
+    overflow: hidden;
+    image-rendering: pixelated;
+  }
+  .row-thumb img {
+    max-width: 100%;
+    max-height: 100%;
+    image-rendering: pixelated;
+  }
+  .row-name {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+  .row-name mark {
+    background: transparent;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .row-id {
+    color: var(--muted);
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Consolas, "Liberation Mono", monospace;
+    flex-shrink: 0;
+  }
+  .id-mono.clickable {
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .id-mono.clickable:hover { background: var(--hit); }
+  .id-mono.clickable.copied { color: var(--accent); }
+  .slot-badge {
+    background: var(--code);
+    color: var(--muted);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    margin-left: 6px;
+  }
+  #detail {
+    overflow-y: auto;
+    padding: 28px 36px;
+  }
+  #detail.empty { padding: 0; }
+  .detail-head { margin-bottom: 24px; }
+  .detail-head h2 {
+    margin: 0 0 6px;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .detail-meta {
+    display: flex;
+    gap: 14px;
+    color: var(--muted);
+    font-size: 13px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .id-mono {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    background: var(--code);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .copy-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--code);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 13.5px;
+    margin-bottom: 22px;
+  }
+  .copy-line code { flex: 1; user-select: all; }
+  .copy-line input {
+    width: 70px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12.5px;
+    text-align: center;
+  }
+  .description {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .description strong { color: var(--text); font-weight: 700; }
+  .description em { color: var(--muted); font-style: italic; }
+  .fields {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 8px 16px;
+    margin-top: 22px;
+    font-size: 13px;
+  }
+  .fields dt { color: var(--muted); }
+  .fields dd {
+    margin: 0;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    word-break: break-all;
+  }
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .empty-state h3 {
+    color: var(--text);
+    margin: 0 0 10px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .empty-state p { margin: 6px 0; max-width: 520px; }
+  .empty-state code {
+    background: var(--code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: var(--text);
+    word-break: break-all;
+  }
+  .drop-zone {
+    margin-top: 22px;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 32px 60px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .drop-zone:hover,
+  .drop-zone.drag {
+    border-color: var(--accent);
+    background: var(--hit);
+  }
+  .drop-zone input { display: none; }
+  .hint {
+    margin-top: 18px;
+    font-size: 12.5px;
+    color: var(--muted);
+    max-width: 520px;
+  }
+  .no-results {
+    padding: 30px 16px;
+    color: var(--muted);
+    text-align: center;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>rAthena Item Browser</h1>
+  <input type="search" id="search" placeholder="Search by ID or name (e.g. 909, Jellopy, Red Potion)…" disabled autocomplete="off" spellcheck="false">
+  <select id="cat-filter" disabled title="Filter by category">
+    <option value="">All categories</option>
+  </select>
+  <span class="status" id="status">No file loaded yet.</span>
+</header>
+<main>
+  <div id="results" aria-label="Item list"></div>
+  <div id="detail" class="empty">
+    <div class="empty-state">
+      <h3 id="empty-title">Loading the game's item table…</h3>
+      <p id="empty-msg">Reading the <code>itemInfo.lua</code> your game uses, with your mods' items included in the client.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const search = $("search");
+const catFilter = $("cat-filter");
+const status = $("status");
+const results = $("results");
+const detail = $("detail");
+
+let items = [];
+let index = new Map();
+let selectedId = null;
+// Origin of the asset server that serves item icons. If the app is running,
+// its RemoteClient answers on :3338; images are fetched cross-origin here,
+// which is allowed for <img> without CORS but blocked for canvas.
+const ASSET_ORIGIN = "http://127.0.0.1:3338";
+
+
+// -------- persistent cache in IndexedDB --------
+// After a successful parse we stash the parsed array plus the source
+// filename and size. On next page load, if the cache is present, we
+// restore instantly and let the user drop a new file to refresh.
+const DB_NAME = "roItemBrowser";
+const DB_STORE = "cache";
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbGet(key) {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readonly");
+      const req = tx.objectStore(DB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return undefined; }
+}
+
+async function dbPut(key, value) {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* private mode / quota — silent */ }
+}
+
+async function dbDel(key) {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).delete(key);
+      tx.oncomplete = () => resolve();
+    });
+  } catch { /* noop */ }
+}
+
+async function tryRestore() {
+  const cached = await dbGet("current");
+  if (!cached || !cached.items || !cached.items.length) return false;
+  items = cached.items;
+  index = new Map(items.map(it => [it.id, it]));
+  populateCategoryFilter();
+  search.disabled = false;
+  catFilter.disabled = false;
+  setStatus(`${items.length.toLocaleString()} items restored from cache${cached.fileName ? " (" + cached.fileName + ")" : ""}`, "ok");
+  render("");
+  return true;
+}
+
+// Build the dropdown as two-level: each parent bucket (Weapon, Armor, …)
+// becomes an <optgroup>, and every distinct raw Type inside it becomes a
+// leaf. A "cat:X" value filters by the whole bucket, a "type:X" value
+// filters by that exact subtype. Buckets with only one subtype collapse
+// to a plain top-level option, no optgroup.
+//
+// Headgear is a special case: the raw Type is just "Headgear" for every
+// item, so subgrouping by Type would collapse to one line. Instead we
+// subgroup by equip position (Upper / Middle / Lower / combinations),
+// which is what a modder actually cares about.
+function subgroupKey(it) {
+  if (categoryOf(it.type) === "Headgear") {
+    return { kind: "pos", value: it.position || "(unknown position)" };
+  }
+  return { kind: "type", value: it.type };
+}
+
+// The order slot labels appear in-game — used to sort the Headgear optgroup.
+const POSITION_ORDER = ["Upper", "Middle", "Lower", "Upper + Middle", "Middle + Lower", "Upper + Lower", "All 3 slots", "(unknown position)"];
+
+function populateCategoryFilter() {
+  // Bucket → Map(leafKey → {count, kind, value})
+  const buckets = new Map();
+  let untyped = 0;
+  for (const it of items) {
+    if (!it.type) { untyped++; continue; }
+    const bucket = categoryOf(it.type);
+    const { kind, value } = subgroupKey(it);
+    if (!buckets.has(bucket)) buckets.set(bucket, new Map());
+    const inner = buckets.get(bucket);
+    const entry = inner.get(value) || { count: 0, kind, value };
+    entry.count++;
+    inner.set(value, entry);
+  }
+  // Sort buckets by total. Sort leaves by count except for Headgear, whose
+  // slots have a natural anatomical order that reads better than "biggest first".
+  const sortedBuckets = Array.from(buckets.entries())
+    .map(([b, m]) => ({
+      name: b,
+      total: Array.from(m.values()).reduce((a, e) => a + e.count, 0),
+      leaves: Array.from(m.values()),
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  const parts = ['<option value="">All categories</option>'];
+  for (const b of sortedBuckets) {
+    if (b.name === "Headgear") {
+      b.leaves.sort((a, c) => POSITION_ORDER.indexOf(a.value) - POSITION_ORDER.indexOf(c.value));
+    } else {
+      b.leaves.sort((a, c) => c.count - a.count);
+    }
+    if (b.leaves.length === 1) {
+      const only = b.leaves[0];
+      parts.push(`<option value="${only.kind}:${escapeAttr(only.value)}">${escapeHtml(b.name)} (${only.count.toLocaleString()})</option>`);
+    } else {
+      parts.push(`<optgroup label="${escapeAttr(b.name)}">`);
+      parts.push(`<option value="cat:${escapeAttr(b.name)}">All ${escapeHtml(b.name.toLowerCase())} (${b.total.toLocaleString()})</option>`);
+      for (const leaf of b.leaves) {
+        parts.push(`<option value="${leaf.kind}:${escapeAttr(leaf.value)}">${escapeHtml(leaf.value)} (${leaf.count.toLocaleString()})</option>`);
+      }
+      parts.push('</optgroup>');
+    }
+  }
+  if (untyped) {
+    parts.push(`<option value="untyped">(no Type field) (${untyped.toLocaleString()})</option>`);
+  }
+  catFilter.innerHTML = parts.join("");
+}
+
+function showClearCacheButton() {
+  if (document.getElementById("clear-cache")) return;
+  const btn = document.createElement("button");
+  btn.id = "clear-cache";
+  btn.className = "btn ghost";
+  btn.textContent = "Clear cache";
+  btn.title = "Forget the loaded file and start over";
+  btn.addEventListener("click", async () => {
+    await dbDel("current");
+    location.reload();
+  });
+  status.parentNode.insertBefore(btn, status);
+}
+
+async function loadFile(file) {
+  setStatus(`Reading ${file.name}…`);
+  try {
+    const t0 = performance.now();
+    const buf = await file.arrayBuffer();
+    // itemInfo.lua from Ragnarok clients is CP949-encoded (Korean legacy codepage).
+    // Some newer / edited copies land as UTF-8. Try strict UTF-8 first; on any
+    // invalid byte fall back to EUC-KR (which is the CP949-compatible label
+    // browsers ship in the Encoding Standard).
+    let text;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    } catch {
+      try {
+        text = new TextDecoder("euc-kr", { fatal: false }).decode(buf);
+      } catch {
+        text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+      }
+    }
+    setStatus(`Parsing ${(file.size/1024/1024).toFixed(1)} MB…`);
+    await new Promise(r => setTimeout(r, 20));
+    const parsed = parseItemInfo(text);
+    items = Object.entries(parsed).map(([id, it]) => ({ id: parseInt(id, 10), ...it }));
+    items.sort((a, b) => a.id - b.id);
+    index = new Map(items.map(it => [it.id, it]));
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    setStatus(`Loaded ${items.length.toLocaleString()} items in ${secs}s`, "ok");
+    search.disabled = false;
+    catFilter.disabled = false;
+    populateCategoryFilter();
+    // Persist for the next page-open. Fire-and-forget; cache miss is fine.
+    dbPut("current", { fileName: file.name, size: file.size, when: Date.now(), items });
+    search.focus();
+    render(search.value.trim());
+  } catch (err) {
+    setStatus(`Error: ${err.message}`, "error");
+    console.error(err);
+  }
+}
+
+function setStatus(msg, cls) {
+  status.textContent = msg;
+  status.className = "status" + (cls ? " " + cls : "");
+}
+
+function parseItemInfo(text) {
+  const out = {};
+  const idPattern = /\[\s*(\d+)\s*\]\s*=\s*\{/g;
+  let m;
+  while ((m = idPattern.exec(text)) !== null) {
+    const id = parseInt(m[1], 10);
+    const bodyStart = m.index + m[0].length;
+    const end = matchBrace(text, bodyStart);
+    if (end < 0) continue;
+    const body = text.slice(bodyStart, end);
+    // Only accept if body looks like an item entry (has one of the known fields)
+    if (!/identifiedDisplayName|unidentifiedDisplayName|identifiedResourceName/.test(body)) continue;
+    out[id] = parseBody(body);
+    idPattern.lastIndex = end + 1;
+  }
+  return out;
+}
+
+// Given text and an index just after an opening '{', return the index of the matching '}'.
+function matchBrace(text, start) {
+  let depth = 1;
+  let i = start;
+  const n = text.length;
+  while (i < n && depth > 0) {
+    const c = text[i];
+    if (c === '"') {
+      i++;
+      while (i < n && text[i] !== '"') {
+        if (text[i] === '\\') i++;
+        i++;
+      }
+    } else if (c === '-' && text[i + 1] === '-') {
+      // Lua comment: skip to end of line (long comments -- [[ ... ]] are rare here)
+      while (i < n && text[i] !== '\n') i++;
+    } else if (c === '{') {
+      depth++;
+    } else if (c === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+    i++;
+  }
+  return -1;
+}
+
+function parseBody(body) {
+  // Word boundary at start — otherwise "identifiedFoo" would also match inside
+  // "unidentifiedFoo" (which ends with the same suffix) and grab the wrong one.
+  const str = (key) => {
+    const re = new RegExp("\\b" + key + "\\s*=\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+    const m = body.match(re);
+    return m ? m[1] : "";
+  };
+  const num = (key) => {
+    const re = new RegExp("\\b" + key + "\\s*=\\s*(-?\\d+)");
+    const m = body.match(re);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  const arr = (key) => {
+    const openMatch = body.match(new RegExp("\\b" + key + "\\s*=\\s*\\{"));
+    if (!openMatch) return [];
+    const openIdx = openMatch.index + openMatch[0].length;
+    const closeIdx = matchBrace(body, openIdx);
+    if (closeIdx < 0) return [];
+    const inner = body.slice(openIdx, closeIdx);
+    const strs = [];
+    const sp = /"((?:[^"\\]|\\.)*)"/g;
+    let m;
+    while ((m = sp.exec(inner)) !== null) {
+      strs.push(m[1].replace(/\\"/g, '"').replace(/\\n/g, "\n"));
+    }
+    return strs;
+  };
+  const description = arr("identifiedDescriptionName");
+  return {
+    displayName: str("identifiedDisplayName") || str("unidentifiedDisplayName"),
+    unidentifiedName: str("unidentifiedDisplayName"),
+    resourceName: str("identifiedResourceName") || str("unidentifiedResourceName"),
+    unidentifiedResourceName: str("unidentifiedResourceName"),
+    description,
+    unidentifiedDescription: arr("unidentifiedDescriptionName"),
+    slotCount: num("slotCount"),
+    classNum: num("ClassNum"),
+    type: extractType(description),
+    position: extractPosition(description),
+  };
+}
+
+// Pull the equip slot(s) out of a headgear description. The line reads
+// "Position: Upper" or "Position: Upper, Middle" — sometimes typoed as
+// "Uppper" or "Medium". We tokenise on the three canonical words and
+// normalise so that {upper,middle} and {middle,upper} collapse to the
+// same "Upper + Middle" label. Returns "" for items that don't carry it.
+function extractPosition(descLines) {
+  for (const raw of descLines) {
+    const clean = raw.replace(/\^[0-9a-fA-F]{6}/g, "").trim();
+    const m = clean.match(/^(?:Position|Location)\s*[:：]\s*(.+?)\s*$/i);
+    if (!m) continue;
+    const value = m[1].toLowerCase();
+    // Stop at the next `<word>:` if the description ran fields together, e.g.
+    // "Upper Weight: 10". Anything after that isn't the position any more.
+    const trimmed = value.split(/\b(?:weight|defense|refineable|slot|armor level|armor lv|attack|requirement|jobs?|level|class)\s*[:：]/i)[0];
+    const has = {
+      upper: /\b(upper|uppper)\b/.test(trimmed),
+      middle: /\b(middle|medium)\b/.test(trimmed),
+      lower: /\b(lower)\b/.test(trimmed),
+    };
+    const count = has.upper + has.middle + has.lower;
+    if (count === 0) return "";
+    if (count === 3) return "All 3 slots";
+    const parts = [];
+    if (has.upper) parts.push("Upper");
+    if (has.middle) parts.push("Middle");
+    if (has.lower) parts.push("Lower");
+    return parts.join(" + ");
+  }
+  return "";
+}
+
+// Pull "Type: X" out of a description block. Descriptions typically embed one
+// line like "^0000CCType:^000000 Consumable" or "Type : Weapon". We strip
+// color codes first, then match. Returns "" if nothing found.
+function extractType(descLines) {
+  for (const raw of descLines) {
+    const clean = raw.replace(/\^[0-9a-fA-F]{6}/g, "").trim();
+    const m = clean.match(/^Type\s*[:：]\s*(.+?)\s*$/i);
+    if (m) return m[1].trim();
+  }
+  return "";
+}
+
+// Roll a fine-grained Type into one of a handful of top-level buckets so the
+// filter dropdown stays short. Falls back to the raw type text as its own
+// bucket when nothing matches — better a long list than a wrong one.
+function categoryOf(type) {
+  const t = type.toLowerCase();
+  if (!t) return "Other";
+  if (/(healing|consumable|potion|food|recipe|scroll)/.test(t)) return "Consumable";
+  if (/(card)/.test(t)) return "Card";
+  if (/(headgear|hat|helm)/.test(t)) return "Headgear";
+  if (/(costume|garb)/.test(t)) return "Costume";
+  if (/(shield|armor|garment|shoes|footgear|accessory|robe|manteau|belt|muffler)/.test(t)) return "Armor";
+  if (/(sword|dagger|axe|bow|staff|rod|wand|whip|book|spear|katar|knuckle|instrument|mace|club|two.hand|weapon|gun|revolver|rifle|shotgun|gatling|grenade|huuma|shuriken)/.test(t)) return "Weapon";
+  if (/(ammo|arrow|bullet|cannon|shuriken|kunai)/.test(t)) return "Ammo";
+  if (/(enchant)/.test(t)) return "Enchant";
+  if (/(pet|egg|tamin|accessor)/.test(t)) return "Pet";
+  if (/(collectible|misc|etc|material)/.test(t)) return "Misc";
+  if (/(quest|event)/.test(t)) return "Quest / Event";
+  return type;
+}
+
+// -------- search --------
+let searchTimer = null;
+search.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => render(search.value.trim()), 120);
+});
+catFilter.addEventListener("change", () => render(search.value.trim()));
+
+// Global `/` shortcut to focus the search box, matching Slack / GitHub / most
+// web docs. `Esc` clears the query and moves focus back so you can type again.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement !== search && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault();
+    search.focus();
+    search.select();
+  } else if (e.key === "Escape" && document.activeElement === search) {
+    search.value = "";
+    render("");
+  }
+});
+search.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const first = results.querySelector(".row");
+    if (first) first.click();
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    const rows = Array.from(results.querySelectorAll(".row"));
+    const cur = rows.findIndex(r => r.classList.contains("selected"));
+    const next = rows[Math.min(cur + 1, rows.length - 1)] || rows[0];
+    if (next) next.click();
+    next?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    const rows = Array.from(results.querySelectorAll(".row"));
+    const cur = rows.findIndex(r => r.classList.contains("selected"));
+    const next = rows[Math.max(cur - 1, 0)] || rows[0];
+    if (next) next.click();
+    next?.scrollIntoView({ block: "nearest" });
+  }
+});
+
+const LIMIT = 300;
+
+function render(query) {
+  const q = query.toLowerCase();
+  const cat = catFilter.value;
+  let list;
+  if (!q) {
+    list = items;
+  } else if (/^\d+$/.test(q)) {
+    const exact = index.get(parseInt(q, 10));
+    const prefix = items.filter(it => String(it.id).startsWith(q) && it.id !== parseInt(q, 10));
+    list = exact ? [exact, ...prefix] : prefix;
+  } else {
+    const parts = q.split(/\s+/).filter(Boolean);
+    list = items.filter(it => {
+      const name = it.displayName.toLowerCase();
+      return parts.every(p => name.includes(p));
+    });
+  }
+  if (cat) {
+    // Dropdown values:
+    //   type:X      → items whose raw Type is exactly X (e.g. "Dagger")
+    //   pos:X       → headgears whose Position is exactly X (e.g. "Upper")
+    //   cat:X       → items whose parent bucket is X (e.g. "Weapon")
+    //   untyped     → items with no Type field extracted
+    //   (bare "X")  → legacy: parent-bucket match, kept for old cached data
+    if (cat === "untyped") {
+      list = list.filter(it => !it.type);
+    } else if (cat.startsWith("type:")) {
+      const exact = cat.slice(5);
+      list = list.filter(it => it.type === exact);
+    } else if (cat.startsWith("pos:")) {
+      const exact = cat.slice(4);
+      const isUnknown = exact === "(unknown position)";
+      list = list.filter(it =>
+        categoryOf(it.type) === "Headgear" &&
+        (isUnknown ? !it.position : it.position === exact)
+      );
+    } else if (cat.startsWith("cat:")) {
+      const bucket = cat.slice(4);
+      list = list.filter(it => categoryOf(it.type) === bucket);
+    } else {
+      list = list.filter(it => categoryOf(it.type) === cat);
+    }
+  }
+  results.innerHTML = "";
+  const info = document.createElement("div");
+  info.id = "results-info";
+  info.textContent = list.length === 0
+    ? "0 items"
+    : list.length > LIMIT
+      ? `Showing ${LIMIT.toLocaleString()} of ${list.length.toLocaleString()} — refine to narrow.`
+      : `${list.length.toLocaleString()} item${list.length === 1 ? "" : "s"}`;
+  results.appendChild(info);
+  if (list.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "no-results";
+    empty.textContent = "No items match. Try a partial name or an ID.";
+    results.appendChild(empty);
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const it of list.slice(0, LIMIT)) {
+    const row = document.createElement("div");
+    row.className = "row";
+    if (selectedId === it.id) row.classList.add("selected");
+    row.dataset.id = it.id;
+    const slot = it.slotCount ? `<span class="slot-badge">${it.slotCount}s</span>` : "";
+    const thumb = it.resourceName
+      ? `<div class="row-thumb"><img loading="lazy" src="${iconUrl("item", it.resourceName)}" alt="" onerror="this.remove()"></div>`
+      : '<div class="row-thumb"></div>';
+    const highlighted = highlightMatch(it.displayName || "(unnamed)", q);
+    row.innerHTML =
+      thumb +
+      `<div class="row-name">${highlighted}${slot}</div>` +
+      `<div class="row-id">${it.id}</div>`;
+    row.addEventListener("click", () => selectItem(it));
+    frag.appendChild(row);
+  }
+  results.appendChild(frag);
+  if (selectedId != null && !index.has(selectedId)) {
+    clearDetail();
+  }
+}
+
+function clearDetail() {
+  detail.classList.add("empty");
+  detail.innerHTML =
+    '<div class="empty-state"><h3>Pick an item</h3><p>Click one on the left, or press ↓ to jump in.</p></div>';
+}
+
+function selectItem(it) {
+  selectedId = it.id;
+  const descParts = (it.description.length ? it.description : it.unidentifiedDescription);
+  const descText = descParts.join("\n");
+  const desc = formatDescription(descText);
+  detail.classList.remove("empty");
+  const slots = it.slotCount ? `<span>${it.slotCount} slot${it.slotCount === 1 ? "" : "s"}</span>` : "";
+  const resource = it.resourceName ? `<span class="id-mono">${escapeHtml(it.resourceName)}</span>` : "";
+  const typeChip = it.type ? `<span class="chip type">${escapeHtml(it.type)}</span>` : "";
+  detail.innerHTML =
+    '<div class="detail-head">' +
+      previewMarkup(it) +
+      '<div class="detail-title">' +
+        `<h2>${escapeHtml(it.displayName || "(unnamed)")}</h2>` +
+        '<div class="detail-meta">' +
+          `<span>ID <span class="id-mono clickable" title="Click to copy just the ID" data-copy="${it.id}">${it.id}</span></span>` +
+          slots + typeChip + resource +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="copy-line">' +
+      '<code id="copy-code">getitem ' + it.id + ', 1;</code>' +
+      '<input type="number" id="copy-qty" min="1" max="30000" value="1" title="Quantity">' +
+      '<button class="btn" id="copy-btn">Copy</button>' +
+    '</div>' +
+    `<div class="description">${desc || '<em>No description.</em>'}</div>` +
+    buildFields(it);
+  const qty = $("copy-qty");
+  const code = $("copy-code");
+  const btn = $("copy-btn");
+  qty.addEventListener("input", () => {
+    const n = Math.max(1, Math.min(30000, parseInt(qty.value, 10) || 1));
+    code.textContent = `getitem ${it.id}, ${n};`;
+  });
+  btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(code.textContent);
+      btn.textContent = "Copied!";
+    } catch {
+      // Fallback for file:// where clipboard may be blocked
+      const r = document.createRange();
+      r.selectNode(code);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      try { document.execCommand("copy"); btn.textContent = "Copied!"; }
+      catch { btn.textContent = "Select + Ctrl+C"; }
+      getSelection().removeAllRanges();
+    }
+    setTimeout(() => btn.textContent = "Copy", 1200);
+  });
+  // Highlight the row
+  for (const r of results.querySelectorAll(".row")) {
+    r.classList.toggle("selected", parseInt(r.dataset.id, 10) === it.id);
+  }
+  // Wire the "click ID chip to copy just the number" affordance.
+  for (const chip of detail.querySelectorAll(".id-mono.clickable")) {
+    chip.addEventListener("click", async () => {
+      const value = chip.dataset.copy || chip.textContent;
+      try { await navigator.clipboard.writeText(value); }
+      catch { /* clipboard unavailable on file:// in some browsers — noop */ }
+      chip.classList.add("copied");
+      const original = chip.textContent;
+      chip.textContent = "Copied";
+      setTimeout(() => { chip.textContent = original; chip.classList.remove("copied"); }, 900);
+    });
+  }
+}
+
+// The RemoteClient asset server exposes item art under a CP949-named folder.
+// `유저인터페이스` is Korean for "user interface". Three useful buckets:
+//   collection/{resource}.bmp  — 75×100 identified art (the "info book" image)
+//   item/{resource}.bmp        — 24×24 inventory icon, same one drawn on the
+//                                ground when the item is dropped
+//   cardbmp/{koreanName}.bmp   — 300×400 card illustration (cards only)
+// The card path is keyed by the *Korean* item name, which the translated
+// itemInfo.lua does not carry (every card there uses the placeholder resource
+// name 이름없는카드 = "unnamed card"). We attempt it with the resource name we
+// have — if the client ever ships a per-card resource, it just works — and
+// otherwise fall back to a placeholder with a note. The 24×24 drop icon is
+// always attempted.
+function iconUrl(sub, resourceName) {
+  return `${ASSET_ORIGIN}/data/texture/${encodeURIComponent("유저인터페이스")}/${sub}/${encodeURIComponent(resourceName)}.bmp`;
+}
+
+// Build one <div class="preview"> whose image falls back through a chain of
+// URLs, dropping to a placeholder when they are all gone.
+function previewFor(kind, urls, alt, placeholder) {
+  if (!urls.length) {
+    return `<div class="preview ${kind}"><span class="placeholder">${escapeHtml(placeholder)}</span></div>`;
+  }
+  // Encode the fallback chain into onerror handlers.
+  const first = urls[0];
+  const rest = urls.slice(1);
+  const restJson = JSON.stringify(rest);
+  const phJson = JSON.stringify(placeholder);
+  return `<div class="preview ${kind}">` +
+    `<img src="${first}" alt="${escapeHtml(alt)}" data-fallbacks='${escapeAttr(restJson)}' ` +
+    `onerror="tryNext(this, ${escapeAttr(phJson)})">` +
+    '</div>';
+}
+
+function previewMarkup(it) {
+  if (!it.resourceName) {
+    return '<div class="preview-stack">' +
+      '<div class="preview collection"><span class="placeholder">no sprite name</span></div>' +
+      '</div>';
+  }
+  const alt = it.displayName || String(it.id);
+  const collectionUrl = iconUrl("collection", it.resourceName);
+  const itemUrl = iconUrl("item", it.resourceName);
+
+  return '<div class="preview-stack">' +
+    previewFor("collection", [collectionUrl], alt, "no image (is the app running?)") +
+    '<div class="preview-row">' +
+      previewFor("drop", [itemUrl], alt, "?") +
+    '</div>' +
+  '</div>';
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+}
+
+// Handler that walks a data-fallbacks list of URLs, then reveals a placeholder.
+window.tryNext = function (img, placeholder) {
+  let fallbacks;
+  try { fallbacks = JSON.parse(img.dataset.fallbacks || "[]"); }
+  catch { fallbacks = []; }
+  if (fallbacks.length) {
+    const next = fallbacks.shift();
+    img.dataset.fallbacks = JSON.stringify(fallbacks);
+    img.src = next;
+    return;
+  }
+  const span = document.createElement("span");
+  span.className = "placeholder";
+  span.textContent = placeholder || "no image";
+  img.replaceWith(span);
+};
+
+function buildFields(it) {
+  const rows = [];
+  if (it.unidentifiedName && it.unidentifiedName !== it.displayName) {
+    rows.push(["Unidentified", escapeHtml(it.unidentifiedName)]);
+  }
+  if (it.unidentifiedResourceName && it.unidentifiedResourceName !== it.resourceName) {
+    rows.push(["Unidentified sprite", escapeHtml(it.unidentifiedResourceName)]);
+  }
+  if (it.classNum) {
+    rows.push(["ClassNum", it.classNum]);
+  }
+  if (rows.length === 0) return "";
+  return '<dl class="fields">' + rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") + '</dl>';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
+}
+
+// Wrap every substring that matches the search query in <mark>. Numeric
+// queries don't need highlighting (the ID column already shows the number).
+function highlightMatch(name, query) {
+  if (!query || /^\d+$/.test(query)) return escapeHtml(name);
+  const parts = query.split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
+  const escaped = parts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  if (!escaped) return escapeHtml(name);
+  const re = new RegExp("(" + escaped + ")", "gi");
+  return escapeHtml(name).replace(re, "<mark>$1</mark>");
+}
+
+// Turn Lua-style ^rrggbb color codes into HTML, escape everything, bold [Headers].
+// The RO client draws these on a white paper tooltip, so authors picked dark
+// blues, dark greens, near-blacks — colours that vanish in a dark browser
+// theme. `readableColor` maps each ^rrggbb to a lightness that survives the
+// current background, so descriptions stay legible in both themes.
+function formatDescription(text) {
+  if (!text) return "";
+  const isDark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const parts = text.split(/(\^[0-9a-fA-F]{6})/);
+  let currentColor = null;
+  let html = "";
+  for (const p of parts) {
+    if (/^\^[0-9a-fA-F]{6}$/.test(p)) {
+      const c = p.slice(1).toLowerCase();
+      if (c === "000000") {
+        if (currentColor) { html += "</span>"; currentColor = null; }
+      } else {
+        if (currentColor) html += "</span>";
+        currentColor = c;
+        html += `<span style="color:#${readableColor(c, isDark)}">`;
+      }
+    } else {
+      html += escapeHtml(p);
+    }
+  }
+  if (currentColor) html += "</span>";
+  html = html.replace(/\[([^\]\n<>]{1,60})\]/g, "<strong>[$1]</strong>");
+  return html;
+}
+
+function readableColor(hex, onDark) {
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s;
+  const l0 = (max + min) / 2;
+  if (max === min) { h = 0; s = 0; }
+  else {
+    const d = max - min;
+    s = l0 > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)); break;
+      case g: h = ((b - r) / d + 2); break;
+      case b: h = ((r - g) / d + 4); break;
+    }
+    h *= 60;
+  }
+  // Force lightness into a legible band for the active background. Bright
+  // enough to stand out on the dark panel; dark enough to stand out on white.
+  let l = l0;
+  if (onDark) l = Math.max(l, 0.72);
+  else l = Math.min(l, 0.38);
+  // Near-greys collapse to plain text colour so we don't tint innocuous text
+  if (s < 0.06) return onDark ? "e5e7eb" : "1a1a1a";
+  return hslToHex(h, s, l);
+}
+
+// Inside Ragnarok Offline (served from ro-tool://) the game's own item table
+// is next to this page, so load it straight away. Opened from disk, restore
+// the last-loaded file, or wait for one to be dropped, as before.
+(async () => {
+  if (location.protocol === "file:") { tryRestore(); return; }
+  setStatus("Reading the game's item table…");
+  try {
+    const res = await fetch("./itemInfo.lua", { cache: "no-store" });
+    if (!res.ok) throw new Error((await res.text().catch(() => "")) || "HTTP " + res.status);
+    await loadFile(new File([await res.blob()], "itemInfo.lua"));
+    if (items.length) clearDetail();
+  } catch (err) {
+    const why = err && err.message ? err.message : "The item table could not be read.";
+    setStatus(why, "error");
+    const title = document.getElementById("empty-title");
+    const msg = document.getElementById("empty-msg");
+    if (title) title.textContent = "Couldn't read the game's item table";
+    if (msg) msg.textContent = why;
+    if (!(await tryRestore())) return;
+  }
+})();
+
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360 / 360;
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  const toHex = (v) => Math.round(v * 255).toString(16).padStart(2, "0");
+  return toHex(r) + toHex(g) + toHex(b);
+}
+</script>
+</body>
+</html>

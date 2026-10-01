@@ -1,0 +1,30 @@
+{
+  "name": "blaze-shield-lua",
+  "version": "1.0.0",
+  "author": "Ragnarok Offline",
+  "description": "Blaze Shield honours HP/SP drain bonuses and Hylozoist Card on every pillar hit. A worked example of Lua skill hooks.",
+  "requires": { "app": ">=1.3.9", "era": "any" },
+  "settings": [
+    {
+      "key": "drain",
+      "type": "boolean",
+      "default": true,
+      "label": "Drain bonuses work on Blaze Shield",
+      "description": "Cards and weapons that drain HP or SP on a hit (Moonlight Dagger, Hunter Fly, ...) also drain on each Blaze Shield pillar hit."
+    },
+    {
+      "key": "polymorph",
+      "type": "boolean",
+      "default": true,
+      "label": "Hylozoist Card works on Blaze Shield",
+      "description": "Its chance to turn a monster into a random one rolls on each pillar hit, not only on weapon attacks."
+    },
+    {
+      "key": "log_hits",
+      "type": "boolean",
+      "default": false,
+      "label": "Log every hit",
+      "description": "Writes each hit to the map server's log. For checking the mod works; leave it off."
+    }
+  ]
+}

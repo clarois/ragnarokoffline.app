@@ -1,6 +1,6 @@
 import { createMovement } from './MovementCore.mjs';
 
-const EVENTS = new Set(['map:enter', 'map:leave', 'connection', 'ui:append', 'ui:remove', 'movement:clear', 'preferences:change']);
+const EVENTS = new Set(['map:enter', 'map:leave', 'connection', 'ui:append', 'ui:remove', 'movement:clear', 'preferences:change', 'item:use']);
 const copy = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 function freeze(value) {
     if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
@@ -117,6 +117,36 @@ export function createRuntime({ storage, report = (...args) => console.error(...
                     return bridge.attackNearest?.() ?? false;
                 },
             }),
+            // Raise the client's native target cursor -- the same one taming
+            // items use -- and let the player click an entity. options.type picks
+            // what is selectable: 'mob' (default), 'player' or 'any'. Resolves
+            // with the clicked { classId, gid, name, kind }, or null if they
+            // cancelled with ESC or a click on empty ground. One selection runs
+            // at a time, and disposing the plugin (or a second pick) cancels a
+            // pending one. The server stays authoritative: this reads what was
+            // clicked, it does not act on it.
+            targeting: Object.freeze({
+                pick(options) {
+                    if (disposed) throw new Error(`Plugin ${name} is disposed`);
+                    if (typeof bridge.beginTargeting !== 'function') return Promise.resolve(null);
+                    const release = cleanup(() => bridge.cancelTargeting?.());
+                    return Promise.resolve(bridge.beginTargeting(copy(options)))
+                        .then(result => result ? freeze(copy(result)) : null)
+                        .finally(() => release());
+                },
+            }),
+            // Send an @command to the server, exactly as if the player had typed
+            // it in the chat box. Restricted to atcommands (@ or #) so a plugin
+            // cannot speak in the player's voice, and gated server-side by the
+            // player's own group like any command they could type themselves.
+            // Returns whether it was sent, not whether the server accepted it.
+            server: Object.freeze({
+                command(text) {
+                    if (disposed) throw new Error(`Plugin ${name} is disposed`);
+                    if (typeof text !== 'string') return false;
+                    return bridge.serverCommand?.(text) ?? false;
+                },
+            }),
         });
         const instance = { api, dispose() {
             if (disposed) return;
@@ -135,6 +165,10 @@ export function createRuntime({ storage, report = (...args) => console.error(...
         },
         enterMap(name) { map = name; movement.setActive(true); emit('map:enter', Object.freeze({ name })); },
         leaveMap(reason = 'loading') { const old = map; map = null; movement.setActive(false); if (old) emit('map:leave', Object.freeze({ name: old, reason })); },
+        // The player used an inventory item. Fired from the packet the client
+        // sends, so it carries the item's type id (ITID), resolved from the live
+        // inventory before the server consumes the stack.
+        useItem(itemId) { if (Number.isInteger(itemId)) emit('item:use', Object.freeze({ itemId })); },
         connection(status, kind) {
             connection = Object.freeze({ status, kind });
             if (status !== 'connected') {

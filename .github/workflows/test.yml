@@ -32,6 +32,10 @@ jobs:
       - run: python3 tests/diagnostics/verify-base-sp.py vendor/rathena
       - run: python3 tests/diagnostics/verify-skill-level.py vendor/rathena
       - run: python3 tests/diagnostics/verify-weapon-bounds.py vendor/rathena
+      # The population tables: a job claimed by two profiles silently empties
+      # one of them, and the server says nothing. Gear is checked against the
+      # renewal item database.
+      - run: python3 third-party/population-engine/validate.py vendor/rathena
   client-build:
     runs-on: ubuntu-latest
     timeout-minutes: 10

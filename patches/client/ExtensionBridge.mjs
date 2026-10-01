@@ -17,6 +17,8 @@ import PACKET from 'Network/PacketStructure.js';
 import PACKETVER from 'Network/PacketVerManager.js';
 import UIManager from 'UI/UIManager.js';
 import ChatBox from 'UI/Components/ChatBox/ChatBox.js';
+import SkillTargetSelection from 'UI/Components/SkillTargetSelection/SkillTargetSelection.js';
+import Entity from 'Renderer/Entity/Entity.js';
 
 const visible = component => Boolean(component?.__active && component._host?.getClientRects().length &&
     getComputedStyle(component._host).display !== 'none' && getComputedStyle(component._host).visibility !== 'hidden');
@@ -157,11 +159,131 @@ function action(name, value) {
     return false;
 }
 
+// --- Target picker -------------------------------------------------------
+// Reuse the client's own target-selection cursor -- the one taming items raise
+// through ZC_START_CAPTURE (see Engine/MapEngine/Pet.js) -- so a plugin can ask
+// the player to click an entity and hand it back. `type` chooses what is
+// selectable: 'mob' (default, the taming flag), 'player' (friendly actors) or
+// 'any'. NPCs are not skill-targetable and so cannot be picked. Only one
+// selection runs at a time (the component is a singleton), so a second pick or
+// a plugin disposal cancels the pending one, and so does the client raising
+// the cursor for itself (a skill from the skill list, a taming item): the
+// player's own action wins, and the plugin gets null.
+let activePick = null;
+let settingPick = false;
+// Requested target type -> the client's skill-target flags. Evaluated at call
+// time: SkillTargetSelection.TYPE is filled during the component's lazy init.
+function flagForType(type) {
+    const TYPE = SkillTargetSelection.TYPE;
+    switch (type) {
+        case 'player': return TYPE.FRIEND;                                      // PCs, homun, merc, elementals
+        case 'any': return TYPE.ENEMY | TYPE.FRIEND | TYPE.PET | TYPE.TRAP | TYPE.HOMUN;
+        case 'mob':
+        default: return TYPE.PET;                                               // monsters, same as taming
+    }
+}
+// A friendly kind name on the result, so an 'any' pick can tell what it got.
+function kindOf(entity) {
+    switch (entity.objecttype) {
+        case Entity.TYPE_MOB:
+        case Entity.TYPE_UNIT: return 'mob';
+        case Entity.TYPE_PC: return 'player';
+        case Entity.TYPE_HOM: return 'homun';
+        case Entity.TYPE_MERC: return 'merc';
+        case Entity.TYPE_ELEM: return 'elemental';
+        case Entity.TYPE_TRAP: return 'trap';
+        default: return 'other';
+    }
+}
+function settleTargeting(result) {
+    const pick = activePick;
+    if (!pick) return;
+    activePick = null;
+    SkillTargetSelection.onPetSelected = pick.savedPet;
+    SkillTargetSelection.onUseSkillToId = pick.savedId;
+    SkillTargetSelection.onRemove = pick.savedRemove;
+    pick.resolve(result);
+}
+function beginTargeting(options) {
+    if (activePick) settleTargeting(null);
+    return new Promise(resolve => {
+        const savedPet = SkillTargetSelection.onPetSelected;
+        const savedId = SkillTargetSelection.onUseSkillToId;
+        const savedRemove = SkillTargetSelection.onRemove;
+        activePick = { resolve, savedPet, savedId, savedRemove };
+        const picked = gid => {
+            const entity = gid == null ? null : EntityManager.get(gid);
+            settleTargeting(entity
+                ? { classId: entity._job ?? entity.job, gid: entity.GID, name: entity.display?.name || '', kind: kindOf(entity) }
+                : null);
+        };
+        // onPetSelected fires for a mob under the PET flag; onUseSkillToId is the
+        // path every other flag (and touch targeting) takes. Both hand back the
+        // clicked entity, so the picker does not care which one fired.
+        SkillTargetSelection.onPetSelected = gid => picked(gid);
+        SkillTargetSelection.onUseSkillToId = (skid, level, gid) => picked(gid);
+        // A pick removes the component before its callback, and ESC or a click on
+        // empty ground removes it without one -- onRemove is the single teardown
+        // path, so a microtask after it settles null unless a pick got there
+        // first (which nulls activePick synchronously).
+        SkillTargetSelection.onRemove = function () {
+            savedRemove.apply(this, arguments);
+            queueMicrotask(() => settleTargeting(null));
+        };
+        const label = typeof options?.label === 'string' && options.label ? options.label.slice(0, 40) : 'Select a target';
+        SkillTargetSelection.append();
+        settingPick = true;
+        try { SkillTargetSelection.set({ SKID: -10, level: 0 }, flagForType(options?.type), label); } finally { settingPick = false; }
+    });
+}
+function cancelTargeting() {
+    if (!activePick) return;
+    try { SkillTargetSelection.remove(); } catch { /* not mounted */ }
+    settleTargeting(null);
+}
+
+// Send an @command the way the chat box does for the player's own input: a
+// public-chat packet the server reads as an atcommand. Atcommands only (@ or #),
+// so a plugin cannot put words in the player's mouth, and the server authorises
+// it by the player's group exactly as if they had typed it.
+function serverCommand(text) {
+    const player = Session.Entity;
+    if (!player || typeof text !== 'string') return false;
+    const trimmed = text.trim();
+    if (trimmed[0] !== '@' && trimmed[0] !== '#') return false;
+    const packet = new PACKET.CZ.REQUEST_CHAT();
+    packet.msg = player.display.name + ' : ' + trimmed;
+    Network.sendPacket(packet);
+    return true;
+}
+
 export function init() {
     if (installed) return;
     installed = true;
     // Test harness only; inert unless scripts/rotest opted this page in.
     installAgentHook();
+    // Any other set() is the client targeting for itself. Hand it back its own
+    // callbacks first, or the pending plugin pick would swallow the click and
+    // the skill would never be cast.
+    const clientSet = SkillTargetSelection.set;
+    SkillTargetSelection.set = function () {
+        if (activePick && !settingPick) settleTargeting(null);
+        return clientSet.apply(this, arguments);
+    };
+    // Emit item:use so mods can react to a consumable being used. The id is the
+    // item type (ITID), resolved from the live inventory at send time -- before
+    // the server consumes the stack. Wrapping the send keeps this independent of
+    // which use-item packet the current packet version emits.
+    const send = Network.sendPacket;
+    Network.sendPacket = function (packet) {
+        try {
+            if (packet instanceof PACKET.CZ.USE_ITEM || (PACKET.CZ.USE_ITEM2 && packet instanceof PACKET.CZ.USE_ITEM2)) {
+                const item = component('Inventory')?.getItemByIndex?.(packet.index);
+                if (item) Runtime.useItem(item.ITID);
+            }
+        } catch { /* a hook must never break the packet send */ }
+        return send.apply(this, arguments);
+    };
     Runtime.configure({
         inputState,
         shortcutConflict(keyCode) { return inputState().battleMode && Boolean(BattleMode.match(keyCode)); },
@@ -182,7 +304,7 @@ export function init() {
                 player: player ? { id: player.GID, position: Array.from(player.position).slice(0, 2), action: player.action,
                     hp: player.life.hp, maxHp: player.life.hp_max, sp: player.life.sp, maxSp: player.life.sp_max } : null,
                 camera: { direction: Camera.direction },
-                target: target ? { id: target.GID, name: target.display?.name || '', hp: target.life?.hp, maxHp: target.life?.hp_max } : null };
+                target: target ? { id: target.GID, class: target._job ?? target.job, name: target.display?.name || '', hp: target.life?.hp, maxHp: target.life?.hp_max } : null };
         },
         // Turn the camera by a step, honouring the same limits the mouse obeys.
         // Indoor maps clamp yaw to a narrow window (-60..-25 for prt_in), so a
@@ -238,6 +360,11 @@ export function init() {
             return true;
         },
         action,
+        // Native target-cursor pick (api.targeting.pick) and the @command
+        // channel (api.server.command); both defined above.
+        beginTargeting,
+        cancelTargeting,
+        serverCommand,
     });
     const clear = () => Runtime.movement.clear('focus-lost');
     const compose = () => { composing = true; clear(); };

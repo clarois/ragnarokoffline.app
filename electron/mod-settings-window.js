@@ -114,8 +114,13 @@ function pageUrl(root, file) {
 
 // Must run before the app is ready: a standard, secure scheme gets relative
 // URLs and its own origin, so the page cannot read file:// or anything else.
-function registerScheme(protocol) {
-	protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+//
+// Electron keeps only the last registerSchemesAsPrivileged call, so every
+// other scheme the app declares is passed in and registered here, together.
+// A second call elsewhere would silently strip this one's privileges, or
+// have its own stripped -- which is how the Tools pages lost fetch().
+function registerScheme(protocol, others = []) {
+	protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }, ...others]);
 }
 
 // The values to hand the supervisor: every declared setting, with the ones the

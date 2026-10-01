@@ -8,6 +8,7 @@ rebuild, no compiler, no Docker.
 ├── mod.json     name, version, author, description, what it requires
 ├── db/          server tables: mob stats, item stats, drops, skills
 ├── npc/         server scripts: NPCs, warps, monster spawns, quests
+├── lua/         skill hooks: damage formulas, accuracy, what a hit does
 ├── conf/        a few server settings, from a short allowlist
 ├── data/        client assets: sprites, textures, map geometry, Lua
 ├── BGM/         music, merged over the client's own tracks
@@ -306,7 +307,7 @@ asked for.
 **A brand-new item needs a second file to be named in the client.** `db/` gives
 it stats, a script and a price; the client gets its name, icon and description
 from a separate table and will otherwise call it *Unknown Item*. That is
-[`System/`](#system--item-names-and-descriptions), ten lines, and it is
+[`System/`](#system--item-names-quest-text-and-descriptions), ten lines, and it is
 additive too.
 
 **`Drops:` does not behave like the other fields.** A drop entry without an
@@ -468,6 +469,124 @@ rather than where it stands.
 
 See [`examples/mods/quest-npc`](../examples/mods/quest-npc).
 
+## lua/ — changing how a skill works
+
+`db/` changes a skill's numbers: its cast time, cooldown, SP cost, element,
+hit count, how long its status lasts. What it cannot change is the **formula**
+— how much damage a skill does, from what — or what happens when it hits.
+Those are C++ in the server. A mod's `lua/` folder reaches them without a
+change to the server.
+
+```lua
+-- my-mod/lua/firebolt.lua: Fire Bolt scales with INT as well as its level.
+skill("MG_FIREBOLT", {
+  ratio = function(c, stock)
+    return stock + c.caster.int * 2
+  end,
+})
+```
+
+Every `.lua` file in `lua/` (subfolders too) runs once when the server
+starts, in the same order mods are applied, so where two mods hook the same
+part of the same skill the later one wins — but only that part: one mod's
+`ratio` and another's `on_hit` on the same skill both apply. **Apply**
+restarts the server, so an edited file takes effect then.
+
+### The hooks
+
+`skill("<AegisName>", { ... })` takes any of four functions. The name is the
+one in `skill_db.yml` — `MG_FIREBOLT`, not "Fire Bolt".
+
+| Hook | Called | Return |
+|---|---|---|
+| `ratio(c, stock)` | when the skill's damage is calculated | the skill's damage percentage; `stock` is the server's own, so `stock * 2` doubles it |
+| `hit(c, stock)` | when a weapon skill's accuracy is calculated | the hit rate bonus |
+| `element(c, stock)` | when the attack's element is decided | an element, e.g. `const("ELE_FIRE")` |
+| `on_hit(c)` | on every hit, once its damage is known | nothing; call the actions below |
+
+`ratio`, `hit` and `element` receive the stock result and return a new one;
+returning `nil` keeps it. They work for the roughly 1,060 skills rAthena has
+given their own C++ class, which includes every damaging player skill. For
+the rest, the server says so in the log when it starts, and `on_hit` still
+works.
+
+`c` describes the hit:
+
+| | |
+|---|---|
+| `c.skill`, `c.skill_id`, `c.skill_lv` | the skill and the level used |
+| `c.caster`, `c.target` | the two units (below) |
+| `c.damage` | `on_hit` only: the damage this hit deals |
+| `c:chance(n)` | true `n` times in 10000, from the server's own random numbers |
+
+and each unit has `id`, `kind` (`"pc"`, `"mob"`, `"homun"`, `"merc"`,
+`"elemental"`, `"pet"`, `"npc"`), `name`, `level`, `str` `agi` `vit` `int`
+`dex` `luk`, `hp` `maxhp` `sp` `maxsp`, `race`, `element`, `size`, `boss`,
+`dead`, and `has_status("SC_…")`. A player also has `job`, `job_level` and
+`classchange` (the Hylozoist Card bonus); a monster has `mob_id`. They are a
+copy: changing them changes nothing.
+
+In `on_hit`, `c` can also ask for something to happen. It happens once the hit
+has been dealt, and not at all if the unit has died by then:
+
+| Action | |
+|---|---|
+| `c:drain()` | the caster's HP/SP drain bonuses, on this hit's damage — what weapon attacks already do |
+| `c:heal(hp, sp)` | restores the caster |
+| `c:status("SC_STUN", rate, ms, val1, who)` | a status on `"target"` (default) or `"caster"`; `rate` is out of 10000 |
+| `c:polymorph()` | Hylozoist Card's effect: the target becomes a random monster. Never a boss |
+
+Three functions work anywhere:
+
+| | |
+|---|---|
+| `const("SC_STUN")` | any constant a server script can use: `SC_*`, `ELE_*`, `RC_*`, `Job_*` |
+| `setting("<mod>", "<key>", default)` | a [setting](#settings--options-the-app-renders-for-you) from Settings → Mods. Booleans are `true`/`false` and numbers keep their fractions, unlike in an NPC script |
+| `log(...)` | a line in the map server's log, with your mod's name on it |
+
+### What a script cannot do
+
+Lua here has arithmetic, strings, tables and `utf8` — nothing that reads a
+file, starts a program or opens a connection (`io`, `os`, `require`, `load`
+and `debug` are not there). A mod's Lua can change a fight; it cannot touch
+the computer the server runs on.
+
+A mistake costs one hook, not the server. An error, or a loop that runs past
+a million instructions, turns that hook off until the next start and logs the
+mod, the skill and where it went wrong:
+
+```
+[Error]: Lua: my-mod's hook for MG_FIREBOLT failed and is now off until the server restarts:
+db/import/lua/my-mod/firebolt.lua:3: attempt to perform arithmetic on a nil value (field 'intt')
+stack traceback:
+	...
+```
+
+[`examples/mods/blaze-shield-lua`](../examples/mods/blaze-shield-lua) is a
+complete one: Blaze Shield honouring drain cards and Hylozoist Card.
+
+### A mod, or a change to the server?
+
+Most of what people want to change is one of these, and only the last row
+needs anything more than a mod:
+
+| You want to change | Where | |
+|---|---|---|
+| A monster, item, drop, skill's cast time/cooldown/cost/duration | `db/` | Only the fields you name |
+| An NPC, a quest, a warp, a shop, what happens on an event | `npc/` | rAthena's script language |
+| A skill's damage formula, accuracy or element | `lua/` | `ratio`, `hit`, `element` |
+| What a skill does when it hits: drain, heal, a status, polymorph | `lua/` | `on_hit` |
+| A server setting from the allowlist | `conf/` | |
+| Switch on one of the fork's server extensions, or set its values | `db/extension_db.yml` | `@extensions` in game lists them; `@extensioninfo <id>` shows what one does |
+| How the client looks or behaves | `data/`, `System/`, `client/` | |
+| **A new kind of event, a new script command, a new action for `on_hit`, or anything outside a skill** (status formulas in `status.cpp`, how monsters think) | the server | A change to [our rAthena fork](https://github.com/Flux159/rathena), made once and then usable by every mod |
+
+That last row is the one to think about before asking for a server change:
+is it really new, or is it a formula (Lua) or a number (`db/`)? When it is
+new, the change adds the *capability* — an event like `OnPCDropItemEvent`, a
+command like `makeitemowned`, an action like `c:polymorph()` — and what a
+particular mod does with it stays in the mod.
+
 ## conf/ — a few server settings
 
 `conf/` sets server config the supervisor otherwise owns. It is an
@@ -541,6 +660,13 @@ group already holds, from rAthena's own `groups.yml` or from a mod applied
 earlier, before the server reads it, and names each one in the log. Taking away
 a command the group does not have (`go: false`) is the same error, and is
 treated the same way. Aliases count: `accountinfo` is `accinfo`.
+
+**Group 20 is taken.** The app always defines it, as *AI Agent*: the accounts
+an AI agent plays on (Claude Code, Codex; Settings → Population → *Play with an
+AI agent*). It is a player's permissions plus `@warp`, `@go` and `@load`, and
+it is read before any mod's file. Give your own groups another id. A mod that
+lists group 20 adds its commands to the agents rather than making a group of
+its own; one that removes commands from it can stop the agents travelling.
 
 **`groups.yml` decides what every player on your server can do.** A mod that
 ships one can hand out `@item` or `@zeny` as easily as `@autoloot`. The
@@ -783,7 +909,7 @@ Its source is in [`examples/mods/randomizer`](../examples/mods/randomizer) and
 is worth reading whatever you are building: it is a worked account of the
 `db/import` traps above, found by hitting them.
 
-## System/ — item names and descriptions
+## System/ — item names, quest text and descriptions
 
 `System/` is merged over the client's tables *after* the English translation,
 so a mod wins. This is where `itemInfo.lua` goes if your mod adds items and
@@ -835,6 +961,32 @@ read by the client, and the log says so. Editing the copy under
 `state/assets/System/` does not last: that folder is rebuilt on every start.
 
 See [`examples/mods/custom-item`](../examples/mods/custom-item).
+
+**Quest tables are added too.** A `System/OngoingQuestInfoList.lub` holding
+only your quests gives them their titles, summaries and descriptions in the
+quest window, and every other quest keeps its own:
+
+```lua
+-- my-mod/System/OngoingQuestInfoList.lub
+QuestInfoList = {
+	[70001] = {
+		Title = "The Islander's Errand",
+		Summary = "Bring Hana 10 Jellopies.",
+		IconName = "ico_nq.bmp",
+		Description = { "Hana in Alberta needs ^0000FF10 Jellopies^000000." },
+		RewardEXP = "1000",
+		RewardJEXP = "500",
+		RewardItemList = { { ItemID = 501, ItemNum = 5 } },
+	},
+}
+```
+
+The quest id is the one your script gives `setquest`, and its hunting targets
+come from your mod's `db/quest_db.yml`, not from this file. Write the
+text in ASCII: the client reads quest tables in its own codepage, not as
+UTF-8. The app copies each table aside as `OngoingQuestInfoList-<mod>.lub` and
+lists them in the client's `customQuestInfo`, which loads **after** the base,
+in mod order, the last definition of a quest winning.
 
 Everything else in `System/` still replaces the client's copy, so start from the
 translation's version and add to it.
@@ -891,7 +1043,7 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 
 | API | Contract |
 | --- | --- |
-| `api.on(event, listener, { replay: true })` | Returns an unsubscribe function; subscriptions also end at disposal. Events: `map:enter`, `map:leave`, `connection`, `ui:append`, `ui:remove`, `movement:clear`, `preferences:change`. |
+| `api.on(event, listener, { replay: true })` | Returns an unsubscribe function; subscriptions also end at disposal. Events: `map:enter`, `map:leave`, `connection`, `ui:append`, `ui:remove`, `movement:clear`, `preferences:change`, and `item:use` (`{ itemId }`, the item's id, sent when the client asks to use it -- before the server says whether it worked). |
 | `api.snapshot()` | Frozen copy of map, connection, player position/HP/SP, selected target identity/name/HP, camera, packet version and movement counters. Server movement acknowledgements are read-only evidence. |
 | `api.components.current()` | Mounted `{ name, root, host }` descriptors. DOM references support styling; do not retain detached components after `ui:remove`. |
 | `api.preferences.get(key, fallback)` / `.set(key, value)` | JSON values isolated by plugin, browser and server origin. Storage failure is reported by `set`. Do not store secrets. |
@@ -899,6 +1051,8 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 | `api.input.state()` / `.shortcutConflict(keyCode)` | Read input eligibility and the active native battle-shortcut mapping. |
 | `api.input.suspend()` | Suspend movement while showing a plugin dialog. Returns an idempotent release function, also released at disposal. |
 | `api.actions.perform(name, payload)` | Native actions: `attack`, `target` (toggle auto-target), `interact`, `pickup`, `menu` (game options), `shortcut` with `{ index: 0…35 }`, `shortcut:assign` and `storage:transfer` (below), or `window` with an allowed `{ name }`. Returns whether the action was dispatched, not whether the server accepted it. |
+| `api.targeting.pick({ type, label })` | Raises the client's own target cursor and resolves to a frozen `{ classId, gid, name, kind }` for what the player clicks, or `null` for ESC, empty ground, a client too old to offer it, or the player starting a skill of their own (their action wins). `type` is `mob` (default), `player` or `any`; NPCs cannot be picked. One pick at a time: a new one cancels the last, and so does disposal. |
+| `api.server.command(text)` | Sends an `@` or `#` command as if the player had typed it in chat, so the server allows exactly what the player's group allows. Anything else is refused; returns whether it was sent. |
 | `api.cleanup(fn)` | Register idempotent cleanup immediately after allocating a resource. The returned function can release it early. Runs on failure, scope replacement and page teardown. |
 
 Allowed window actions currently cover Inventory, Equipment, SkillList, Quest,

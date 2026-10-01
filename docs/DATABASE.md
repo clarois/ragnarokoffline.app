@@ -14,6 +14,13 @@ is drawing.
 ragnarok-stack sql [--write] [--file <path>] [<statement>]
 ```
 
+Most repairs no longer need the command line: **Settings → Tools → Database**
+shows the same database table by table. You can filter and sort it, edit cells, add and
+delete rows, and save them together. It is read-only until you turn editing
+on, and a save works the way `sql --write` does: a backup first, the game
+stopped while the change is written, and everything undone if any part of it
+fails. Underneath it is `ragnarok-stack db`; see [The Database tool](#the-database-tool).
+
 ## Where the command is
 
 The supervisor binary ships inside the app and is the same one the app itself
@@ -130,6 +137,44 @@ A statement may be up to 16 KiB, a result up to 64 KiB, and a call has 30
 seconds. Narrow a large read with `LIMIT` or fewer columns. These are the
 bounds the rest of the app's database plumbing has always used; nothing here is
 meant to be a reporting tool.
+
+## The Database tool
+
+Settings → Tools → Database is a window onto the same `ragnarok` database.
+
+- **Browsing** never stops anything. Pick a table; page through it, sort by a
+  column, filter (`name contains Agent`, `class = 4252`), or type a raw
+  `WHERE` condition. The raw condition runs in a read-only transaction and
+  has to be a single condition, so no `;` and no comments.
+- **Editing** is off until you turn it on. Changes are staged and highlighted;
+  *Review and save* lists every one (old → new), then saves them all at once.
+  A table with no primary key (`loginlog`, `bonus_script`) can be read and
+  not edited, because nothing says which row an edit means. A key column
+  cannot be edited in place: add the new row and delete the old one.
+- **Saving** checks first that every row is still there and still holds what
+  you were shown. Then it takes a backup (`backups/before-db-browser-*.sql`),
+  stops the game, applies the changes, and starts the game again. Most of
+  rAthena's tables are MyISAM, which cannot roll back, so if any statement
+  fails the tool loads that backup again. The error names the change that failed,
+  and nothing was saved.
+
+The page never sends SQL for a write, only a list of changes.
+`ragnarok-stack db` builds the statements, with every value hex-encoded:
+
+```
+ragnarok-stack db tables
+ragnarok-stack db describe <table>
+echo '{"table":"char","filters":[{"column":"name","op":"contains","value":"Agent"}]}' | ragnarok-stack db rows
+echo '{"changes":[{"table":"char","key":{"char_id":"150000"},"set":{"zeny":"1000"}}]}' | ragnarok-stack db apply
+```
+
+Values in the JSON are strings, including numbers, because
+`inventory.unique_id` does not fit in a JavaScript number.
+
+Know what a column means before you change it. Editing a table's values does
+not teach rAthena anything new. A variable in `mapreg` whose name has no
+trailing `$` is a number, so the map server reads the text `hello` as 0, and it
+deletes zero-valued variables when it next saves.
 
 ## What is in there
 

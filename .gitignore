@@ -63,3 +63,9 @@ stack/target/
 
 # Fetched by scripts/package.sh for the Windows installer (25 MB, Microsoft's binary)
 /electron/vc_redist.x64.exe
+
+# IntelliJ Idea
+.idea
+
+# Editor settings are per person, not per repo.
+/.vscode/

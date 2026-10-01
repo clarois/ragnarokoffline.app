@@ -154,6 +154,14 @@ impl Config {
     }
 }
 
+/// The state directory, as `Config::load` resolves it, without the rest of
+/// the config.
+pub fn state_dir(root: &Path) -> PathBuf {
+    env::var_os("RAGNAROKMAC_STATE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| default_state(root, &data_root()))
+}
+
 /// Where state lives when nothing says otherwise.
 ///
 /// The app always passes `RAGNAROKMAC_STATE`, so this is the path a terminal

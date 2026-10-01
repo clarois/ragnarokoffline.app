@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>rAthena Mob Browser</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --hit: #eff6ff;
+    --code: #f3f4f6;
+    --danger: #ef4444;
+    --success: #10b981;
+    --mvp: #f59e0b;
+    --miniboss: #a855f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --border: #262b36;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --hit: #1e293b;
+      --code: #0d1017;
+      --danger: #f87171;
+      --success: #34d399;
+      --mvp: #fbbf24;
+      --miniboss: #c084fc;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .status {
+    color: var(--muted);
+    font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 320px;
+  }
+  .status.error { color: var(--danger); }
+  .status.ok { color: var(--success); }
+  input[type=file] { display: none; }
+  .btn {
+    padding: 6px 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border);
+  }
+  .btn.ghost:hover { background: var(--hit); }
+  #search {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  #search:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+  }
+  #search:disabled { opacity: 0.5; cursor: not-allowed; }
+  select.filter {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    max-width: 200px;
+    cursor: pointer;
+  }
+  select.filter:disabled { opacity: 0.5; cursor: not-allowed; }
+  select.filter:focus { outline: none; border-color: var(--accent); }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    overflow: hidden;
+    min-height: 0;
+  }
+  #results {
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+  }
+  #results-info {
+    padding: 8px 16px;
+    color: var(--muted);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    z-index: 1;
+  }
+  .row {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    transition: background 0.08s;
+  }
+  .row:hover { background: var(--hit); }
+  .row.selected {
+    background: var(--hit);
+    border-left: 3px solid var(--accent);
+    padding-left: 13px;
+  }
+  .row-thumb { flex: none; width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+  .row-main {
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .row-name {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .row-name mark {
+    background: transparent;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .row-sub {
+    font-size: 11.5px;
+    color: var(--muted);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 1px;
+  }
+  .row-id {
+    color: var(--muted);
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    flex-shrink: 0;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 3px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: var(--code);
+    color: var(--muted);
+  }
+  .badge.mvp { background: var(--mvp); color: white; }
+  .badge.miniboss { background: var(--miniboss); color: white; }
+  #detail {
+    overflow-y: auto;
+    padding: 28px 36px;
+  }
+  #detail.empty { padding: 0; }
+  .detail-head { margin-bottom: 20px; }
+  .detail-top { display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; }
+  .sprite-box { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: var(--panel, rgba(255,255,255,0.03)); border: 1px solid var(--line, rgba(255,255,255,0.08));
+    border-radius: 10px; padding: 10px; min-width: 200px; }
+  .sprite-box canvas { image-rendering: pixelated; display: block; }
+  .sprite-box .sprite-note { font-size: 12px; color: var(--muted, #8b93a7); min-height: 16px; }
+  .sprite-controls { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+  .sprite-controls button { font: inherit; font-size: 12px; padding: 3px 8px; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--muted, #8b93a7); border: 1px solid var(--line, rgba(255,255,255,0.12)); }
+  .sprite-controls button.on { color: var(--text, #e5e7eb); border-color: var(--accent, #7b8cde); }
+  .detail-head h2 {
+    margin: 0 0 6px;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .detail-meta {
+    display: flex;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 13px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .id-mono {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    background: var(--code);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .id-mono.clickable { cursor: pointer; transition: background 0.1s; }
+  .id-mono.clickable:hover { background: var(--hit); }
+  .id-mono.clickable.copied { color: var(--accent); }
+  .copy-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--code);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 13px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .copy-line code { flex: 1; min-width: 160px; user-select: all; }
+  .copy-line select {
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(90px, 1fr));
+    gap: 8px 12px;
+    margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-value.small { font-size: 14px; font-weight: 500; }
+  h3 {
+    margin: 20px 0 10px;
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  table.drops {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  table.drops th, table.drops td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  table.drops thead th {
+    background: var(--code);
+    font-size: 11.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  table.drops tr:last-child td { border-bottom: none; }
+  .rate-bar {
+    display: inline-block;
+    width: 80px;
+    height: 6px;
+    background: var(--code);
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-left: 8px;
+    overflow: hidden;
+  }
+  .rate-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+  }
+  .rate-bar.mvp span { background: var(--mvp); }
+  .drop-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .drop-icon {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+    background: var(--code);
+    border-radius: 3px;
+    flex-shrink: 0;
+    object-fit: contain;
+  }
+  .drop-icon.placeholder { background: transparent; }
+  .element-Water   { color: #38bdf8; }
+  .element-Earth   { color: #a3e635; }
+  .element-Fire    { color: #f97316; }
+  .element-Wind    { color: #60a5fa; }
+  .element-Poison  { color: #a78bfa; }
+  .element-Holy    { color: #fde047; }
+  .element-Dark    { color: #a855f7; }
+  .element-Ghost   { color: #94a3b8; }
+  .element-Undead  { color: #94a3b8; }
+  .element-Neutral { color: var(--muted); }
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .empty-state h3 {
+    color: var(--text);
+    margin: 0 0 10px;
+    font-size: 18px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .empty-state p { margin: 6px 0; max-width: 560px; }
+  .empty-state code {
+    background: var(--code);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    word-break: break-all;
+  }
+  .drop-zone {
+    margin-top: 22px;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 30px 56px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .drop-zone:hover, .drop-zone.drag {
+    border-color: var(--accent);
+    background: var(--hit);
+  }
+  .drop-zone input { display: none; }
+  .divider {
+    margin: 20px 0 12px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>rAthena Mob Browser</h1>
+  <input type="search" id="search" placeholder="Search by ID, name, or aegis (e.g. 1002, Poring, PORING)…" disabled autocomplete="off" spellcheck="false">
+  <select id="race-filter" class="filter" disabled title="Race"><option value="">All races</option></select>
+  <select id="size-filter" class="filter" disabled title="Size"><option value="">All sizes</option></select>
+  <select id="element-filter" class="filter" disabled title="Element"><option value="">All elements</option></select>
+  <select id="tier-filter" class="filter" disabled title="Category"><option value="">Any tier</option><option value="normal">Normal</option><option value="miniboss">Mini-boss</option><option value="mvp">MVP</option></select>
+  <span class="status" id="status">Idle.</span>
+</header>
+<main>
+  <div id="results" aria-label="Mob list"></div>
+  <div id="detail" class="empty">
+    <div class="empty-state">
+      <h3 id="empty-title">Loading your server's monsters…</h3>
+      <p id="empty-msg">
+        Reading <code>mob_db.yml</code> from your running server, with your mods' changes included.
+      </p>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const search = $("search");
+const raceFilter = $("race-filter");
+const sizeFilter = $("size-filter");
+const elementFilter = $("element-filter");
+const tierFilter = $("tier-filter");
+const status = $("status");
+const results = $("results");
+const detail = $("detail");
+
+let mobs = [];
+let index = new Map();
+let selectedId = null;
+
+// AegisName -> Korean sprite filename for drop icons. Populated lazily when
+// the extractor has produced item_db_*.yml files next to this HTML AND the
+// running asset server can serve itemInfo.lua. Missing chain -> no icons.
+let dropIconMap = new Map();
+
+// Preferred: mob_db.yml sitting next to this HTML in tools/, produced by
+// extract-mob-db.ps1. This resolves against wherever the page was loaded
+// from — file:// blocks it in most browsers, but any HTTP host works.
+const LOCAL_URL = "./mob_db.yml";
+const ASSET_ORIGIN = "http://127.0.0.1:3338";
+const ITEM_DB_FILES = ["./item_db_equip.yml", "./item_db_etc.yml", "./item_db_usable.yml"];
+const ITEMINFO_URL = ASSET_ORIGIN + "/System/LuaFiles514/itemInfo.lua";
+
+// --------- events ---------
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement !== search && !e.metaKey && !e.ctrlKey) {
+    e.preventDefault(); search.focus(); search.select();
+  } else if (e.key === "Escape" && document.activeElement === search) {
+    search.value = ""; render();
+  }
+});
+
+let searchTimer = null;
+search.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(render, 100);
+});
+search.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { results.querySelector(".row")?.click(); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const rows = Array.from(results.querySelectorAll(".row"));
+    const cur = rows.findIndex(r => r.classList.contains("selected"));
+    const dir = e.key === "ArrowDown" ? 1 : -1;
+    const next = rows[Math.max(0, Math.min(rows.length - 1, cur + dir))] || rows[0];
+    next?.click();
+    next?.scrollIntoView({ block: "nearest" });
+  }
+});
+for (const el of [raceFilter, sizeFilter, elementFilter, tierFilter]) {
+  el.addEventListener("change", render);
+}
+
+
+// Try to fetch mob_db.yml sitting next to this HTML. Works when the page is
+// opened via any HTTP host (e.g. a static server serving the tools/ folder).
+// Silently fails on file:// or when the script hasn't been run yet — in
+// which case the empty state remains and the user can drop the file manually.
+async function tryFetchLocal() {
+  if (location.protocol === "file:") return false;
+  setStatus("Reading your server\u2019s mob_db.yml…");
+  try {
+    const t0 = performance.now();
+    const res = await fetch(LOCAL_URL, { cache: "no-store" });
+    // Inside Ragnarok Offline the app answers with the reason when it can't
+    // (most often: the server isn't running).
+    if (!res.ok) throw new Error((await res.text().catch(() => "")) || "HTTP " + res.status);
+    const text = await res.text();
+    if (text.length < 1000) throw new Error("response too small to be a mob_db");
+    setStatus(`Parsing local mob_db.yml (${(text.length/1024/1024).toFixed(1)} MB)…`);
+    await new Promise(r => setTimeout(r, 20));
+    await ingest(text, "local mob_db.yml", t0);
+    const title = document.getElementById("empty-title");
+    const msg = document.getElementById("empty-msg");
+    if (title) title.textContent = "Pick a monster";
+    if (msg) msg.textContent = "Click one on the left, or search by name, ID or AegisName.";
+    return true;
+  } catch (err) {
+    const why = err && err.message ? err.message : "The monster table could not be read.";
+    setStatus(why, "error");
+    const title = document.getElementById("empty-title");
+    const msg = document.getElementById("empty-msg");
+    if (title) title.textContent = "Couldn't read your server's monsters";
+    if (msg) msg.textContent = why + " Then close this window and open it again from Settings → Tools.";
+    return false;
+  }
+}
+
+async function loadFile(file) {
+  setStatus(`Reading ${file.name}…`);
+  try {
+    const t0 = performance.now();
+    const text = await file.text();
+    setStatus(`Parsing ${(file.size / 1024 / 1024).toFixed(1)} MB…`);
+    await new Promise(r => setTimeout(r, 20));
+    await ingest(text, file.name, t0);
+  } catch (err) {
+    setStatus("Load failed: " + err.message, "error");
+  }
+}
+
+async function ingest(text, sourceLabel, startTime) {
+  const parsed = parseMobDb(text);
+  if (!parsed.length) {
+    setStatus("No mobs parsed — is this really a mob_db.yml?", "error");
+    return;
+  }
+  mobs = parsed.sort((a, b) => a.id - b.id);
+  index = new Map(mobs.map(m => [m.id, m]));
+  const secs = ((performance.now() - startTime) / 1000).toFixed(1);
+  setStatus(`Loaded ${mobs.length.toLocaleString()} mobs from ${sourceLabel} in ${secs}s`, "ok");
+  populateFilters();
+  enableUi();
+  dbPut("current", { source: sourceLabel, when: Date.now(), mobs });
+  render();
+  search.focus();
+  // Background: build the AegisName -> sprite map for drop icons. Fires and
+  // forgets — the UI is fully usable without it, and icons appear when the
+  // async chain completes (a redraw is triggered if a mob was already open).
+  tryLoadDropIcons();
+}
+
+function enableUi() {
+  for (const el of [search, raceFilter, sizeFilter, elementFilter, tierFilter]) el.disabled = false;
+}
+
+function setStatus(msg, cls) {
+  status.textContent = msg;
+  status.className = "status" + (cls ? " " + cls : "");
+}
+
+// --------- YAML parser (targeted at rAthena mob_db.yml) ---------
+// mob_db.yml has a fixed shape and consistent 2-space indent, so a general
+// YAML parser would be overkill. We walk lines and route on indent level:
+//   0/2 spaces  → structural (Body:, Header:, comments)
+//   "  - Id:"   → new mob entry
+//   4 spaces    → scalar field on the current mob, or start of a subblock
+//   6 spaces    → item inside a list (Drops, MvpDrops), or field of Modes
+//   8 spaces    → field of the current drop entry
+function parseMobDb(text) {
+  const out = [];
+  const lines = text.split(/\r?\n/);
+  let mob = null;
+  let mode = null;      // "drops" | "mvpDrops" | "modes" | null
+  let currentDrop = null;
+  const flushMob = () => { if (mob) out.push(mob); };
+
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    if (!line || line.startsWith("#")) continue;
+    // New mob entry starts a fresh block
+    const idMatch = line.match(/^  - Id:\s*(.+?)\s*$/);
+    if (idMatch) {
+      flushMob();
+      mob = newMob();
+      mob.id = parseInt(idMatch[1], 10);
+      mode = null; currentDrop = null;
+      continue;
+    }
+    if (!mob) continue;
+    // 4-space scalar: a top-level field on the mob, ends any sublist
+    const scalar4 = line.match(/^    (\S[^:]*):\s*(.*)$/);
+    if (scalar4 && !line.startsWith("      ")) {
+      const key = scalar4[1];
+      const value = scalar4[2];
+      if (value === "") {
+        // A subblock header like "    Drops:" or "    Modes:"
+        if (key === "Drops") { mode = "drops"; currentDrop = null; }
+        else if (key === "MvpDrops") { mode = "mvpDrops"; currentDrop = null; }
+        else if (key === "Modes") { mode = "modes"; currentDrop = null; }
+        else { mode = null; currentDrop = null; }
+      } else {
+        mob[camel(key)] = coerce(value);
+        mode = null; currentDrop = null;
+      }
+      continue;
+    }
+    // 6-space list item: "      - Item: NAME" (drop entry)
+    const dropStart = line.match(/^      - Item:\s*(.+?)\s*$/);
+    if (dropStart && (mode === "drops" || mode === "mvpDrops")) {
+      currentDrop = { item: dropStart[1], rate: 0 };
+      (mode === "mvpDrops" ? mob.mvpDrops : mob.drops).push(currentDrop);
+      continue;
+    }
+    // 6-space scalar: field on Modes block
+    const scalar6 = line.match(/^      (\S[^:]*):\s*(.+?)\s*$/);
+    if (scalar6 && mode === "modes") {
+      mob.modes[camel(scalar6[1])] = coerce(scalar6[2]);
+      continue;
+    }
+    // 8-space scalar: field on the current drop
+    const scalar8 = line.match(/^        (\S[^:]*):\s*(.+?)\s*$/);
+    if (scalar8 && currentDrop) {
+      currentDrop[camel(scalar8[1])] = coerce(scalar8[2]);
+      continue;
+    }
+  }
+  flushMob();
+  return out;
+}
+
+function newMob() {
+  return { id: 0, drops: [], mvpDrops: [], modes: {} };
+}
+
+function camel(s) {
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+function coerce(v) {
+  const t = v.trim();
+  if (t === "true") return true;
+  if (t === "false") return false;
+  if (/^-?\d+$/.test(t)) return parseInt(t, 10);
+  if (/^-?\d+\.\d+$/.test(t)) return parseFloat(t);
+  return t;
+}
+
+// --------- drop-icon lookup ---------
+// Icon URL on the app's asset server. `유저인터페이스` is "user interface" in
+// Korean — the asset server resolves the CP949 folder name via URL encoding.
+function iconUrl(sprite) {
+  return `${ASSET_ORIGIN}/data/texture/${encodeURIComponent("유저인터페이스")}/item/${encodeURIComponent(sprite)}.bmp`;
+}
+
+// Load AegisName -> Korean sprite map that the extractor built. The map is
+// served as a JS payload on the asset server, not fetched as JSON — this way
+// a cross-origin <script> tag pulls it in without CORS, so it works when the
+// page is opened by double-click (file://) as well as from an HTTP host.
+async function tryLoadDropIcons() {
+  // Cached from a prior session?
+  const cached = await dbGet("dropIcons");
+  if (cached && cached.length) {
+    dropIconMap = new Map(cached);
+    return;
+  }
+  // Race the script load against a timeout so a missing asset server doesn't
+  // hang the UI. Setting __mobItemIconsReady lets the payload signal us the
+  // moment it lands; the onload handler is our belt-and-suspenders.
+  const loaded = await new Promise((resolve) => {
+    let done = false;
+    const finish = (ok) => { if (!done) { done = true; resolve(ok); } };
+    window.__mobItemIconsReady = () => finish(true);
+    const tag = document.createElement("script");
+    tag.src = ASSET_ORIGIN + "/item-icons.js?ts=" + Date.now();
+    tag.onload = () => finish(true);
+    tag.onerror = () => finish(false);
+    document.head.appendChild(tag);
+    setTimeout(() => finish(false), 4000);
+  });
+  if (!loaded || !window.__mobItemIcons) return;
+  for (const [aegis, sprite] of Object.entries(window.__mobItemIcons)) {
+    dropIconMap.set(aegis, sprite);
+  }
+  if (dropIconMap.size) {
+    dbPut("dropIcons", Array.from(dropIconMap.entries()));
+    // Re-render the current selection so icons appear without a click.
+    if (selectedId != null && index.has(selectedId)) selectMob(index.get(selectedId));
+  }
+}
+
+// Boss tier: MVPs have Modes.mvp=true or a MvpExp > 0; mini-bosses are
+// Modes.mini_boss (older field name is different across versions, so we
+// also treat "no MVP but has MvpDrops" and level thresholds cautiously).
+function tierOf(m) {
+  if (m.modes && (m.modes.mvp === true || m.modes.Mvp === true)) return "mvp";
+  if (m.mvpExp && m.mvpExp > 0) return "mvp";
+  if (m.mvpDrops.length > 0) return "mvp";
+  if (m.modes && (m.modes.miniBoss === true || m.modes.MiniBoss === true)) return "miniboss";
+  return "normal";
+}
+
+// --------- filter dropdowns ---------
+function populateFilters() {
+  const races = new Map(), sizes = new Map(), elements = new Map();
+  for (const m of mobs) {
+    if (m.race)    races.set(m.race,     (races.get(m.race)     || 0) + 1);
+    if (m.size)    sizes.set(m.size,     (sizes.get(m.size)     || 0) + 1);
+    if (m.element) elements.set(m.element,(elements.get(m.element)|| 0) + 1);
+  }
+  fill(raceFilter, "All races", races);
+  fill(sizeFilter, "All sizes", sizes, ["Small","Medium","Large"]);
+  fill(elementFilter, "All elements", elements);
+}
+
+function fill(select, allLabel, counts, forcedOrder) {
+  const entries = Array.from(counts.entries());
+  if (forcedOrder) {
+    entries.sort((a, b) => forcedOrder.indexOf(a[0]) - forcedOrder.indexOf(b[0]));
+  } else {
+    entries.sort((a, b) => b[1] - a[1]);
+  }
+  select.innerHTML = `<option value="">${allLabel}</option>` +
+    entries.map(([k, n]) => `<option value="${escapeAttr(k)}">${escapeHtml(k)} (${n.toLocaleString()})</option>`).join("");
+}
+
+// --------- rendering ---------
+const LIMIT = 300;
+
+function render() {
+  const query = search.value.trim();
+  const q = query.toLowerCase();
+  const race = raceFilter.value;
+  const size = sizeFilter.value;
+  const element = elementFilter.value;
+  const tier = tierFilter.value;
+
+  let list = mobs;
+  if (q) {
+    if (/^\d+$/.test(q)) {
+      const exact = index.get(parseInt(q, 10));
+      const prefix = mobs.filter(m => String(m.id).startsWith(q) && m.id !== parseInt(q, 10));
+      list = exact ? [exact, ...prefix] : prefix;
+    } else {
+      const parts = q.split(/\s+/).filter(Boolean);
+      list = mobs.filter(m => {
+        const n = (m.name || "").toLowerCase();
+        const a = (m.aegisName || "").toLowerCase();
+        return parts.every(p => n.includes(p) || a.includes(p));
+      });
+    }
+  }
+  if (race) list = list.filter(m => m.race === race);
+  if (size) list = list.filter(m => m.size === size);
+  if (element) list = list.filter(m => m.element === element);
+  if (tier) list = list.filter(m => tierOf(m) === tier);
+
+  results.innerHTML = "";
+  const info = document.createElement("div");
+  info.id = "results-info";
+  info.textContent = list.length === 0
+    ? "0 mobs"
+    : list.length > LIMIT
+      ? `Showing ${LIMIT.toLocaleString()} of ${list.length.toLocaleString()} — refine to narrow.`
+      : `${list.length.toLocaleString()} mob${list.length === 1 ? "" : "s"}`;
+  results.appendChild(info);
+
+  if (list.length === 0) {
+    const empty = document.createElement("div");
+    empty.style.cssText = "padding:30px 16px;color:var(--muted);text-align:center";
+    empty.textContent = "No mobs match. Try a partial name or ID, or clear a filter.";
+    results.appendChild(empty);
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const m of list.slice(0, LIMIT)) {
+    const row = document.createElement("div");
+    row.className = "row";
+    if (selectedId === m.id) row.classList.add("selected");
+    row.dataset.id = m.id;
+    const t = tierOf(m);
+    const badge = t === "mvp" ? '<span class="badge mvp">MVP</span>'
+                : t === "miniboss" ? '<span class="badge miniboss">Mini</span>'
+                : "";
+    const elClass = m.element ? "element-" + m.element : "";
+    row.innerHTML =
+      `<img class="row-thumb" alt="" data-thumb="${m.id}">` +
+      '<div class="row-main">' +
+        `<div class="row-name">${highlight(m.name || "?", q)} ${badge}</div>` +
+        `<div class="row-sub">` +
+          (m.level ? `<span>Lv ${m.level}</span>` : "") +
+          (m.race ? `<span>${escapeHtml(m.race)}</span>` : "") +
+          (m.element ? `<span class="${elClass}">${escapeHtml(m.element)}${m.elementLevel ? " " + m.elementLevel : ""}</span>` : "") +
+          (m.size ? `<span>${escapeHtml(m.size)}</span>` : "") +
+        `</div>` +
+      '</div>' +
+      `<div class="row-id">${m.id}</div>`;
+    row.addEventListener("click", () => selectMob(m));
+    frag.appendChild(row);
+  }
+  results.appendChild(frag);
+  watchThumbs();
+}
+
+function selectMob(m) {
+  selectedId = m.id;
+  detail.classList.remove("empty");
+  const t = tierOf(m);
+  const bigBadge = t === "mvp" ? '<span class="badge mvp">MVP</span>'
+                : t === "miniboss" ? '<span class="badge miniboss">Mini-boss</span>'
+                : "";
+  const elClass = m.element ? "element-" + m.element : "";
+  const drops = renderDropTable(m.drops, "drops");
+  const mvpDrops = renderDropTable(m.mvpDrops, "mvp");
+
+  detail.innerHTML =
+    '<div class="detail-top">' +
+    '<div class="detail-head">' +
+      `<h2>${escapeHtml(m.name || "?")} ${bigBadge}</h2>` +
+      '<div class="detail-meta">' +
+        `<span>ID <span class="id-mono clickable" data-copy="${m.id}" title="Click to copy just the ID">${m.id}</span></span>` +
+        (m.aegisName ? `<span>Aegis <span class="id-mono clickable" data-copy="${escapeAttr(m.aegisName)}" title="Click to copy aegis name">${escapeHtml(m.aegisName)}</span></span>` : "") +
+        (m.level ? `<span>Level ${m.level}</span>` : "") +
+        (m.race ? `<span>Race: ${escapeHtml(m.race)}</span>` : "") +
+        (m.element ? `<span class="${elClass}">Element: ${escapeHtml(m.element)}${m.elementLevel ? " " + m.elementLevel : ""}</span>` : "") +
+        (m.size ? `<span>Size: ${escapeHtml(m.size)}</span>` : "") +
+      '</div>' +
+    '</div>' +
+    '<div class="sprite-box" id="sprite-box"><canvas id="sprite-canvas" width="200" height="200"></canvas>' +
+      '<div class="sprite-controls" id="sprite-controls"></div><div class="sprite-note" id="sprite-note">Loading sprite…</div></div>' +
+    '</div>' +
+    renderCopyLine(m) +
+    renderStats(m) +
+    (drops ? '<h3>Drops</h3>' + drops : "") +
+    (mvpDrops ? '<h3>MVP Drops</h3>' + mvpDrops : "");
+
+  showSprite(m);
+  const qty = $("copy-qty");
+  const kind = $("copy-kind");
+  const code = $("copy-code");
+  const btn = $("copy-btn");
+  const rebuild = () => {
+    const raw = kind.value.replace(/\{id\}/g, m.id).replace(/\{aegis\}/g, m.aegisName || "").replace(/\{qty\}/g, qty.value);
+    code.textContent = raw;
+  };
+  qty.addEventListener("input", rebuild);
+  kind.addEventListener("change", rebuild);
+  btn.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(code.textContent); }
+    catch { /* clipboard blocked on file:// */ }
+    btn.textContent = "Copied!";
+    setTimeout(() => btn.textContent = "Copy", 1000);
+  });
+  for (const chip of detail.querySelectorAll(".id-mono.clickable")) {
+    chip.addEventListener("click", async () => {
+      const val = chip.dataset.copy;
+      try { await navigator.clipboard.writeText(val); } catch {}
+      const original = chip.textContent;
+      chip.textContent = "Copied"; chip.classList.add("copied");
+      setTimeout(() => { chip.textContent = original; chip.classList.remove("copied"); }, 900);
+    });
+  }
+  for (const r of results.querySelectorAll(".row")) {
+    r.classList.toggle("selected", parseInt(r.dataset.id, 10) === m.id);
+  }
+}
+
+function renderCopyLine(m) {
+  const summonCmd = `monster "prontera",150,150,"${escapeAttr(m.name||m.aegisName||"?")}",${m.id},1;`;
+  return '<div class="copy-line">' +
+    '<code id="copy-code">' + escapeHtml(summonCmd) + '</code>' +
+    '<select id="copy-kind">' +
+      `<option value='monster "prontera",150,150,"${escapeAttr(m.name||m.aegisName||"?")}",{id},{qty};'>monster script</option>` +
+      `<option value="@monster {id}">@monster GM cmd</option>` +
+      `<option value="@summon {id}">@summon GM cmd</option>` +
+      `<option value="{aegis}">Aegis name</option>` +
+      `<option value="{id}">Just the ID</option>` +
+    '</select>' +
+    '<input type="number" id="copy-qty" min="1" max="500" value="1" style="width:60px;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--panel);color:var(--text);font-family:inherit">' +
+    '<button class="btn" id="copy-btn">Copy</button>' +
+    '</div>';
+}
+
+function renderStats(m) {
+  const cell = (label, value, small=false) => value == null || value === "" ? "" :
+    `<div class="stat"><div class="stat-label">${label}</div><div class="stat-value${small ? " small" : ""}">${value}</div></div>`;
+  return '<div class="stat-grid">' +
+    cell("HP", (m.hp || 0).toLocaleString()) +
+    cell("Attack", m.attack != null ? `${m.attack}${m.attack2 != null ? " – " + m.attack2 : ""}` : null) +
+    cell("Defense", m.defense) +
+    cell("M.Def", m.magicDefense) +
+    cell("STR", m.str, true) +
+    cell("AGI", m.agi, true) +
+    cell("VIT", m.vit, true) +
+    cell("INT", m.int, true) +
+    cell("DEX", m.dex, true) +
+    cell("LUK", m.luk, true) +
+    cell("Base EXP", (m.baseExp || 0).toLocaleString(), true) +
+    cell("Job EXP",  (m.jobExp  || 0).toLocaleString(), true) +
+  '</div>';
+}
+
+function renderDropTable(drops, cls) {
+  if (!drops || !drops.length) return "";
+  const rows = drops
+    .map(d => ({ item: d.item, rate: d.rate || 0, steal: d.stealProtected }))
+    .sort((a, b) => b.rate - a.rate);
+  const barCls = cls === "mvp" ? "rate-bar mvp" : "rate-bar";
+  const body = rows.map(r => {
+    const pct = (r.rate / 100).toFixed(2);
+    const barWidth = Math.max(2, Math.min(100, r.rate / 100));
+    const sprite = dropIconMap.get(r.item);
+    // The icon is the same 24×24 sprite the client draws on the ground. If
+    // the fetch 404s (missing sprite, asset server down) the img removes
+    // itself so the row layout stays clean.
+    const icon = sprite
+      ? `<img class="drop-icon" src="${iconUrl(sprite)}" alt="" loading="lazy" onerror="this.remove()">`
+      : '<span class="drop-icon placeholder"></span>';
+    return `<tr><td><span class="drop-cell">${icon}${escapeHtml(r.item)}${r.steal ? ' <span class="badge">steal-protected</span>' : ""}</span></td>` +
+      `<td style="text-align:right;font-variant-numeric:tabular-nums">${pct}%` +
+      ` <span class="${barCls}"><span style="width:${barWidth}%"></span></span></td></tr>`;
+  }).join("");
+  return `<table class="drops"><thead><tr><th>Item</th><th style="text-align:right">Chance</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// --------- highlight & escape ---------
+function highlight(name, query) {
+  if (!query || /^\d+$/.test(query)) return escapeHtml(name);
+  const parts = query.split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
+  const escaped = parts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  if (!escaped) return escapeHtml(name);
+  return escapeHtml(name).replace(new RegExp("(" + escaped + ")", "gi"), "<mark>$1</mark>");
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+function escapeAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+}
+
+// --------- IndexedDB cache ---------
+const DB_NAME = "roMobBrowser";
+const DB_STORE = "cache";
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbGet(key) {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readonly");
+      const req = tx.objectStore(DB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return undefined; }
+}
+async function dbPut(key, value) {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {}
+}
+async function dbDel(key) {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).delete(key);
+      tx.oncomplete = () => resolve();
+    });
+  } catch {}
+}
+function showClearCacheButton() {
+  if (document.getElementById("clear-cache")) return;
+  const btn = document.createElement("button");
+  btn.id = "clear-cache";
+  btn.className = "btn ghost";
+  btn.textContent = "Clear cache";
+  btn.title = "Forget the loaded file and start over";
+  btn.addEventListener("click", async () => { await dbDel("current"); location.reload(); });
+  status.parentNode.insertBefore(btn, status);
+}
+async function tryRestore() {
+  const cached = await dbGet("current");
+  if (!cached || !cached.mobs || !cached.mobs.length) return false;
+  mobs = cached.mobs;
+  index = new Map(mobs.map(m => [m.id, m]));
+  populateFilters();
+  enableUi();
+  setStatus(`${mobs.length.toLocaleString()} mobs restored from cache${cached.source ? " (" + cached.source + ")" : ""}`, "ok");
+  render();
+  tryLoadDropIcons();
+  return true;
+}
+
+// --------- monster sprite ---------
+// The monster's own .spr/.act from your client, the way the game draws it:
+// the app finds the sprite name (the client's monster table) and fetches the
+// files from the asset server. The decoding follows roBrowser's
+// Loaders/Sprite.js and Loaders/Action.js.
+const SPRITE_ACTIONS = [["Idle", 0], ["Walk", 1], ["Attack", 2], ["Hurt", 3], ["Die", 4]];
+let spriteTable = null;
+let spriteRun = 0; // bumps on every monster change, so an old animation stops
+
+async function spriteName(m) {
+  if (!spriteTable) {
+    try { spriteTable = await (await fetch("./monster-sprites.json", { cache: "no-store" })).json(); }
+    catch { spriteTable = {}; }
+  }
+  return spriteTable[m.id] || (m.aegisName ? m.aegisName.toLowerCase() : null);
+}
+
+function reader(buf) {
+  const dv = new DataView(buf);
+  let p = 0;
+  return {
+    get pos() { return p; }, set pos(v) { p = v; }, length: buf.byteLength,
+    u8: () => dv.getUint8(p++),
+    u16: () => { const v = dv.getUint16(p, true); p += 2; return v; },
+    i16: () => { const v = dv.getInt16(p, true); p += 2; return v; },
+    u32: () => { const v = dv.getUint32(p, true); p += 4; return v; },
+    i32: () => { const v = dv.getInt32(p, true); p += 4; return v; },
+    f32: () => { const v = dv.getFloat32(p, true); p += 4; return v; },
+    str: n => { let s = ""; for (let i = 0; i < n; i++) s += String.fromCharCode(dv.getUint8(p + i)); p += n; return s; },
+  };
+}
+
+function readSpr(buf) {
+  const r = reader(buf);
+  if (r.str(2) !== "SP") throw new Error("not a sprite");
+  const version = r.u8() / 10 + r.u8();
+  const indexed = r.u16();
+  const rgba = version > 1.1 ? r.u16() : 0;
+  const frames = [];
+  for (let i = 0; i < indexed; i++) {
+    const w = r.u16(), h = r.u16();
+    const data = new Uint8Array(w * h);
+    if (version < 2.1) {
+      for (let j = 0; j < w * h; j++) data[j] = r.u8();
+    } else {
+      // Runs of transparent pixels are stored as 0, count.
+      const end = r.u16() + r.pos;
+      let k = 0;
+      while (r.pos < end) {
+        const c = r.u8();
+        data[k++] = c;
+        if (!c) {
+          const n = r.u8();
+          if (!n) data[k++] = 0; else for (let j = 1; j < n; j++) data[k++] = 0;
+        }
+      }
+    }
+    frames.push({ rgba: false, w, h, data });
+  }
+  for (let i = 0; i < rgba; i++) {
+    const w = r.i16(), h = r.i16();
+    const data = new Uint8Array(buf, r.pos, w * h * 4).slice();
+    r.pos += w * h * 4;
+    frames.push({ rgba: true, w, h, data });
+  }
+  const palette = version > 1.0 ? new Uint8Array(buf, buf.byteLength - 1024, 1024) : null;
+  return { indexed, frames, palette };
+}
+
+function readAct(buf) {
+  const r = reader(buf);
+  if (r.str(2) !== "AC") throw new Error("not an action file");
+  const version = r.u8() / 10 + r.u8();
+  const count = r.u16();
+  r.pos += 10;
+  const actions = [];
+  for (let a = 0; a < count; a++) {
+    const frames = [];
+    const nf = r.u32();
+    for (let f = 0; f < nf; f++) {
+      r.pos += 32;
+      const nl = r.u32();
+      const layers = [];
+      for (let l = 0; l < nl; l++) {
+        const layer = { x: r.i32(), y: r.i32(), index: r.i32(), mirror: r.i32(), alpha: 1, sx: 1, sy: 1, angle: 0, type: 0 };
+        if (version >= 2.0) {
+          r.u8(); r.u8(); r.u8(); layer.alpha = r.u8() / 255;
+          layer.sx = r.f32();
+          layer.sy = version <= 2.3 ? layer.sx : r.f32();
+          layer.angle = r.i32();
+          layer.type = r.i32();
+          if (version >= 2.5) { r.i32(); r.i32(); }
+        }
+        layers.push(layer);
+      }
+      if (version >= 2.0) r.i32(); // sound
+      if (version >= 2.3) { const np = r.i32(); r.pos += np * 16; }
+      frames.push(layers);
+    }
+    actions.push({ frames, delay: 150 });
+  }
+  if (version >= 2.1) {
+    const sounds = r.i32();
+    r.pos += sounds * 40;
+    if (version >= 2.2) for (const a of actions) a.delay = r.f32() * 25;
+  }
+  return { actions };
+}
+
+// One canvas per sprite frame, made once.
+function frameImages(spr) {
+  const pal = spr.palette;
+  return spr.frames.map(f => {
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, f.w); c.height = Math.max(1, f.h);
+    const ctx = c.getContext("2d");
+    const img = ctx.createImageData(c.width, c.height);
+    const out = img.data;
+    for (let y = 0; y < f.h; y++) {
+      for (let x = 0; x < f.w; x++) {
+        const o = (y * f.w + x) * 4;
+        if (f.rgba) {
+          // Stored bottom-up, as A, B, G, R.
+          const s = ((f.h - y - 1) * f.w + x) * 4;
+          out[o] = f.data[s + 3]; out[o + 1] = f.data[s + 2]; out[o + 2] = f.data[s + 1]; out[o + 3] = f.data[s];
+        } else {
+          const i = f.data[y * f.w + x];
+          if (!i || !pal) continue;
+          out[o] = pal[i * 4]; out[o + 1] = pal[i * 4 + 1]; out[o + 2] = pal[i * 4 + 2]; out[o + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return c;
+  });
+}
+
+function layerImage(images, spr, layer) {
+  if (layer.index < 0) return null;
+  return images[layer.index + (layer.type === 1 ? spr.indexed : 0)] || null;
+}
+
+// One load per sprite, shared by the list's thumbnails and the viewer.
+const spriteCache = new Map();
+function loadSprite(name) {
+  if (!spriteCache.has(name)) {
+    spriteCache.set(name, (async () => {
+      const [a, b] = await Promise.all([
+        fetch(`./sprite/${encodeURIComponent(name)}.spr`), fetch(`./sprite/${encodeURIComponent(name)}.act`)]);
+      if (!a.ok || !b.ok) throw new Error(`Your client has no sprite called ${name}.`);
+      const spr = readSpr(await a.arrayBuffer());
+      const act = readAct(await b.arrayBuffer());
+      return { spr, act, images: frameImages(spr) };
+    })());
+  }
+  return spriteCache.get(name);
+}
+
+// A still of the monster standing, facing the viewer, for the list.
+const thumbCache = new Map();
+async function spriteThumb(m) {
+  const name = await spriteName(m);
+  if (!name) return null;
+  if (thumbCache.has(name)) return thumbCache.get(name);
+  const { spr, act, images } = await loadSprite(name);
+  const layers = (act.actions[0] && act.actions[0].frames[0]) || [];
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const l of layers) {
+    const img = layerImage(images, spr, l);
+    if (!img) continue;
+    const w = img.width * Math.abs(l.sx), h = img.height * Math.abs(l.sy);
+    x0 = Math.min(x0, l.x - w / 2); x1 = Math.max(x1, l.x + w / 2);
+    y0 = Math.min(y0, l.y - h / 2); y1 = Math.max(y1, l.y + h / 2);
+  }
+  if (!isFinite(x0)) return null;
+  const size = 80; // drawn at 2x, shown at 40px
+  const zoom = Math.min(2, size / Math.max(x1 - x0, y1 - y0));
+  const c = document.createElement("canvas");
+  c.width = size; c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const cx = size / 2 - ((x0 + x1) / 2) * zoom, cy = size / 2 - ((y0 + y1) / 2) * zoom;
+  for (const l of layers) {
+    const img = layerImage(images, spr, l);
+    if (!img) continue;
+    ctx.save();
+    ctx.globalAlpha = l.alpha;
+    ctx.translate(cx + l.x * zoom, cy + l.y * zoom);
+    if (l.angle) ctx.rotate(l.angle * Math.PI / 180);
+    ctx.scale(l.sx * zoom * (l.mirror ? -1 : 1), l.sy * zoom);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    ctx.restore();
+  }
+  const url = c.toDataURL("image/png");
+  thumbCache.set(name, url);
+  return url;
+}
+
+// Thumbnails load as their rows scroll into view, not all 300 at once.
+let thumbObserver = null;
+function watchThumbs() {
+  if (!("IntersectionObserver" in window)) return;
+  if (!thumbObserver) {
+    thumbObserver = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        const img = e.target;
+        thumbObserver.unobserve(img);
+        const m = index.get(Number(img.dataset.thumb));
+        if (!m) continue;
+        spriteThumb(m).then(url => { if (url) img.src = url; else img.style.visibility = "hidden"; })
+          .catch(() => { img.style.visibility = "hidden"; });
+      }
+    }, { root: results, rootMargin: "200px" });
+  }
+  for (const img of results.querySelectorAll("img[data-thumb]")) thumbObserver.observe(img);
+}
+
+async function showSprite(m) {
+  const run = ++spriteRun;
+  const canvas = $("sprite-canvas"), note = $("sprite-note"), controls = $("sprite-controls");
+  if (!canvas) return;
+  const say = t => { if (run === spriteRun && note) note.textContent = t; };
+  let spr, act, images;
+  try {
+    const name = await spriteName(m);
+    if (!name) { say("No sprite for this monster."); return; }
+    ({ spr, act, images } = await loadSprite(name));
+  } catch (e) {
+    say(e.message.startsWith("Your client") ? e.message : "The sprite could not be read: " + e.message);
+    return;
+  }
+  if (run !== spriteRun) return;
+  const state = { action: 0, dir: 0 };
+  const available = SPRITE_ACTIONS.filter(([, n]) => act.actions.length > n * 8);
+
+  const pick = () => {
+    const i = state.action * 8 + state.dir;
+    return act.actions[i] || act.actions[state.action * 8] || act.actions[0];
+  };
+  // Fit the whole action, every frame, in the box.
+  let view = null;
+  const fit = () => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const layers of pick().frames) for (const l of layers) {
+      const img = layerImage(images, spr, l);
+      if (!img) continue;
+      const w = img.width * Math.abs(l.sx), h = img.height * Math.abs(l.sy);
+      x0 = Math.min(x0, l.x - w / 2); x1 = Math.max(x1, l.x + w / 2);
+      y0 = Math.min(y0, l.y - h / 2); y1 = Math.max(y1, l.y + h / 2);
+    }
+    if (!isFinite(x0)) { x0 = -20; y0 = -20; x1 = 20; y1 = 20; }
+    const span = Math.max(x1 - x0, y1 - y0);
+    const zoom = Math.max(0.5, Math.min(3, 200 / Math.max(span, 1)));
+    view = { zoom, cx: 100 - ((x0 + x1) / 2) * zoom, cy: 100 - ((y0 + y1) / 2) * zoom };
+  };
+
+  const buttons = () => {
+    controls.textContent = "";
+    for (const [label, n] of available) {
+      const btn = document.createElement("button");
+      btn.textContent = label;
+      if (n === state.action) btn.className = "on";
+      btn.addEventListener("click", () => { state.action = n; frame = 0; last = 0; fit(); buttons(); });
+      controls.append(btn);
+    }
+    const turn = document.createElement("button");
+    turn.textContent = "Turn ↻";
+    turn.title = "Look from another side";
+    turn.addEventListener("click", () => { state.dir = (state.dir + 1) % 8; frame = 0; fit(); });
+    controls.append(turn);
+  };
+
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  let frame = 0, last = 0;
+  fit(); buttons(); say("");
+  const draw = t => {
+    if (run !== spriteRun || !document.body.contains(canvas)) return;
+    const a = pick();
+    const delay = Math.max(40, a.delay || 150);
+    if (!last) last = t;
+    if (t - last >= delay) {
+      last = t;
+      // Die holds its last frame for a moment before playing again.
+      if (state.action === 4 && frame === a.frames.length - 1) { if (t - (draw.held || (draw.held = t)) < 1500) { requestAnimationFrame(draw); return; } }
+      draw.held = 0;
+      frame = (frame + 1) % a.frames.length;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const l of a.frames[frame % a.frames.length] || []) {
+      const img = layerImage(images, spr, l);
+      if (!img) continue;
+      ctx.save();
+      ctx.globalAlpha = l.alpha;
+      ctx.translate(view.cx + l.x * view.zoom, view.cy + l.y * view.zoom);
+      if (l.angle) ctx.rotate(l.angle * Math.PI / 180);
+      ctx.scale(l.sx * view.zoom * (l.mirror ? -1 : 1), l.sy * view.zoom);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      ctx.restore();
+    }
+    requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+}
+
+// Boot sequence:
+//   1. If we have a cached copy from a previous session, restore it instantly.
+//   2. In the background, try fetching the local file to see if it's newer or
+//      just arrived (from running the extract script). If it's there, refresh.
+//   3. If neither, show the empty state with the extraction command.
+(async () => {
+  const restored = await tryRestore();
+  if (restored) return;
+  await tryFetchLocal();
+})();
+</script>
+</body>
+</html>

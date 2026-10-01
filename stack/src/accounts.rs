@@ -27,6 +27,50 @@ use std::io::{self, Read};
 /// six digits and the char server compares those.
 const DEFAULT_BIRTHDATE: &str = "2000-01-01";
 
+/// The accounts AI agents play on (#187), when the player turns that on.
+///
+/// Fixed names, so the app can find them again: `aiagent` for the first,
+/// `aiagent2`..`aiagent4` for the others. The password is new every time an
+/// agent's window starts and is never stored. The group is their own: a
+/// player's permissions plus the three travel commands, and nothing a GM has.
+/// An existing account of one of these names that is *not* in that group
+/// belongs to somebody and is never taken over.
+pub const AGENT_ACCOUNT: &str = "aiagent";
+pub const MAX_AGENTS: u32 = 4;
+
+pub fn agent_account(n: u32) -> String {
+    if n <= 1 { AGENT_ACCOUNT.to_string() } else { format!("{AGENT_ACCOUNT}{n}") }
+}
+
+/// The agent slot a request names, 1 when it names none.
+fn agent_slot(request: &Value) -> Result<u32, String> {
+    match request.str("agent") {
+        None => Ok(1),
+        Some(v) => match v.parse::<u32>() {
+            Ok(n) if (1..=MAX_AGENTS).contains(&n) => Ok(n),
+            _ => Err(format!("Agent must be 1 to {MAX_AGENTS}")),
+        },
+    }
+}
+/// Documented in docs/MODDING.md ("Group 20 is taken") so mods keep off it.
+pub const AGENT_GROUP: u32 = 20;
+pub const AGENT_GROUP_OWNER: &str = "Ragnarok Offline (AI agent)";
+pub const AGENT_GROUP_YML: &str = "Header:
+  Type: PLAYER_GROUP_DB
+  Version: 1
+
+Body:
+  - Id: 20
+    Name: AI Agent
+    Level: 0
+    Inherit:
+      Player: true
+    Commands:
+      warp: true
+      go: true
+      load: true
+";
+
 /// Accounts whose birthday the migration has to write. NULL is what rAthena
 /// leaves; the zero date is what a permissive `sql_mode` can turn it into.
 const MISSING_BIRTHDATE: &str = "(birthdate IS NULL OR birthdate='0000-00-00')";
@@ -348,6 +392,22 @@ fn statement(action: &str, request: &Value) -> Result<String, String> {
             };
             format!("UPDATE login SET {assignment} WHERE account_id={id} AND BINARY userid={} AND sex<>'S'; SELECT ROW_COUNT();", hex(name))
         }
+        // Made if missing, re-keyed if it is already the agent's. The count at
+        // the end is 1 only when an agent-group account of that name exists
+        // afterwards, so a same-named player account is refused rather than
+        // touched: the UPDATE matches the agent group only, and the INSERT
+        // only runs when the name is free.
+        "agent" => {
+            let pass = hex(field(request, "password")?);
+            let name = hex(&agent_account(agent_slot(request)?));
+            format!("LOCK TABLES login WRITE, login AS existing READ; UPDATE login SET user_pass={pass},state=0 WHERE BINARY userid={name} AND group_id={AGENT_GROUP} AND sex<>'S'; INSERT INTO login (userid,user_pass,sex,email,group_id,birthdate) SELECT {name},{pass},'M','a@a.com',{AGENT_GROUP},'{DEFAULT_BIRTHDATE}' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM login AS existing WHERE userid={name}); SELECT COUNT(*) FROM login AS existing WHERE BINARY userid={name} AND group_id={AGENT_GROUP} AND sex<>'S'; UNLOCK TABLES;")
+        }
+        // Turning the feature off: the account stays, with its characters, but
+        // cannot log in until it is turned on again.
+        "agent-disable" => format!(
+            "UPDATE login SET state=5 WHERE BINARY userid IN ({}) AND group_id={AGENT_GROUP} AND sex<>'S'; SELECT 1;",
+            (1..=MAX_AGENTS).map(|n| hex(&agent_account(n))).collect::<Vec<_>>().join(",")
+        ),
         _ => return Err("Unknown account action".into()),
     })
 }
@@ -371,7 +431,7 @@ pub fn run(cfg: &Config, dk: &Docker) -> Result<(), String> {
         println!("{}", list(dk, era)?);
         return Ok(());
     }
-    if action == "password" || action == "create" || action == "invite-create" {
+    if action == "password" || action == "create" || action == "invite-create" || action == "agent" {
         verify_password_format(cfg)?;
     }
     let sql = statement(action, &request)?;
@@ -388,6 +448,10 @@ pub fn run(cfg: &Config, dk: &Docker) -> Result<(), String> {
                 .parse::<u32>()
                 .map_err(|_| "Invalid account response".into());
         }
+        if action == "agent" && output.trim() != "1" {
+            let name = agent_account(agent_slot(&request)?);
+            return Err(format!("An account named {name} already exists and is not the AI agent's. Rename it in Accounts, then turn the agent on again."));
+        }
         if output.trim() != "1" {
             return Err(match action {
                 "password" => "The password was not changed: the account already uses this password. Choose a different one.",
@@ -398,7 +462,13 @@ pub fn run(cfg: &Config, dk: &Docker) -> Result<(), String> {
         }
         Ok(1)
     };
-    let changed = if action == "invite-create" {
+    // Only this app-owned account, never one a player is on, and the servers
+    // cache nothing about it that the change could be lost under: it is
+    // logged in fresh after this. Stopping the game to (re)key it would throw
+    // the player out every time they let an agent in.
+    let changed = if action == "agent" || action == "agent-disable" {
+        update()?
+    } else if action == "invite-create" {
         // The invited-player path only INSERTs a new group-0 row. It cannot
         // change a loaded account, so friends joining need not disconnect the
         // host or other players. Owner mutations retain their stop/save guard.
@@ -495,6 +565,49 @@ mod tests {
         assert!(!sql.contains("account_id"));
         assert!(sql.ends_with("SELECT ROW_COUNT();"));
     }
+    /// The agent account is made or re-keyed only as the agent's: the
+    /// password travels hex-encoded, the UPDATE is confined to the agent
+    /// group, and the INSERT only runs when the name is free -- so a player's
+    /// own account of the same name is never touched.
+    #[test]
+    fn the_agent_account_is_never_a_players_account() {
+        let request = json::parse(r#"{"password":"hunter2-secret"}"#).unwrap();
+        let sql = statement("agent", &request).unwrap();
+        assert!(!sql.contains("hunter2-secret"), "{sql}");
+        assert!(sql.contains(&hex("hunter2-secret")));
+        assert!(sql.contains(&format!("WHERE BINARY userid={} AND group_id={AGENT_GROUP}", hex(AGENT_ACCOUNT))), "{sql}");
+        assert!(sql.contains("WHERE NOT EXISTS (SELECT 1 FROM login AS existing WHERE userid="), "{sql}");
+        assert!(sql.contains(&format!("'M','a@a.com',{AGENT_GROUP},'{DEFAULT_BIRTHDATE}'")));
+        let off = statement("agent-disable", &request).unwrap();
+        assert!(off.contains(&format!("group_id={AGENT_GROUP}")) && off.contains("state=5"), "{off}");
+        for n in 1..=MAX_AGENTS {
+            username(&agent_account(n)).unwrap();
+            assert!(off.contains(&hex(&agent_account(n))), "{off}");
+        }
+        // A second agent is its own account; a slot out of range is refused.
+        let two = statement("agent", &json::parse(r#"{"password":"x","agent":"2"}"#).unwrap()).unwrap();
+        assert!(two.contains(&hex("aiagent2")) && !two.contains(&format!("{},", hex("aiagent"))), "{two}");
+        assert!(statement("agent", &json::parse(r#"{"password":"x","agent":"5"}"#).unwrap()).is_err());
+    }
+
+    /// The group the account is put in must be the one groups.yml defines,
+    /// and it survives the merge whole: no stock group already holds the
+    /// travel commands under that id.
+    #[test]
+    fn the_agent_group_is_written_and_kept_whole() {
+        assert!(AGENT_GROUP_YML.contains(&format!("- Id: {AGENT_GROUP}\n")));
+        let (body, notes) = crate::mods::combine_whole_conf(
+            "groups.yml",
+            &[(AGENT_GROUP_OWNER.to_string(), AGENT_GROUP_YML.to_string())],
+            &[],
+        );
+        assert!(notes.is_empty(), "{notes:?}");
+        let body = body.unwrap();
+        for command in ["warp: true", "go: true", "load: true", "Player: true"] {
+            assert!(body.contains(command), "{body}");
+        }
+    }
+
     #[test]
     fn the_default_birthdate_is_safe_to_inline_and_matches_the_seeded_account() {
         assert!(DEFAULT_BIRTHDATE

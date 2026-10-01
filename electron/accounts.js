@@ -14,6 +14,8 @@ function runAccounts(binary, options, request) {
       "disable",
       "enable",
       "birthdates",
+      "agent",
+      "agent-disable",
     ].includes(request.action) ||
     !["renewal", "prerenewal"].includes(request.era)
   ) {

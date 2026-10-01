@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Database</title>
+<!--
+  A database browser and editor (#200), written against an adapter so it can
+  serve any app with a database: see adapter.js for the four calls it needs.
+  Nothing in this file knows which database it is looking at.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --hit: #eff6ff;
+    --code: #f3f4f6;
+    --changed: #fef3c7;
+    --changed-text: #92400e;
+    --added: #dcfce7;
+    --deleted: #fee2e2;
+    --danger: #dc2626;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --border: #262b36;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --hit: #1e293b;
+      --code: #0d1017;
+      --changed: #3b2f0b;
+      --changed-text: #fcd34d;
+      --added: #0f2e1b;
+      --deleted: #3a1414;
+      --danger: #f87171;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; font-size: 13px; line-height: 1.4;
+  }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; box-shadow: var(--shadow); z-index: 2;
+  }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .spacer { flex: 1; }
+  .btn {
+    padding: 5px 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel);
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--danger); }
+  .btn.small { padding: 2px 7px; font-size: 12px; }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--code); color: var(--muted); white-space: nowrap; }
+  .pill.on { background: var(--changed); color: var(--changed-text); }
+  .muted { color: var(--muted); }
+  .layout { flex: 1; display: flex; min-height: 0; }
+  aside {
+    width: 240px; flex: none; border-right: 1px solid var(--border); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  aside input { margin: 10px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  #tables { overflow: auto; flex: 1; padding-bottom: 8px; }
+  .table-item {
+    display: flex; justify-content: space-between; gap: 8px; padding: 5px 12px; cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .table-item:hover { background: var(--hit); }
+  .table-item.active { background: var(--hit); border-left-color: var(--accent); font-weight: 600; }
+  .table-item .count { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: normal; }
+  .table-item .dot { color: var(--changed-text); }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .toolbar {
+    padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .toolbar-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar h2 { margin: 0; font-size: 14px; }
+  .filter { display: flex; gap: 6px; align-items: center; }
+  .filter select, .filter input, #raw-where {
+    padding: 4px 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg);
+  }
+  .filter input { width: 180px; }
+  #raw-where { width: 100%; min-height: 34px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
+  .notice { padding: 8px 14px; background: var(--changed); color: var(--changed-text); border-bottom: 1px solid var(--border); }
+  .notice.error { background: var(--deleted); color: var(--danger); }
+  #grid-wrap { flex: 1; overflow: auto; min-height: 0; }
+  table.grid { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+  .grid th, .grid td {
+    border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    padding: 4px 8px; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left;
+  }
+  .grid th {
+    position: sticky; top: 0; background: var(--panel); z-index: 1; cursor: pointer; user-select: none;
+    font-weight: 600; vertical-align: bottom;
+  }
+  .grid th .type { display: block; font-weight: normal; font-size: 11px; color: var(--muted); }
+  .grid th.sorted { color: var(--accent); }
+  .grid th.act, .grid td.act { position: sticky; left: 0; background: var(--panel); cursor: default; width: 1px; padding: 2px 6px; }
+  .grid th.act { z-index: 2; }
+  .grid td.num { text-align: right; }
+  .grid td.null, .grid td.bin, .grid td.default { color: var(--muted); font-style: italic; }
+  .grid tr:hover td { background: var(--hit); }
+  .grid tr:hover td.act { background: var(--hit); }
+  .grid td.editable { cursor: text; }
+  .grid td.changed { background: var(--changed) !important; color: var(--changed-text); font-style: normal; }
+  .grid tr.added td { background: var(--added); }
+  .grid tr.deleted td:not(.act) { background: var(--deleted); text-decoration: line-through; }
+  .grid td.editing { padding: 0; overflow: visible; }
+  .cell-editor { display: flex; align-items: center; gap: 2px; background: var(--panel); }
+  .cell-editor input { border: 2px solid var(--accent); padding: 2px 6px; min-width: 140px; background: var(--panel); outline: none; }
+  .key { color: var(--accent); margin-right: 3px; }
+  footer {
+    padding: 7px 14px; border-top: 1px solid var(--border); background: var(--panel);
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  #structure { overflow: auto; flex: 1; padding: 0; }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+  .empty p { max-width: 520px; margin: 0 auto 14px; white-space: pre-line; }
+  dialog {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text);
+    padding: 0; width: min(720px, calc(100vw - 32px)); box-shadow: 0 10px 40px rgba(0,0,0,.25);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog .body { padding: 16px 20px; max-height: 60vh; overflow: auto; }
+  dialog h3 { margin: 0 0 10px; font-size: 15px; }
+  dialog p { white-space: pre-line; margin: 0 0 10px; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+  .change { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .change .what { font-weight: 600; margin-bottom: 4px; }
+  .change .line { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  .change .old { color: var(--danger); }
+  .change .new { color: #16a34a; }
+  .warning { background: var(--changed); color: var(--changed-text); border-radius: 6px; padding: 8px 10px; margin-top: 10px; }
+  .error-box { background: var(--deleted); color: var(--danger); border-radius: 6px; padding: 8px 10px; margin-top: 10px; white-space: pre-wrap; }
+  #toast {
+    position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 8px 14px; border-radius: 8px; max-width: 80vw; display: none; z-index: 10;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Database</h1>
+  <span id="db-name" class="muted"></span>
+  <span class="spacer"></span>
+  <span id="changes" class="pill">No changes</span>
+  <button id="discard" class="btn" disabled>Discard</button>
+  <button id="review" class="btn primary" disabled>Review and save…</button>
+  <button id="edit-toggle" class="btn" title="Editing is off until you turn it on">Editing: off</button>
+</header>
+<div class="layout">
+  <aside>
+    <input id="table-search" type="search" placeholder="Find a table" aria-label="Find a table">
+    <div id="tables" role="listbox" aria-label="Tables"></div>
+  </aside>
+  <main id="main">
+    <div class="empty" id="start"><p>Loading tables…</p></div>
+  </main>
+</div>
+
+<dialog id="edit-dialog">
+  <div class="body">
+    <h3>Turn on editing?</h3>
+    <p id="edit-warning"></p>
+  </div>
+  <div class="actions">
+    <button class="btn" value="cancel" id="edit-cancel">Keep it read-only</button>
+    <button class="btn primary" id="edit-ok">Turn on editing</button>
+  </div>
+</dialog>
+
+<dialog id="review-dialog">
+  <div class="body">
+    <h3 id="review-title">Review changes</h3>
+    <div id="review-list"></div>
+    <div class="warning" id="save-warning"></div>
+    <div class="error-box" id="save-error" hidden></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="review-cancel">Back</button>
+    <button class="btn primary" id="review-save">Save</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script src="adapter.js"></script>
+<script>
+'use strict';
+const adapter = window.DbAdapter;
+const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null && v !== false) node.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children) if (c != null) node.append(c);
+  return node;
+};
+
+const OPS = [
+  ['=', '='], ['!=', '≠'], ['<', '<'], ['<=', '≤'], ['>', '>'], ['>=', '≥'],
+  ['contains', 'contains'], ['starts', 'starts with'], ['ends', 'ends with'],
+  ['null', 'is NULL'], ['notnull', 'is not NULL'],
+];
+const PAGE_SIZES = [50, 100, 250, 500];
+
+const state = {
+  tables: [],           // from adapter.tables()
+  schemas: new Map(),   // table -> describe()
+  table: null,          // the open table's name
+  view: 'rows',         // 'rows' | 'structure'
+  filters: [],          // [{ column, op, value }]
+  where: '',
+  showWhere: false,
+  orderBy: '', desc: false,
+  limit: 100, offset: 0,
+  total: 0, rows: [],
+  loading: false, error: '',
+  editing: false,
+  // Staged, not written: edits and deletes by row, inserts in order.
+  staged: new Map(),    // rowId -> { table, key, orig, set: {}, del: bool }
+  inserts: [],          // [{ id, table, values: {} }]
+};
+let nextInsert = 1;
+
+// ---- Values
+
+const isHex = v => v && typeof v === 'object' && typeof v.hex === 'string';
+function show(v) {
+  if (v === null || v === undefined) return 'NULL';
+  if (isHex(v)) return `0x${v.hex}`;
+  return String(v);
+}
+function same(a, b) {
+  if (a === null || b === null || a === undefined || b === undefined) return a == b;
+  if (isHex(a) || isHex(b)) return isHex(a) && isHex(b) && a.hex === b.hex;
+  return String(a) === String(b);
+}
+const rowId = (table, key) => table + '\u0000' + JSON.stringify(key);
+function keyOf(schema, row) {
+  const key = {};
+  for (const k of schema.primaryKey) key[k] = row[schema.columns.findIndex(c => c.name === k)];
+  return key;
+}
+const keyLabel = key => Object.entries(key).map(([k, v]) => `${k}=${show(v)}`).join(', ');
+
+function changeCount() {
+  let n = state.inserts.length;
+  for (const s of state.staged.values()) if (s.del || Object.keys(s.set).length) n++;
+  return n;
+}
+function changedTables() {
+  const t = new Set(state.inserts.map(i => i.table));
+  for (const s of state.staged.values()) t.add(s.table);
+  return t;
+}
+
+function toast(text, ms = 5000) {
+  const t = $('toast');
+  t.textContent = text;
+  t.style.display = 'block';
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.style.display = 'none'; }, ms);
+}
+
+// ---- Header
+
+function paintHeader() {
+  const n = changeCount();
+  $('changes').textContent = n ? `${n} row${n === 1 ? '' : 's'} changed` : 'No changes';
+  $('changes').classList.toggle('on', n > 0);
+  $('discard').disabled = !n;
+  $('review').disabled = !n;
+  $('edit-toggle').textContent = state.editing ? 'Editing: on' : 'Editing: off';
+  $('edit-toggle').classList.toggle('danger', state.editing);
+}
+
+// ---- Tables list
+
+function paintTables() {
+  const list = $('tables');
+  list.textContent = '';
+  const q = $('table-search').value.trim().toLowerCase();
+  const dirty = changedTables();
+  for (const t of state.tables) {
+    if (q && !t.name.toLowerCase().includes(q)) continue;
+    const item = el('div', {
+      class: 'table-item' + (t.name === state.table ? ' active' : ''), role: 'option',
+      title: `${t.name}: about ${t.rows.toLocaleString()} rows${t.engine ? `, ${t.engine}` : ''}` +
+        (t.primaryKey.length ? `; key ${t.primaryKey.join(', ')}` : '; no primary key, so read-only'),
+      onclick: () => openTable(t.name),
+    },
+      el('span', {}, t.name, dirty.has(t.name) ? el('span', { class: 'dot', text: ' •' }) : null),
+      el('span', { class: 'count', text: t.primaryKey.length ? t.rows.toLocaleString() : `${t.rows.toLocaleString()} ⊘` }));
+    list.append(item);
+  }
+}
+
+async function loadTables() {
+  try {
+    const answer = await adapter.tables();
+    state.tables = answer.tables;
+    $('db-name').textContent = answer.database || '';
+    paintTables();
+    if (!state.table) {
+      $('main').replaceChildren(el('div', { class: 'empty' }, el('p', { text: `${state.tables.length} tables. Pick one on the left.` })));
+    }
+  } catch (e) {
+    $('main').replaceChildren(el('div', { class: 'empty' },
+      el('p', { text: e.message }),
+      /not running|Press Play/i.test(e.message) || !adapter.notes?.notRunning ? null : el('p', { class: 'muted', text: adapter.notes.notRunning }),
+      el('button', { class: 'btn', text: 'Try again', onclick: () => { $('main').replaceChildren(el('div', { class: 'empty' }, el('p', { text: 'Loading tables…' }))); loadTables(); } })));
+  }
+}
+
+// ---- A table
+
+async function openTable(name) {
+  if (state.table !== name) {
+    state.table = name;
+    state.filters = [];
+    state.where = '';
+    state.showWhere = false;
+    state.orderBy = '';
+    state.desc = false;
+    state.offset = 0;
+    state.rows = [];
+    state.total = 0;
+    state.view = 'rows';
+  }
+  paintTables();
+  state.error = '';
+  try {
+    if (!state.schemas.has(name)) state.schemas.set(name, await adapter.describe(name));
+  } catch (e) {
+    state.error = e.message;
+    paintMain();
+    return;
+  }
+  await loadRows();
+}
+
+function query() {
+  return {
+    filters: state.filters.filter(f => f.column && (f.op === 'null' || f.op === 'notnull' || f.value !== '')),
+    where: state.showWhere ? state.where : '',
+    orderBy: state.orderBy, desc: state.desc,
+    limit: state.limit, offset: state.offset,
+  };
+}
+
+async function loadRows() {
+  const name = state.table;
+  state.loading = true;
+  paintMain();
+  try {
+    const answer = await adapter.rows(name, query());
+    if (state.table !== name) return;
+    state.rows = answer.rows;
+    state.total = answer.total;
+    state.error = '';
+  } catch (e) {
+    if (state.table !== name) return;
+    state.rows = [];
+    state.total = 0;
+    state.error = e.message;
+  }
+  state.loading = false;
+  paintMain();
+}
+
+function paintMain() {
+  const schema = state.schemas.get(state.table);
+  const main = $('main');
+  if (!schema) {
+    main.replaceChildren(el('div', { class: 'empty' }, el('p', { text: state.error || 'Loading…' })));
+    return;
+  }
+  const info = state.tables.find(t => t.name === state.table);
+  const editable = schema.primaryKey.length > 0;
+
+  const tabs = el('div', { class: 'toolbar-row' },
+    el('h2', { text: state.table }),
+    el('span', { class: 'muted', text: info ? `${info.engine || ''}` : '' }),
+    el('span', { class: 'spacer' }),
+    el('button', { class: 'btn small' + (state.view === 'rows' ? ' primary' : ''), text: 'Rows', onclick: () => { state.view = 'rows'; paintMain(); } }),
+    el('button', { class: 'btn small' + (state.view === 'structure' ? ' primary' : ''), text: 'Structure', onclick: () => { state.view = 'structure'; paintMain(); } }));
+
+  const toolbar = el('div', { class: 'toolbar' }, tabs);
+  const parts = [toolbar];
+
+  if (!editable) {
+    parts.push(el('div', { class: 'notice', text: 'This table has no primary key, so there is no way to say which row an edit is for. It can be browsed, not edited.' }));
+  }
+
+  if (state.view === 'structure') {
+    parts.push(el('div', { id: 'structure' }, structureTable(schema)));
+    main.replaceChildren(...parts);
+    return;
+  }
+
+  // Filters
+  for (const [i, f] of state.filters.entries()) toolbar.append(filterRow(schema, f, i));
+  const whereBox = el('textarea', { id: 'raw-where', placeholder: 'A raw WHERE condition, read-only: e.g. zeny > 100000 AND last_map = \'prontera\'', spellcheck: 'false' });
+  whereBox.value = state.where;
+  whereBox.addEventListener('input', () => { state.where = whereBox.value; });
+  whereBox.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); applyFilters(); } });
+  if (state.showWhere) toolbar.append(whereBox);
+  toolbar.append(el('div', { class: 'toolbar-row' },
+    el('button', { class: 'btn small', text: '+ Filter', onclick: () => { state.filters.push({ column: schema.columns[0].name, op: schema.columns[0].numeric ? '=' : 'contains', value: '' }); paintMain(); focusLastFilter(); } }),
+    el('button', { class: 'btn small', text: state.showWhere ? 'Hide WHERE' : 'WHERE…', title: 'For advanced users: a raw SQL condition, run read-only', onclick: () => { state.showWhere = !state.showWhere; paintMain(); if (state.showWhere) $('raw-where')?.focus(); } }),
+    (state.filters.length || state.showWhere) ? el('button', { class: 'btn small primary', text: 'Apply', onclick: applyFilters }) : null,
+    (state.filters.length || (state.showWhere && state.where)) ? el('button', { class: 'btn small', text: 'Clear', onclick: () => { state.filters = []; state.where = ''; state.showWhere = false; applyFilters(); } }) : null,
+    el('span', { class: 'spacer' }),
+    state.editing && editable ? el('button', { class: 'btn small', text: '+ Add row', onclick: () => addRow(schema) }) : null));
+
+  if (state.error) parts.push(el('div', { class: 'notice error', text: state.error }));
+
+  const wrap = el('div', { id: 'grid-wrap' }, grid(schema, editable));
+  parts.push(wrap);
+
+  // Paging
+  const from = state.total ? state.offset + 1 : 0;
+  const to = Math.min(state.offset + state.rows.length, state.total);
+  const size = el('select', { 'aria-label': 'Rows per page', onchange: e => { state.limit = Number(e.target.value); state.offset = 0; loadRows(); } },
+    ...PAGE_SIZES.map(n => el('option', { value: n, text: `${n} per page`, selected: n === state.limit })));
+  parts.push(el('footer', {},
+    el('button', { class: 'btn small', text: '«', title: 'First page', disabled: state.offset === 0 || state.loading, onclick: () => { state.offset = 0; loadRows(); } }),
+    el('button', { class: 'btn small', text: '‹ Previous', disabled: state.offset === 0 || state.loading, onclick: () => { state.offset = Math.max(0, state.offset - state.limit); loadRows(); } }),
+    el('span', { text: state.loading ? 'Loading…' : `Rows ${from.toLocaleString()}–${to.toLocaleString()} of ${state.total.toLocaleString()}` }),
+    el('button', { class: 'btn small', text: 'Next ›', disabled: to >= state.total || state.loading, onclick: () => { state.offset += state.limit; loadRows(); } }),
+    el('button', { class: 'btn small', text: '»', title: 'Last page', disabled: to >= state.total || state.loading, onclick: () => { state.offset = Math.max(0, Math.floor((state.total - 1) / state.limit) * state.limit); loadRows(); } }),
+    el('span', { class: 'spacer' }),
+    size));
+  const scroll = document.getElementById('grid-wrap')?.scrollLeft || 0;
+  main.replaceChildren(...parts);
+  wrap.scrollLeft = scroll;
+}
+
+function focusLastFilter() {
+  const inputs = document.querySelectorAll('.filter input');
+  inputs[inputs.length - 1]?.focus();
+}
+
+function applyFilters() {
+  state.offset = 0;
+  loadRows();
+}
+
+function filterRow(schema, f, i) {
+  const column = el('select', { 'aria-label': 'Column', onchange: e => { f.column = e.target.value; } },
+    ...schema.columns.map(c => el('option', { value: c.name, text: c.name, selected: c.name === f.column })));
+  const value = el('input', { type: 'text', placeholder: 'value', 'aria-label': 'Value' });
+  value.value = f.value;
+  value.hidden = f.op === 'null' || f.op === 'notnull';
+  value.addEventListener('input', () => { f.value = value.value; });
+  value.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
+  const op = el('select', { 'aria-label': 'Condition', onchange: e => { f.op = e.target.value; value.hidden = f.op === 'null' || f.op === 'notnull'; } },
+    ...OPS.map(([v, label]) => el('option', { value: v, text: label, selected: v === f.op })));
+  return el('div', { class: 'filter' }, column, op, value,
+    el('button', { class: 'btn small', text: '✕', title: 'Remove this filter', onclick: () => { state.filters.splice(i, 1); applyFilters(); } }));
+}
+
+function structureTable(schema) {
+  const head = el('tr', {}, ...['Column', 'Type', 'Null', 'Default', 'Key', 'Extra'].map(h => el('th', { text: h })));
+  const body = schema.columns.map(c => el('tr', {},
+    el('td', {}, c.primary ? el('span', { class: 'key', text: '🔑' }) : null, c.name),
+    el('td', { text: c.type }),
+    el('td', { text: c.nullable ? 'yes' : 'no' }),
+    el('td', { class: c.default === null ? 'null' : '', text: c.default === null ? (c.nullable ? 'NULL' : '—') : c.default }),
+    el('td', { text: c.primary ? `primary (${schema.primaryKey.indexOf(c.name) + 1})` : '' }),
+    el('td', { text: c.autoIncrement ? 'auto_increment' : '' })));
+  return el('table', { class: 'grid' }, el('thead', {}, head), el('tbody', {}, ...body));
+}
+
+// ---- The grid
+
+function grid(schema, editable) {
+  const head = el('tr', {}, state.editing && editable ? el('th', { class: 'act' }) : null,
+    ...schema.columns.map(c => {
+      const sorted = state.orderBy === c.name;
+      return el('th', {
+        class: sorted ? 'sorted' : '',
+        title: `${c.name} ${c.type}${c.nullable ? ', can be NULL' : ''}${c.primary ? ', part of the primary key' : ''}. Click to sort.`,
+        onclick: () => {
+          if (state.orderBy !== c.name) { state.orderBy = c.name; state.desc = false; }
+          else if (!state.desc) state.desc = true;
+          else { state.orderBy = ''; state.desc = false; }
+          state.offset = 0;
+          loadRows();
+        },
+      }, c.primary ? el('span', { class: 'key', text: '🔑' }) : null, c.name, sorted ? (state.desc ? ' ↓' : ' ↑') : '',
+        el('span', { class: 'type', text: c.type }));
+    }));
+  const body = [];
+  for (const ins of state.inserts.filter(i => i.table === state.table)) body.push(insertRow(schema, ins));
+  for (const row of state.rows) body.push(dataRow(schema, row, editable));
+  if (!body.length) {
+    body.push(el('tr', {}, el('td', { colspan: schema.columns.length + 1, class: 'muted', text: state.loading ? 'Loading…' : 'No rows.' })));
+  }
+  return el('table', { class: 'grid' }, el('thead', {}, head), el('tbody', {}, ...body));
+}
+
+function dataRow(schema, row, editable) {
+  const key = editable ? keyOf(schema, row) : null;
+  const id = editable ? rowId(state.table, key) : null;
+  const staged = id ? state.staged.get(id) : null;
+  const tr = el('tr', { class: staged?.del ? 'deleted' : '' });
+  if (state.editing && editable) {
+    tr.append(el('td', { class: 'act' }, staged?.del
+      ? el('button', { class: 'btn small', text: 'Keep', title: 'Do not delete this row', onclick: () => { staged.del = false; tidy(id); paintMain(); paintHeader(); paintTables(); } })
+      : el('button', { class: 'btn small danger', text: 'Delete', title: 'Delete this row when you save', onclick: () => { stage(schema, row, key).del = true; paintMain(); paintHeader(); paintTables(); } })));
+  }
+  schema.columns.forEach((c, i) => {
+    const has = staged && Object.prototype.hasOwnProperty.call(staged.set, c.name);
+    const value = has ? staged.set[c.name] : row[i];
+    const td = el('td', { text: show(value), title: show(value) });
+    classify(td, c, value);
+    if (has) td.classList.add('changed');
+    const canEdit = state.editing && editable && !c.primary && !isHex(row[i]) && !staged?.del;
+    if (canEdit) {
+      td.classList.add('editable');
+      td.addEventListener('click', () => editCell(td, c, value, v => {
+        const s = stage(schema, row, key);
+        if (same(v, row[i])) delete s.set[c.name]; else s.set[c.name] = v;
+        tidy(id);
+      }));
+    } else if (state.editing && editable && c.primary) {
+      td.title = `${show(value)} — part of the row's key. To change it, add a new row and delete this one.`;
+    } else if (state.editing && isHex(row[i])) {
+      td.title = 'Binary data; not editable here.';
+    }
+    tr.append(td);
+  });
+  return tr;
+}
+
+function insertRow(schema, ins) {
+  const tr = el('tr', { class: 'added' });
+  tr.append(el('td', { class: 'act' }, el('button', { class: 'btn small', text: 'Remove', title: 'Do not add this row', onclick: () => {
+    state.inserts = state.inserts.filter(x => x !== ins);
+    paintMain(); paintHeader(); paintTables();
+  } })));
+  for (const c of schema.columns) {
+    const has = Object.prototype.hasOwnProperty.call(ins.values, c.name);
+    const value = has ? ins.values[c.name] : undefined;
+    const shown = has ? show(value) : (c.autoIncrement ? '(automatic)' : c.default !== null ? `(${c.default})` : c.nullable ? '(NULL)' : '(required)');
+    const td = el('td', { text: shown, title: has ? shown : 'Default: ' + shown, class: 'editable' });
+    if (has) { classify(td, c, value); td.classList.add('changed'); } else td.classList.add('default');
+    td.addEventListener('click', () => editCell(td, c, has ? value : '', v => { ins.values[c.name] = v; }, () => { delete ins.values[c.name]; }));
+    tr.append(td);
+  }
+  return tr;
+}
+
+function classify(td, c, value) {
+  if (c.numeric) td.classList.add('num');
+  if (value === null) td.classList.add('null');
+  if (isHex(value)) td.classList.add('bin');
+}
+
+function stage(schema, row, key) {
+  const id = rowId(state.table, key);
+  let s = state.staged.get(id);
+  if (!s) {
+    const orig = {};
+    schema.columns.forEach((c, i) => { orig[c.name] = row[i]; });
+    s = { table: state.table, key, orig, set: {}, del: false };
+    state.staged.set(id, s);
+  }
+  return s;
+}
+
+function tidy(id) {
+  const s = state.staged.get(id);
+  if (s && !s.del && !Object.keys(s.set).length) state.staged.delete(id);
+}
+
+function addRow(schema) {
+  state.inserts.unshift({ id: nextInsert++, table: state.table, values: {} });
+  paintMain(); paintHeader(); paintTables();
+  document.querySelector('#grid-wrap').scrollTop = 0;
+}
+
+// One cell editor at a time. Enter or leaving the cell keeps the value, Escape
+// puts it back; NULL is a button, since no typed text can mean it.
+let editingCell = null;
+function editCell(td, column, current, commit, reset) {
+  if (editingCell) return;
+  editingCell = td;
+  const input = el('input', { type: 'text', spellcheck: 'false', inputmode: column.numeric ? 'decimal' : 'text' });
+  input.value = current === null || current === undefined ? '' : show(current);
+  let wasNull = current === null;
+  let done = false;
+  const finish = keep => {
+    if (done) return;
+    done = true;
+    editingCell = null;
+    if (keep) commit(wasNull && input.value === '' ? null : input.value);
+    paintMain(); paintHeader(); paintTables();
+  };
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('input', () => { wasNull = false; });
+  input.addEventListener('blur', () => setTimeout(() => finish(true), 120));
+  const tools = [];
+  if (column.nullable) tools.push(el('button', { class: 'btn small', text: 'NULL', title: 'Set this cell to NULL', onmousedown: e => { e.preventDefault(); wasNull = true; input.value = ''; finish(true); } }));
+  if (reset) tools.push(el('button', { class: 'btn small', text: 'Default', title: 'Leave this to the table\'s default', onmousedown: e => { e.preventDefault(); done = true; editingCell = null; reset(); paintMain(); paintHeader(); paintTables(); } }));
+  if (current === null) input.placeholder = 'NULL';
+  td.classList.add('editing');
+  td.replaceChildren(el('div', { class: 'cell-editor' }, input, ...tools));
+  input.focus();
+  input.select();
+}
+
+// ---- Editing on and off
+
+$('edit-toggle').addEventListener('click', () => {
+  if (state.editing) {
+    state.editing = false;
+    paintHeader();
+    if (state.table) paintMain();
+    return;
+  }
+  $('edit-warning').textContent = adapter.notes?.editWarning || 'Changes are staged until you press Save.';
+  $('edit-dialog').showModal();
+});
+$('edit-cancel').addEventListener('click', () => $('edit-dialog').close());
+$('edit-ok').addEventListener('click', () => {
+  $('edit-dialog').close();
+  state.editing = true;
+  paintHeader();
+  if (state.table) paintMain();
+});
+
+$('discard').addEventListener('click', () => {
+  const n = changeCount();
+  if (n && !confirm(`Throw away ${n} staged change${n === 1 ? '' : 's'}?`)) return;
+  state.staged.clear();
+  state.inserts = [];
+  paintHeader(); paintTables();
+  if (state.table) paintMain();
+});
+
+// ---- Review and save
+
+function changeList() {
+  const changes = [];
+  for (const s of state.staged.values()) {
+    if (s.del) changes.push({ table: s.table, key: s.key, delete: true });
+    else if (Object.keys(s.set).length) {
+      const old = {};
+      for (const k of Object.keys(s.set)) old[k] = s.orig[k];
+      changes.push({ table: s.table, key: s.key, set: { ...s.set }, old });
+    }
+  }
+  for (const ins of [...state.inserts].reverse()) changes.push({ table: ins.table, insert: { ...ins.values } });
+  return changes;
+}
+
+function paintReview() {
+  const list = $('review-list');
+  list.textContent = '';
+  for (const s of state.staged.values()) {
+    if (s.del) {
+      const box = el('div', { class: 'change' }, el('div', { class: 'what', text: `Delete from ${s.table} (${keyLabel(s.key)})` }));
+      const row = Object.entries(s.orig).map(([k, v]) => `${k}=${show(v)}`).join(', ');
+      box.append(el('div', { class: 'line old', text: row }));
+      list.append(box);
+    } else if (Object.keys(s.set).length) {
+      const box = el('div', { class: 'change' }, el('div', { class: 'what', text: `${s.table} (${keyLabel(s.key)})` }));
+      for (const [k, v] of Object.entries(s.set)) {
+        box.append(el('div', { class: 'line' }, `${k}: `, el('span', { class: 'old', text: show(s.orig[k]) }), ' → ', el('span', { class: 'new', text: show(v) })));
+      }
+      list.append(box);
+    }
+  }
+  for (const ins of state.inserts) {
+    const values = Object.entries(ins.values);
+    const box = el('div', { class: 'change' }, el('div', { class: 'what', text: `Add a row to ${ins.table}` }));
+    box.append(el('div', { class: 'line new', text: values.length ? values.map(([k, v]) => `${k}=${show(v)}`).join(', ') : '(every column its default)' }));
+    list.append(box);
+  }
+  const n = changeCount();
+  $('review-title').textContent = `Review ${n} change${n === 1 ? '' : 's'}`;
+  $('review-save').textContent = `Save ${n} change${n === 1 ? '' : 's'}`;
+  $('save-warning').textContent = adapter.notes?.saveWarning || 'All changes are saved together.';
+}
+
+$('review').addEventListener('click', () => {
+  paintReview();
+  $('save-error').hidden = true;
+  $('review-save').disabled = false;
+  $('review-cancel').disabled = false;
+  $('review-dialog').showModal();
+});
+$('review-cancel').addEventListener('click', () => $('review-dialog').close());
+$('review-dialog').addEventListener('cancel', e => { if ($('review-save').disabled) e.preventDefault(); });
+$('review-save').addEventListener('click', async () => {
+  const changes = changeList();
+  $('review-save').disabled = true;
+  $('review-cancel').disabled = true;
+  $('review-save').textContent = 'Saving…';
+  $('save-error').hidden = true;
+  try {
+    const answer = await adapter.apply(changes);
+    state.staged.clear();
+    state.inserts = [];
+    $('review-dialog').close();
+    toast(`Saved ${answer.applied} change${answer.applied === 1 ? '' : 's'}.${answer.backup ? ` Backup: ${answer.backup}` : ''}`, 9000);
+    paintHeader();
+    await loadTables();
+    if (state.table) await loadRows();
+  } catch (e) {
+    $('save-error').textContent = e.message;
+    $('save-error').hidden = false;
+    $('review-save').textContent = 'Try again';
+    $('review-save').disabled = false;
+    $('review-cancel').disabled = false;
+  }
+});
+
+$('table-search').addEventListener('input', paintTables);
+$('title').textContent = adapter.title || 'Database';
+document.title = adapter.title || 'Database';
+paintHeader();
+loadTables();
+</script>
+</body>
+</html>

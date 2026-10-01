@@ -237,6 +237,11 @@ cp "$ROOT/dist/images.tar.gz" "$PAYLOAD/dist/"
 echo "==> client runtime"
 mkdir -p "$PAYLOAD/vendor/roBrowserLegacy/dist"
 cp -R "$ROOT/vendor/roBrowserLegacy/dist/Web" "$PAYLOAD/vendor/roBrowserLegacy/dist/Web"
+# The client's monster id -> sprite name table, for Settings -> Tools'
+# monster browser (electron/tools.js). It is bundled into the client, not
+# served as a file, so the source copy travels beside it.
+mkdir -p "$PAYLOAD/client-tables"
+cp "$ROOT/vendor/roBrowserLegacy/src/DB/Monsters/MonsterTable.js" "$PAYLOAD/client-tables/MonsterTable.js"
 # `npm run build:all` emits seven ~12 MB bundles and the game loads exactly one.
 # bootstrap.sh prunes the rest, but anyone who rebuilds the client directly
 # skips that and silently adds 24 MB per unpruned viewer to the download. Prune
@@ -335,6 +340,17 @@ tar -cf "$EN/data.tar" -C "$SRC" data
 cp -R "$SRC/SystemEN" "$EN/SystemEN"
 done
 
+# The single files link-assets lifts from ROenglishRE's Compatibility layers;
+# config/TRANSLATION_EXTRAS lists them and says why only these.
+grep -v '^[[:space:]]*\(#\|$\)' "$ROOT/config/TRANSLATION_EXTRAS" | while IFS=$'\t' read -r SRC _; do
+    [ -f "$ROOT/vendor/ROenglishRE/Translation/$SRC" ] || {
+        echo "warning: TRANSLATION_EXTRAS names $SRC, which the pinned ROenglishRE lacks" >&2
+        continue
+    }
+    mkdir -p "$(dirname "$PAYLOAD/vendor/ROenglishRE/Translation/$SRC")"
+    cp "$ROOT/vendor/ROenglishRE/Translation/$SRC" "$PAYLOAD/vendor/ROenglishRE/Translation/$SRC"
+done
+
 # The Visual C++ runtime, for the Windows installer to hand to Windows.
 #
 # Every binary in payload/bin imports VCRUNTIME140.dll; the Electron shell does
@@ -378,8 +394,16 @@ case "$(uname -s)" in
 esac
 
 # A marker the app compares against, so a new build refreshes the copy it
-# materialises into Application Support.
-git -C "$ROOT" rev-parse --short HEAD 2>/dev/null > "$PAYLOAD/VERSION" || echo dev > "$PAYLOAD/VERSION"
+# materialises into Application Support. A build with uncommitted changes gets a
+# timestamp too: two such builds on one commit are different builds, and with
+# the bare hash the second would keep running the first's binaries (#174).
+if MARKER=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null); then
+    [ -z "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ] ||
+        MARKER="$MARKER-dirty-$(date +%s)"
+else
+    MARKER=dev
+fi
+echo "$MARKER" > "$PAYLOAD/VERSION"
 
 # The release version, which is a different thing from the build marker above:
 # VERSION changes on every commit and exists so the app knows to re-materialise

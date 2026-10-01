@@ -300,7 +300,7 @@ and `useatcmd`.
   (check the TABs, then the server log), or your account's level is below the
   number in `bindatcmd`.
 - **The server log.** Script errors are printed with the file name and line
-  number:
+  number. **Settings → Tools → Log viewer** shows them live; from a terminal:
 
   ```sh
   ~/Library/Application\ Support/Ragnarok\ Offline/runtime/bin/ragnarok-stack logs map 100

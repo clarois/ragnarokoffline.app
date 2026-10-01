@@ -652,7 +652,19 @@ fn write_mod_conf_files(cfg: &Config, mods: &crate::mods::Assembled) -> Result<(
     let conf = cfg.state.join("conf");
     for file in ["groups.yml", "atcommands.yml"] {
         let path = conf.join(file);
-        match mods.conf.get(&format!("file:{file}")) {
+        // The AI agent's group is the app's own, and goes first: always
+        // present, so an agent account can log in whether or not any mod
+        // grants commands, and read before any mod's copy so a mod cannot
+        // quietly widen it by listing the same group.
+        let mut with_agent;
+        let entries = if file == "groups.yml" {
+            with_agent = vec![(crate::accounts::AGENT_GROUP_OWNER.to_string(), crate::accounts::AGENT_GROUP_YML.to_string())];
+            with_agent.extend(mods.conf.get("file:groups.yml").cloned().unwrap_or_default());
+            Some(&with_agent)
+        } else {
+            mods.conf.get(&format!("file:{file}"))
+        };
+        match entries {
             None => {
                 let _ = fs::remove_file(&path);
             }
@@ -2020,7 +2032,7 @@ fn read_only(script: &str) -> Result<(), String> {
 /// A statement that starts with anything but a bare word yields an empty
 /// string, which no keyword matches, so the guard refuses it rather than
 /// guessing.
-fn leading_words(script: &str) -> Vec<String> {
+pub(crate) fn leading_words(script: &str) -> Vec<String> {
     let chars: Vec<char> = script.chars().collect();
     let mut out = Vec::new();
     let mut word = String::new();
@@ -2106,7 +2118,7 @@ pub fn backup(cfg: &Config, dk: &Docker, dest: &str) -> Result<(), String> {
 
 /// `announce` is off for the safety copies taken on someone else's behalf, so
 /// their line cannot land in the middle of output a caller is parsing.
-fn backup_snapshot(cfg: &Config, dk: &Docker, dest: &str, announce: bool) -> Result<(), String> {
+pub(crate) fn backup_snapshot(cfg: &Config, dk: &Docker, dest: &str, announce: bool) -> Result<(), String> {
     let backups = cfg.state.join("backups");
     fs::create_dir_all(&backups).map_err(|e| e.to_string())?;
     let tmp = format!("ragnarokmac-{}-{}.sql", std::process::id(), crate::private_fs::random_hex(12)?);
@@ -2154,6 +2166,24 @@ pub fn restore(cfg: &Config, dk: &Docker, src: &str) -> Result<(), String> {
     crate::private_fs::directory(&backups)?;
     let safety = backups.join(format!("before-restore-{}-{}.sql", crate::service_credentials::era(cfg), crate::private_fs::random_hex(8)?));
     backup_snapshot(cfg, dk, &safety.to_string_lossy(), true)?;
+    load_dump(cfg, dk, Path::new(src))
+        .map_err(|_| "Restore failed and may have partially changed the database. Keep game services stopped and restore a verified backup.".to_string())?;
+    if let Some(credentials) = crate::service_credentials::load(&cfg.state, crate::service_credentials::era(cfg))? {
+        // An older dump may carry the old interserver login. Restore the
+        // managed service row before any subsequent player reconnect.
+        migrate_service_credentials(dk, &credentials)?;
+    }
+    println!("restored from {src}; game services are stopped. Restart the server to reconnect. A pre-restore backup was preserved.");
+    Ok(())
+}
+
+/// Feed a dump to the running database. Game services must be stopped.
+///
+/// The dump carries CREATE DATABASE + USE, so this replaces the schema
+/// wholesale rather than merging into whatever is there now.
+pub(crate) fn load_dump(cfg: &Config, dk: &Docker, src: &Path) -> Result<(), String> {
+    let backups = cfg.state.join("backups");
+    crate::private_fs::directory(&backups)?;
     let tmp = format!("restore-{}-{}.sql", std::process::id(), crate::private_fs::random_hex(12)?);
     let staged = backups.join(&tmp);
     if staged.exists() { crate::private_fs::protect(&staged, false)?; }
@@ -2162,22 +2192,13 @@ pub fn restore(cfg: &Config, dk: &Docker, src: &str) -> Result<(), String> {
     if cfg!(windows) {
         dk.copy_into(DB_CONTAINER, &backups, "/backups")?;
     }
-    // The dump carries CREATE DATABASE + USE, so this replaces the schema
-    // wholesale rather than merging into whatever is there now.
     let r = dk.output([
         "exec", DB_CONTAINER, "sh", "-c",
         &format!("{} < /backups/{tmp}", dk.database_client("mariadb")?),
     ]);
     let _ = fs::remove_file(&staged);
     dk.quiet(["exec", DB_CONTAINER, "rm", "-f", &format!("/backups/{tmp}")]);
-    r.map_err(|_| "Restore failed and may have partially changed the database. Keep game services stopped and restore a verified backup.".to_string())?;
-    if let Some(credentials) = crate::service_credentials::load(&cfg.state, crate::service_credentials::era(cfg))? {
-        // An older dump may carry the old interserver login. Restore the
-        // managed service row before any subsequent player reconnect.
-        migrate_service_credentials(dk, &credentials)?;
-    }
-    println!("restored from {src}; game services are stopped. Restart the server to reconnect. A pre-restore backup was preserved.");
-    Ok(())
+    r.map(|_| ())
 }
 
 /// The escape hatch for a shipped user with no terminal and no docker CLI.
@@ -2224,6 +2245,58 @@ pub fn logs(dk: &Docker, service: &str, tail: &str) {
     let _ = out.write_all(dk.logs(&format!("ragnarok-{service}"), tail).as_bytes());
 }
 
+/// Services `logs --follow` will follow: names, not container names, so
+/// nothing but the game's own containers can be asked for.
+pub const FOLLOWED: [&str; 4] = ["map", "char", "login", "db"];
+
+/// Why a follow ended, as the exit status, for a caller that restarts it: the
+/// log viewer (#202) marks a stopped server, and only reconnects when the
+/// stream broke with the server still up.
+pub const FOLLOW_STOPPED: i32 = 0;
+pub const FOLLOW_BROKEN: i32 = 3;
+pub const FOLLOW_ABSENT: i32 = 4;
+
+/// The container and tail length `logs --follow` was asked for.
+fn follow_args(args: &[String]) -> Result<(String, String), String> {
+    let mut service = None;
+    let mut tail = "100".to_string();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--follow" => {}
+            "--tail" => {
+                let n = args.get(i + 1).ok_or("--tail needs a number")?;
+                if n != "all" && n.parse::<u32>().is_err() {
+                    return Err(format!("--tail needs a number, not {n}"));
+                }
+                tail = n.clone();
+                i += 1;
+            }
+            other if service.is_none() && FOLLOWED.contains(&other) => service = Some(other.to_string()),
+            other => return Err(format!("logs --follow takes one of {}, not {other}", FOLLOWED.join(", "))),
+        }
+        i += 1;
+    }
+    Ok((format!("ragnarok-{}", service.unwrap_or_else(|| "map".into())), tail))
+}
+
+/// `logs --follow <service> [--tail N]`: stream a game service's log until
+/// it stops. Returns the exit status to end with.
+pub fn logs_follow(dk: &Docker, args: &[String]) -> Result<i32, String> {
+    let (name, tail) = follow_args(args)?;
+    if dk.state(&name).is_none() {
+        return Ok(FOLLOW_ABSENT);
+    }
+    let followed = dk.follow_logs(&name, &tail);
+    Ok(if dk.is_running(&name) {
+        FOLLOW_BROKEN
+    } else if followed.is_ok() || dk.state(&name).is_some() {
+        FOLLOW_STOPPED
+    } else {
+        FOLLOW_ABSENT
+    })
+}
+
 fn human(bytes: u64) -> String {
     const U: [&str; 4] = ["B", "KB", "MB", "GB"];
     let mut v = bytes as f64;
@@ -2237,6 +2310,16 @@ fn human(bytes: u64) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn logs_follow_names_only_game_services() {
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(super::follow_args(&args(&["--follow", "char", "--tail", "50"])).unwrap(), ("ragnarok-char".to_string(), "50".to_string()));
+        assert_eq!(super::follow_args(&args(&["--follow"])).unwrap().0, "ragnarok-map");
+        for bad in [&["--follow", "db2"][..], &["--follow", "../x"], &["--follow", "map", "--tail", "1;x"], &["--follow", "map", "char"]] {
+            assert!(super::follow_args(&args(bad)).is_err(), "{bad:?}");
+        }
+    }
     #[test]
     fn changed_image_bytes_invalidate_the_same_tag_cache() {
         let first = super::image_bundle_fingerprint(&b"same-size-old"[..]).unwrap();

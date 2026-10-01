@@ -1332,7 +1332,10 @@ pub fn assemble(cfg: &Config) -> Result<Assembled, String> {
         }
     }
 
-    let wants_db = !maps.is_empty() || live.iter().any(|m| m.dir.join("db").is_dir());
+    // Lua skill hooks ride the same db/import mount (see write_lua_layer), so
+    // a mod with only lua/ still needs it.
+    let wants_lua = live.iter().any(|m| m.dir.join("lua").is_dir());
+    let wants_db = !maps.is_empty() || wants_lua || live.iter().any(|m| m.dir.join("db").is_dir());
     if wants_db {
         let dst = build.join("db");
         seed_db_import(cfg, &dst)?;
@@ -1364,6 +1367,14 @@ pub fn assemble(cfg: &Config) -> Result<Assembled, String> {
         eprintln!("mods: {e}");
         BTreeMap::new()
     });
+
+    if wants_lua {
+        let mods: Vec<(&str, &Path, &Manifest, Vec<(String, String)>)> = live
+            .iter()
+            .map(|m| (m.name.as_str(), m.dir.as_path(), &m.manifest, effective(&m.manifest, saved.get(&m.name))))
+            .collect();
+        write_lua_layer(&build.join("db"), &mods)?;
+    }
 
     // Stock scripts first, so a mod's own can duplicate or disable them.
     let mut stock: Vec<String> = Vec::new();
@@ -1518,6 +1529,109 @@ fn settings_script(mods: &[(String, Vec<(String, ScriptValue)>)]) -> String {
          \treturn 0;\n\
          }\n",
     );
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Lua skill hooks
+// ---------------------------------------------------------------------------
+
+/// The settings file every mod's Lua can read, through `setting()`.
+pub const LUA_SETTINGS: &str = "mod-settings.lua";
+
+/// A mod's `lua/` folder, laid out for the map server.
+///
+/// The server (our rAthena fork, `src/map/skill_lua.cpp`) runs the files that
+/// `db/import/lua/load.txt` lists, in its order, so that is written here in
+/// mod order -- the same order that decides who wins in `db/` -- with each
+/// mod's files alphabetical within it. `mod-settings.lua` goes first, so a
+/// file can read its settings while it loads.
+///
+/// Inside `db/import` rather than a mount of its own: the map server already
+/// has that folder, and a server that is not ours simply never looks there.
+fn write_lua_layer(db: &Path, mods: &[(&str, &Path, &Manifest, Vec<(String, String)>)]) -> Result<(), String> {
+    let lua = db.join("lua");
+    fs::create_dir_all(&lua).map_err(|e| format!("mods: lua build folder: {e}"))?;
+
+    let mut settings = String::from(
+        "-- Written by Ragnarok Offline on every server start, from Settings -> Mods.\n\
+         -- Do not edit; it is replaced. Read it with setting(\"<mod>\", \"<key>\", <if missing>).\n\
+         MOD_SETTINGS = {\n",
+    );
+    for (name, _, manifest, values) in mods {
+        if values.is_empty() {
+            continue;
+        }
+        settings.push_str(&format!("  [{}] = {{\n", lua_string(name)));
+        for (setting, (key, raw)) in manifest.settings.iter().zip(values) {
+            settings.push_str(&format!("    [{}] = {},\n", lua_string(key), lua_value(&setting.value, raw)));
+        }
+        settings.push_str("  },\n");
+    }
+    settings.push_str("}\n");
+    fs::write(lua.join(LUA_SETTINGS), settings).map_err(|e| format!("mods: {LUA_SETTINGS}: {e}"))?;
+
+    let mut list = format!(
+        "# Written by Ragnarok Offline: <mod><TAB><file under db/import>, run in this order.\n-\tlua/{LUA_SETTINGS}\n"
+    );
+    for (name, dir, _, _) in mods {
+        let from = dir.join("lua");
+        if !from.is_dir() {
+            continue;
+        }
+        let dst = lua.join(name);
+        copy_tree(&from, &dst)?;
+        collect_lua(&dst, &format!("lua/{name}"), name, &mut list);
+    }
+    fs::write(lua.join("load.txt"), list).map_err(|e| format!("mods: lua load.txt: {e}"))
+}
+
+fn collect_lua(dir: &Path, prefix: &str, name: &str, out: &mut String) {
+    let Ok(rd) = fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for p in entries {
+        let Some(file) = p.file_name().map(|n| n.to_string_lossy().to_string()) else { continue };
+        if p.is_dir() {
+            collect_lua(&p, &format!("{prefix}/{file}"), name, out);
+        } else if p.extension().map(|x| x == "lua").unwrap_or(false) {
+            out.push_str(&format!("{name}\t{prefix}/{file}\n"));
+        }
+    }
+}
+
+/// A setting as a Lua value. Unlike the NPC script version, Lua has real
+/// booleans and fractions, so a checkbox is `true`/`false` (0 would be truthy
+/// in Lua) and 1.5 stays 1.5.
+fn lua_value(declared: &SettingValue, raw: &str) -> String {
+    match declared {
+        SettingValue::Bool(_) => (raw == "true").to_string(),
+        SettingValue::Number(_) => {
+            let n = raw.parse::<f64>().ok().filter(|n| n.is_finite()).unwrap_or(0.0);
+            if n.fract() == 0.0 && n.abs() < 9.0e15 { format!("{}", n as i64) } else { format!("{n}") }
+        }
+        SettingValue::Text(_) => lua_string(&match json::parse(raw) {
+            Ok(json::Value::String(text)) => text,
+            _ => String::new(),
+        }),
+    }
+}
+
+/// A Lua string literal. As with `script_string`, this is where text somebody
+/// typed lands inside code, so nothing in it can end the literal: quotes and
+/// backslashes are escaped and control characters become `\ddd`.
+fn lua_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => out.push_str(&format!("\\{:03}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
     out
 }
 
@@ -2582,6 +2696,68 @@ mod tests {
         assert!(script.trim_end().ends_with('}'));
         // Braces balance, so rAthena reads it as one function.
         assert_eq!(script.matches('{').count(), script.matches('}').count());
+    }
+
+    #[test]
+    fn lua_files_load_in_mod_order_after_the_settings_they_can_read() {
+        let root = tmp("lua-layer");
+        let a = root.join("a-mod");
+        fs::create_dir_all(a.join("lua/sub")).unwrap();
+        fs::write(a.join("lua/z.lua"), "-- z").unwrap();
+        fs::write(a.join("lua/sub/a.lua"), "").unwrap();
+        fs::write(a.join("lua/notes.txt"), "not code").unwrap();
+        let b = root.join("b-mod");
+        fs::create_dir_all(b.join("lua")).unwrap();
+        fs::write(b.join("lua/b.lua"), "").unwrap();
+        let c = root.join("c-mod");
+        fs::create_dir_all(&c).unwrap();
+
+        let plain = Manifest::default();
+        let tuned = Manifest {
+            settings: vec![
+                setting("on", SettingValue::Bool(true), 0.0, 0.0),
+                setting("rate", SettingValue::Number(1.0), 0.0, 10.0),
+                setting("whole", SettingValue::Number(1.0), 0.0, 10.0),
+                setting("label", SettingValue::Text(String::new()), 0.0, 200.0),
+            ],
+            ..Manifest::default()
+        };
+        let values = vec![
+            ("on".to_string(), "false".to_string()),
+            ("rate".to_string(), "1.5".to_string()),
+            ("whole".to_string(), "3".to_string()),
+            ("label".to_string(), "\"say \\\"hi\\\"\\n\\\\\"".to_string()),
+        ];
+        let db = root.join("db");
+        write_lua_layer(
+            &db,
+            &[("a-mod", &a, &plain, vec![]), ("b-mod", &b, &tuned, values), ("c-mod", &c, &plain, vec![])],
+        )
+        .unwrap();
+
+        let list = fs::read_to_string(db.join("lua/load.txt")).unwrap();
+        let lines: Vec<&str> = list.lines().filter(|l| !l.starts_with('#')).collect();
+        assert_eq!(
+            lines,
+            vec![
+                "-\tlua/mod-settings.lua",
+                "a-mod\tlua/a-mod/sub/a.lua",
+                "a-mod\tlua/a-mod/z.lua",
+                "b-mod\tlua/b-mod/b.lua",
+            ]
+        );
+        assert!(db.join("lua/a-mod/z.lua").is_file());
+
+        let settings = fs::read_to_string(db.join("lua").join(LUA_SETTINGS)).unwrap();
+        assert!(settings.contains("MOD_SETTINGS = {\n"), "{settings}");
+        assert!(settings.contains("  [\"b-mod\"] = {\n"), "{settings}");
+        // Real booleans: in Lua, 0 is true.
+        assert!(settings.contains("    [\"on\"] = false,\n"), "{settings}");
+        assert!(settings.contains("    [\"rate\"] = 1.5,\n"), "{settings}");
+        assert!(settings.contains("    [\"whole\"] = 3,\n"), "{settings}");
+        // What someone typed cannot end the string: quote, newline, backslash.
+        assert!(settings.contains("    [\"label\"] = \"say \\\"hi\\\"\\010\\\\\",\n"), "{settings}");
+        assert!(!settings.contains("a-mod"), "a mod with no settings has no entry");
     }
 
     fn setting(key: &str, value: SettingValue, min: f64, max: f64) -> Setting {

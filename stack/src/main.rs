@@ -11,9 +11,12 @@
 
 mod assets;
 mod accounts;
+mod agent;
+mod tools;
 mod asset_transaction;
 mod cmds;
 mod crashes;
+mod database;
 mod host;
 mod config;
 mod cp949;
@@ -36,7 +39,8 @@ use std::env;
 use std::path::PathBuf;
 use std::process::exit;
 
-const USAGE: &str = "usage: ragnarok-stack host-check|capture-crashes|hosting-check [--lan]|secure-services [--lan] [--ram MiB]|mods|mod-enable NAME|mod-disable NAME|mod-forget NAME|up [--lan] [--ram MiB]|down|repair [--lan] [--ram MiB]|status|logs [service] [tail]\n\
+const USAGE: &str = "usage: ragnarok-stack host-check|capture-crashes|hosting-check [--lan]|secure-services [--lan] [--ram MiB]|mods|mod-enable NAME|mod-disable NAME|mod-forget NAME|up [--lan] [--ram MiB]|down|repair [--lan] [--ram MiB]|status|logs [service] [tail]|logs --follow <map|char|login|db> [--tail N]|agent <command> [args]|export-table <name>\n\
+                     \x20      db tables|describe <table>|rows|apply (JSON on stdin for rows and apply)\n\
                      \x20      backup <file>|restore <file>\n\
                      \x20      sql [--write] [--file <path>] [<statement>]\n\
                      \x20      accounts (private JSON request on stdin)\n\
@@ -68,6 +72,17 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let verb = args.first().map(String::as_str).unwrap_or("status");
 
+    // A client of the app's agent API. No config, no lock and no server: it
+    // only has to find the connection file the app wrote.
+    if verb == "agent" {
+        let root = project_root();
+        if let Err(error) = agent::run(&config::state_dir(&root), &args[1..]) {
+            eprintln!("{error}");
+            exit(1);
+        }
+        return;
+    }
+
     if verb == "process-identity" {
         let result = args.get(1).and_then(|s| s.parse::<u32>().ok())
             .ok_or_else(|| "process-identity needs a numeric PID".to_string())
@@ -92,7 +107,8 @@ fn main() {
     // A read is just a query and can run beside anything. `sql --write` stops
     // and starts game services, which is a lifecycle operation and has to
     // queue behind the others.
-    let writes_sql = verb == "sql" && args.iter().any(|a| a == "--write");
+    let writes_sql = (verb == "sql" && args.iter().any(|a| a == "--write"))
+        || (verb == "db" && args.get(1).map(String::as_str) == Some("apply"));
     let _operation = if writes_sql || matches!(verb, "up" | "down" | "repair" | "backup" | "restore" | "accounts" | "secure-services" | "hosting-check" | "sharing-check" | "capture-crashes") {
         match operation_lock::acquire(&cfg.state) {
             Ok(lock) => Some(lock),
@@ -125,6 +141,11 @@ fn main() {
         "capture-crashes" => crashes::command(&cfg, &dk),
         "sharing-check" => hosting::sharing_check(&cfg, &dk).map(|report| println!("{report}")),
         "hosting-check" => hosting::check(&cfg, &dk, lan).map(|report| println!("{report}")),
+        // A read, for Settings -> Tools: no lock, and nothing changes.
+        "export-table" => match args.get(1) {
+            Some(name) => tools::export_table(&cfg, &dk, name).map(|text| print!("{text}")),
+            None => Err(format!("export-table needs one of {}", tools::TABLES.join(", "))),
+        },
         "accounts" => {
             if let Err(error) = accounts::run(&cfg, &dk) {
                 fail(verb, &error);
@@ -139,12 +160,19 @@ fn main() {
             cmds::status(&dk);
             Ok(())
         }
+        "logs" if args.iter().any(|a| a == "--follow") => match cmds::logs_follow(&dk, &args[1..]) {
+            Ok(code) => exit(code),
+            Err(e) => Err(e),
+        },
         "logs" => {
             cmds::logs(&dk, args.get(1).map(String::as_str).unwrap_or("map"),
                        args.get(2).map(String::as_str).unwrap_or("40"));
             Ok(())
         }
         "sql" => cmds::sql(&cfg, &dk, &args[1..]),
+        // Settings -> Tools -> Database (#200). Reads need no lock; `apply`
+        // stops the game like `sql --write` and holds it (above).
+        "db" => database::run(&cfg, &dk, &args[1..]),
         "backup" => match args.get(1) {
             Some(p) => cmds::backup(&cfg, &dk, p),
             None => Err("destination file required".into()),

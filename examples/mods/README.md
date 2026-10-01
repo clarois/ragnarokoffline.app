@@ -29,6 +29,7 @@ noticing: a `data/`-only mod has no empty `npc/` folder for symmetry.
 | [island-population](island-population) | `db/` | **Blocked.** Why AI population cannot be configured for a modded map yet. |
 | [start-in-your-town](start-in-your-town) | `conf/` `npc/` | New characters wake up on your island. Needs `custom-map`. |
 | [settings-window](settings-window) | `npc/` | A settings window of the mod's own: grouped options, one switch for a group, and its own Apply. |
+| [blaze-shield-lua](blaze-shield-lua) | `lua/` | A skill that behaves differently on hit — drain cards and Hylozoist Card on Blaze Shield — with no change to the server. |
 
 One folder here is **not** a mod:
 

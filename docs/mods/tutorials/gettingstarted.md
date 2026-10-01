@@ -103,7 +103,10 @@ Go through these in order:
 2. **Did you click Apply?** Changes to `npc/`, `db/` and `conf/` take effect
    when the server restarts.
 3. **Tabs.** See the warning above. This is the cause most of the time.
-4. **Read the server log.** The app includes a tool that prints it:
+4. **Read the server log.** **Settings → Tools → Log viewer** shows it live,
+   beside the game client's console, with errors marked and the lines that
+   name your mod badged. From a terminal, the app includes a tool that prints
+   it:
 
    ```sh
    # macOS
