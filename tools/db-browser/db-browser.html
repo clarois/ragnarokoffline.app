@@ -100,7 +100,7 @@
   .filter input { width: 180px; }
   #raw-where { width: 100%; min-height: 34px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
   .notice { padding: 8px 14px; background: var(--changed); color: var(--changed-text); border-bottom: 1px solid var(--border); }
-  .notice.error { background: var(--deleted); color: var(--danger); }
+  .notice.error { background: var(--deleted); color: var(--danger); white-space: pre-wrap; }
   #grid-wrap { flex: 1; overflow: auto; min-height: 0; }
   table.grid { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
   .grid th, .grid td {
@@ -327,6 +327,7 @@ async function loadTables() {
     if (!state.table) {
       $('main').replaceChildren(el('div', { class: 'empty' }, el('p', { text: `${state.tables.length} tables. Pick one on the left.` })));
     }
+    return true;
   } catch (e) {
     $('main').replaceChildren(el('div', { class: 'empty' },
       el('p', { text: e.message }),
@@ -685,6 +686,16 @@ function changeList() {
 function paintReview() {
   const list = $('review-list');
   list.textContent = '';
+  // What deleting a row of some tables leaves behind, from the adapter: a
+  // row here is often one of many that belong together.
+  const warned = new Set();
+  for (const s of state.staged.values()) {
+    const note = s.del && adapter.notes?.deleteWarnings?.[s.table];
+    if (note && !warned.has(s.table)) {
+      warned.add(s.table);
+      list.append(el('div', { class: 'notice error', text: note }));
+    }
+  }
   for (const s of state.staged.values()) {
     if (s.del) {
       const box = el('div', { class: 'change' }, el('div', { class: 'what', text: `Delete from ${s.table} (${keyLabel(s.key)})` }));
@@ -726,23 +737,42 @@ $('review-save').addEventListener('click', async () => {
   $('review-cancel').disabled = true;
   $('review-save').textContent = 'Saving…';
   $('save-error').hidden = true;
+  let saved;
   try {
     const answer = await adapter.apply(changes);
-    state.staged.clear();
-    state.inserts = [];
-    $('review-dialog').close();
-    toast(`Saved ${answer.applied} change${answer.applied === 1 ? '' : 's'}.${answer.backup ? ` Backup: ${answer.backup}` : ''}`, 9000);
-    paintHeader();
-    await loadTables();
-    if (state.table) await loadRows();
+    saved = `Saved ${answer.applied} change${answer.applied === 1 ? '' : 's'}.${answer.backup ? ` Backup: ${answer.backup}` : ''}`;
   } catch (e) {
-    $('save-error').textContent = e.message;
-    $('save-error').hidden = false;
-    $('review-save').textContent = 'Try again';
-    $('review-save').disabled = false;
-    $('review-cancel').disabled = false;
+    // Written, but the game did not come back up: the changes are in the
+    // database, so they are no longer staged, and a retry would only fail.
+    if (/^Saved: your changes are in the database/.test(e.message)) saved = e.message;
+    else {
+      $('save-error').textContent = e.message;
+      $('save-error').hidden = false;
+      $('review-save').textContent = 'Try again';
+      $('review-save').disabled = false;
+      $('review-cancel').disabled = false;
+      return;
+    }
   }
+  state.staged.clear();
+  state.inserts = [];
+  $('review-dialog').close();
+  toast(saved, 9000);
+  paintHeader();
+  await afterSave(saved);
 });
+
+// What was saved stays on screen if reading the tables back afterwards fails,
+// so a failed reload never reads as a failed save.
+async function afterSave(saved) {
+  const tablesOk = await loadTables();
+  if (!state.table) return;
+  await loadRows();
+  if (state.error || !tablesOk) {
+    state.error = `${saved}\nReading the table back afterwards failed: ${state.error || 'the table list could not be read'}. Pick the table again to reload it.`;
+    paintMain();
+  }
+}
 
 $('table-search').addEventListener('input', paintTables);
 $('title').textContent = adapter.title || 'Database';

@@ -38,9 +38,26 @@
 #   DungeonsPopulation:          Total target shell count across all Dungeons maps.
 #   DungeonsMaxPerMap:           Hard cap per individual dungeon map (0 = no cap, default).
 #     Each map gets floor(N/count) shells; first (N%count) maps get +1 to reach N exactly.
-#     MaxPerMap clamps the per-map target after distribution (useful when one map in a large
-#     list would otherwise absorb the entire remainder allocation).
+#     MaxPerMap clamps the per-map target after distribution.
 #     0 or omit disables that category.
+###########################################################################
+# Tier Assignment
+# -------------------------------------------------------------------
+# LOW  (Lv 1–40):  prontera, izlude, payon, alberta, geffen, morocc
+# MID  (Lv 40–70): aldebaran, comodo, hugel, amatsu, gonryun, louyang, umbala, xmas
+# HIGH (Lv 70–99): yuno, einbroch, einbech, lighthalzen, rachel, veins, niflheim, moscovia, ayothaya
+#
+# Towns represent social/recruitment hubs. Fields and dungeons are classified
+# independently by progression; they are not required to match their nearest town.
+#
+# Each band holds two of the six tiers in db/population_engine.yml: one of
+# non-transcendent classes and one of transcendent. Where a class line was
+# split between the two (pve_caster / pve_professor, pve_archer / pve_clown,
+# ...) the two entries share one map list and divide its population, so a
+# map holds as many shells as it did before the split. A new profile on
+# maps that already have one adds its own total on top of theirs, and the
+# map server is single-threaded: divide an existing total rather than
+# adding a new one, unless the maps really should get busier.
 ###########################################################################
 
 Header:
@@ -48,6 +65,12 @@ Header:
   Version: 1
 
 Body:
+
+  # =========================================================================
+  # LOW TIER (Lv 1–40): T1 1st classes, T4 transcendent 1st classes
+  # Cities: prontera, izlude, payon, alberta, geffen, morocc
+  # =========================================================================
+
   - Profile: novice_default
     Towns:
       - new_1-1
@@ -55,24 +78,15 @@ Body:
       - new_1-3
     TownsPopulation: 60
 
-  - Profile: pve_first_acolyte
+  - Profile: combat_pve_low
     Towns:
       - prontera
-      - morocc
-      - geffen
+      - izlude
       - payon
       - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 54
+      - geffen
+      - morocc
+    TownsPopulation: 150
     Fields:
       - gef_fild00
       - gef_fild01
@@ -88,25 +102,39 @@ Body:
       - prt_fild06
       - prt_fild07
       - prt_fild08
+    FieldsPopulation: 225
+    Dungeons:
+      - prt_sewb1
+      - prt_sewb2
+      - prt_sewb3
+      - prt_sewb4
+      - iz_dun00
+      - iz_dun01
+      - iz_dun02
+      - gef_dun00
+      - gef_dun01
+      - gef_dun02
+      - orcsdun01
+      - anthell01
+      - anthell02
+      - pay_dun00
+      - pay_dun01
+      - pay_dun02
+      - pay_dun03
+      - pay_dun04
+      - moc_pryd01
+      - moc_pryd02
+    DungeonsPopulation: 225
 
-  - Profile: pve_first_swordsman
+  - Profile: combat_pve_low_transcended
     Towns:
       - prontera
-      - morocc
-      - geffen
+      - izlude
       - payon
       - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 54
+      - geffen
+      - morocc
+    TownsPopulation: 50
     Fields:
       - gef_fild00
       - gef_fild01
@@ -122,127 +150,46 @@ Body:
       - prt_fild06
       - prt_fild07
       - prt_fild08
+    FieldsPopulation: 75
+    Dungeons:
+      - prt_sewb1
+      - prt_sewb2
+      - prt_sewb3
+      - prt_sewb4
+      - iz_dun00
+      - iz_dun01
+      - iz_dun02
+      - gef_dun00
+      - gef_dun01
+      - gef_dun02
+      - orcsdun01
+      - anthell01
+      - anthell02
+      - pay_dun00
+      - pay_dun01
+      - pay_dun02
+      - pay_dun03
+      - pay_dun04
+      - moc_pryd01
+      - moc_pryd02
+    DungeonsPopulation: 75
 
-  - Profile: pve_first_mage
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 54
-    Fields:
-      - gef_fild00
-      - gef_fild01
-      - gef_fild04
-      - gef_fild07
-      - moc_fild07
-      - moc_fild11
-      - moc_fild12
-      - moc_fild18
-      - pay_fild01
-      - pay_fild03
-      - prt_fild01
-      - prt_fild06
-      - prt_fild07
-      - prt_fild08
-
-  - Profile: pve_first_archer
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 54
-    Fields:
-      - gef_fild00
-      - gef_fild01
-      - gef_fild04
-      - gef_fild07
-      - moc_fild07
-      - moc_fild11
-      - moc_fild12
-      - moc_fild18
-      - pay_fild01
-      - pay_fild03
-      - prt_fild01
-      - prt_fild06
-      - prt_fild07
-      - prt_fild08
-
-  - Profile: pve_first_thief
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 54
-    Fields:
-      - gef_fild00
-      - gef_fild01
-      - gef_fild04
-      - gef_fild07
-      - moc_fild07
-      - moc_fild11
-      - moc_fild12
-      - moc_fild18
-      - pay_fild01
-      - pay_fild03
-      - prt_fild01
-      - prt_fild06
-      - prt_fild07
-      - prt_fild08
+  # =========================================================================
+  # MID TIER (Lv 40–70): T2 2nd classes, T5 transcendent 2nd classes
+  # Cities: aldebaran, comodo, hugel, amatsu, gonryun, louyang, umbala, xmas
+  # =========================================================================
 
   - Profile: combat_pve
     Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
       - aldebaran
-      - xmas
       - comodo
-      - yuno
+      - hugel
       - amatsu
       - gonryun
-      - umbala
-      - niflheim
       - louyang
-    TownsPopulation: 180
+      - umbala
+      - xmas
+    TownsPopulation: 150
     Fields:
       - gef_fild02
       - gef_fild03
@@ -278,308 +225,28 @@ Body:
       - prt_fild09
       - prt_fild10
       - prt_fild11
-    FieldsPopulation: 1020
-    Dungeons:
-      - gef_dun00
-      - gef_dun01
-      - gef_dun02
-      - gl_cas01
-      - gl_cas02
-      - gl_church
-      - gl_chyard
-      - gl_dun01
-      - gl_dun02
-      - gl_prison
-      - gl_prison1
-      - gl_sew01
-      - gl_sew02
-      - gl_sew03
-      - gl_sew04
-      - gl_step
-      - iz_dun00
-      - iz_dun01
-      - iz_dun02
-      - orcsdun01
-      - prt_maze01
-      - prt_sewb1
-      - prt_sewb2
-      - prt_sewb3
-      - prt_sewb4
-    DungeonsPopulation: 600
-
-  - Profile: pve_knight     # Knight
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 60
-    Fields:
-      - prt_fild02
-      - prt_fild03
-      - prt_fild04
-      - prt_fild05
-      - prt_fild09
-      - prt_fild10
-      - prt_fild11
-    FieldsPopulation: 100
-    Dungeons:
-      - prt_maze01
-      - prt_maze02
-      - prt_maze03
-      - prt_sewb1
-      - prt_sewb2
-      - prt_sewb3
-      - prt_sewb4
-      - iz_dun00
-      - iz_dun01
-      - iz_dun02
-      - iz_dun03
-      - iz_dun04
-    DungeonsPopulation: 100
-
-  - Profile: pve_paladin    # Crusader
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 60
-    Fields:
-      - pay_fild02
-      - pay_fild04
-      - pay_fild05
-      - pay_fild06
-      - pay_fild07
-      - pay_fild08
-      - pay_fild09
-      - pay_fild10
-      - pay_fild11
-    FieldsPopulation: 100
-    Dungeons:
-      - prt_maze01
-      - prt_maze02
-      - prt_maze03
-      - prt_sewb1
-      - prt_sewb2
-      - prt_sewb3
-      - prt_sewb4
-      - iz_dun00
-      - iz_dun01
-      - iz_dun02
-      - iz_dun03
-      - iz_dun04
-    DungeonsPopulation: 100
-
-  - Profile: pve_caster     # Wizard, Sage
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 60
-    Fields:
-      - gef_fild02
-      - gef_fild03
-      - gef_fild05
-      - gef_fild06
-      - gef_fild08
-      - gef_fild09
-      - gef_fild10
-      - gef_fild11
-      - gef_fild12
-      - gef_fild13
-      - gef_fild14
-      - moc_fild01
-      - moc_fild02
-      - moc_fild03
-      - moc_fild13
-      - moc_fild16
-      - moc_fild17
-      - moc_fild19
-    FieldsPopulation: 100
-    Dungeons:
-      - gef_dun00
-      - gef_dun01
-      - gef_dun02
-      - gl_prison
-      - orcsdun01
-    DungeonsPopulation: 100
-
-  - Profile: pve_archer     # Hunter, Bard, Dancer
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 180
-    Fields:
-      - pay_fild02
-      - pay_fild04
-      - pay_fild05
-      - pay_fild06
-      - pay_fild07
-      - pay_fild08
-      - pay_fild09
-      - pay_fild10
-      - pay_fild11
-    FieldsPopulation: 100
-    Dungeons:
-      - gef_dun00
-      - gef_dun01
-      - gef_dun02
-      - gl_cas01
-      - gl_cas02
-      - gl_church
-      - gl_chyard
-      - gl_dun01
-      - gl_dun02
-      - gl_prison
-      - gl_prison1
-      - gl_sew01
-      - gl_sew02
-      - gl_sew03
-      - gl_sew04
-      - gl_step
-      - orcsdun01
-      - beach_dun
-      - beach_dun2
-      - beach_dun3
-    DungeonsPopulation: 100
-
-  - Profile: pve_monk       # Monk
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 60
-    Fields:
       - yuno_fild01
       - yuno_fild02
       - yuno_fild03
       - yuno_fild04
-      - gef_fild02
-      - gef_fild03
-      - gef_fild05
-      - gef_fild06
-      - gef_fild08
-      - gef_fild09
-      - gef_fild10
-      - gef_fild11
-      - gef_fild12
-      - gef_fild13
-      - gef_fild14
-      - moc_fild01
-      - moc_fild02
-      - moc_fild03
-      - moc_fild13
-      - moc_fild16
-      - moc_fild17
-      - moc_fild19
-    FieldsPopulation: 100
+    FieldsPopulation: 800
     Dungeons:
-      - gefenia01
-      - gefenia02
-      - gefenia03
-      - gefenia04
-      - beach_dun
-      - beach_dun2
-      - beach_dun3
-    DungeonsPopulation: 100
-
-  - Profile: pve_assassin   # Assassin / Assassin Cross — katar build
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - xmas
-      - comodo
-      - yuno
-      - amatsu
-      - gonryun
-      - umbala
-      - niflheim
-      - louyang
-    TownsPopulation: 60
-    Fields:
-      - moc_fild01
-      - moc_fild02
-      - moc_fild03
-      - moc_fild13
-      - moc_fild16
-      - moc_fild17
-      - moc_fild19
-      - pay_fild02
-      - pay_fild04
-      - pay_fild05
-      - pay_fild06
-      - pay_fild07
-      - pay_fild08
-      - pay_fild09
-      - pay_fild10
-      - pay_fild11
-    FieldsPopulation: 80
-    Dungeons:
+      - gef_dun03
+      - alde_dun01
+      - alde_dun02
+      - alde_dun03
+      - alde_dun04
+      - iz_dun03
+      - iz_dun04
+      - prt_maze01
+      - prt_maze02
+      - prt_maze03
+      - ama_dun01
+      - ama_dun02
+      - ama_dun03
+      - lou_dun01
+      - lou_dun02
+      - lou_dun03
       - in_sphinx1
       - in_sphinx2
       - in_sphinx3
@@ -589,80 +256,379 @@ Body:
       - tur_dun02
       - tur_dun03
       - tur_dun04
-      - prt_sewb1
-      - prt_sewb2
-      - prt_sewb3
-      - prt_sewb4
-    DungeonsPopulation: 100
+      - beach_dun
+      - beach_dun2
+      - beach_dun3
+    DungeonsPopulation: 500
 
-  - Profile: pve_rogue      # Rogue
+  - Profile: pve_knight
     Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
       - aldebaran
-      - xmas
       - comodo
-      - yuno
+      - hugel
       - amatsu
       - gonryun
-      - umbala
-      - niflheim
       - louyang
-    TownsPopulation: 45
+      - umbala
+      - xmas
+    TownsPopulation: 50
     Fields:
-      - pay_fild02
-      - pay_fild04
-      - pay_fild05
-      - pay_fild06
-      - pay_fild07
-      - pay_fild08
-      - pay_fild09
-      - pay_fild10
-      - pay_fild11
-      - gef_fild02
-      - gef_fild03
-      - gef_fild05
-    FieldsPopulation: 60
+      - prt_fild02
+      - prt_fild03
+      - prt_fild04
+      - prt_fild05
+      - prt_fild09
+      - prt_fild10
+      - prt_fild11
+    FieldsPopulation: 80
     Dungeons:
-      - prt_sewb1
-      - prt_sewb2
-      - prt_sewb3
-      - prt_sewb4
-      - gl_sew01
-      - gl_sew02
-      - gl_sew03
-      - gl_sew04
-      - gl_dun01
-      - gl_dun02
-      - in_sphinx1
-      - in_sphinx2
-      - in_sphinx3
-      - in_sphinx4
-      - in_sphinx5
+      - prt_maze01
+      - prt_maze02
+      - prt_maze03
+      - iz_dun00
+      - iz_dun01
+      - iz_dun02
+      - iz_dun03
+      - iz_dun04
+      - alde_dun01
+      - alde_dun02
     DungeonsPopulation: 80
 
-  - Profile: pve_merchant_cart  # Merchant / Blacksmith / Alchemist with cart
+  - Profile: pve_paladin
     Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
       - aldebaran
-      - xmas
       - comodo
-      - yuno
+      - hugel
       - amatsu
       - gonryun
-      - umbala
-      - niflheim
       - louyang
-    TownsPopulation: 60
+      - umbala
+      - xmas
+    TownsPopulation: 50
+    Fields:
+      - pay_fild02
+      - pay_fild04
+      - pay_fild05
+      - pay_fild06
+      - pay_fild07
+      - pay_fild08
+      - pay_fild09
+      - pay_fild10
+      - pay_fild11
+    FieldsPopulation: 80
+    Dungeons:
+      - prt_maze01
+      - prt_maze02
+      - prt_maze03
+      - iz_dun00
+      - iz_dun01
+      - iz_dun02
+      - iz_dun03
+      - iz_dun04
+      - alde_dun01
+      - alde_dun02
+    DungeonsPopulation: 80
+
+  - Profile: pve_caster
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 25
+    Fields:
+      - gef_fild02
+      - gef_fild03
+      - gef_fild05
+      - gef_fild06
+      - gef_fild08
+      - gef_fild09
+      - gef_fild10
+      - gef_fild11
+      - gef_fild12
+      - gef_fild13
+      - gef_fild14
+      - moc_fild01
+      - moc_fild02
+      - moc_fild03
+      - moc_fild13
+      - moc_fild16
+      - moc_fild17
+      - moc_fild19
+    FieldsPopulation: 40
+    Dungeons:
+      - gef_dun00
+      - gef_dun01
+      - gef_dun02
+      - gef_dun03
+      - orcsdun01
+      - in_sphinx1
+      - in_sphinx2
+      - in_sphinx3
+    DungeonsPopulation: 40
+
+  - Profile: pve_professor
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 25
+    Fields:
+      - gef_fild02
+      - gef_fild03
+      - gef_fild05
+      - gef_fild06
+      - gef_fild08
+      - gef_fild09
+      - gef_fild10
+      - gef_fild11
+      - gef_fild12
+      - gef_fild13
+      - gef_fild14
+      - moc_fild01
+      - moc_fild02
+      - moc_fild03
+      - moc_fild13
+      - moc_fild16
+      - moc_fild17
+      - moc_fild19
+    FieldsPopulation: 40
+    Dungeons:
+      - gef_dun00
+      - gef_dun01
+      - gef_dun02
+      - gef_dun03
+      - orcsdun01
+      - in_sphinx1
+      - in_sphinx2
+      - in_sphinx3
+    DungeonsPopulation: 40
+
+  - Profile: pve_archer
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 75
+    Fields:
+      - pay_fild02
+      - pay_fild04
+      - pay_fild05
+      - pay_fild06
+      - pay_fild07
+      - pay_fild08
+      - pay_fild09
+      - pay_fild10
+      - pay_fild11
+    FieldsPopulation: 40
+    Dungeons:
+      - gef_dun00
+      - gef_dun01
+      - gef_dun02
+      - gef_dun03
+      - orcsdun01
+      - beach_dun
+      - beach_dun2
+      - beach_dun3
+      - alde_dun01
+      - alde_dun02
+    DungeonsPopulation: 40
+
+  - Profile: pve_clown
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 75
+    Fields:
+      - pay_fild02
+      - pay_fild04
+      - pay_fild05
+      - pay_fild06
+      - pay_fild07
+      - pay_fild08
+      - pay_fild09
+      - pay_fild10
+      - pay_fild11
+    FieldsPopulation: 40
+    Dungeons:
+      - gef_dun00
+      - gef_dun01
+      - gef_dun02
+      - gef_dun03
+      - orcsdun01
+      - beach_dun
+      - beach_dun2
+      - beach_dun3
+      - alde_dun01
+      - alde_dun02
+    DungeonsPopulation: 40
+
+  - Profile: pve_monk
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 50
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - gef_fild02
+      - gef_fild03
+      - gef_fild05
+      - gef_fild06
+      - gef_fild08
+      - gef_fild09
+      - gef_fild10
+      - gef_fild11
+      - gef_fild12
+      - gef_fild13
+      - gef_fild14
+      - moc_fild01
+      - moc_fild02
+      - moc_fild03
+      - moc_fild13
+      - moc_fild16
+      - moc_fild17
+      - moc_fild19
+    FieldsPopulation: 80
+    Dungeons:
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - beach_dun
+      - beach_dun2
+      - beach_dun3
+      - tur_dun01
+      - tur_dun02
+    DungeonsPopulation: 80
+
+  - Profile: pve_assassin
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 50
+    Fields:
+      - moc_fild01
+      - moc_fild02
+      - moc_fild03
+      - moc_fild13
+      - moc_fild16
+      - moc_fild17
+      - moc_fild19
+      - pay_fild02
+      - pay_fild04
+      - pay_fild05
+      - pay_fild06
+      - pay_fild07
+      - pay_fild08
+      - pay_fild09
+      - pay_fild10
+      - pay_fild11
+    FieldsPopulation: 60
+    Dungeons:
+      - in_sphinx1
+      - in_sphinx2
+      - in_sphinx3
+      - in_sphinx4
+      - in_sphinx5
+      - tur_dun01
+      - tur_dun02
+      - tur_dun03
+      - tur_dun04
+      - prt_sewb1
+      - prt_sewb2
+      - prt_sewb3
+      - prt_sewb4
+    DungeonsPopulation: 80
+
+  - Profile: pve_rogue
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 40
+    Fields:
+      - pay_fild02
+      - pay_fild04
+      - pay_fild05
+      - pay_fild06
+      - pay_fild07
+      - pay_fild08
+      - pay_fild09
+      - pay_fild10
+      - pay_fild11
+      - gef_fild02
+      - gef_fild03
+      - gef_fild05
+    FieldsPopulation: 50
+    Dungeons:
+      - prt_sewb1
+      - prt_sewb2
+      - prt_sewb3
+      - prt_sewb4
+      - gl_sew01
+      - gl_sew02
+      - gl_sew03
+      - gl_sew04
+      - gl_dun01
+      - gl_dun02
+      - in_sphinx1
+      - in_sphinx2
+      - in_sphinx3
+      - in_sphinx4
+      - in_sphinx5
+    DungeonsPopulation: 70
+
+  - Profile: pve_merchant_cart
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 34
     Fields:
       - gef_fild02
       - gef_fild03
@@ -671,33 +637,58 @@ Body:
       - pay_fild04
       - pay_fild05
       - pay_fild06
-    FieldsPopulation: 30
+    FieldsPopulation: 17
     Dungeons:
       - iz_dun00
       - iz_dun01
       - iz_dun02
       - tur_dun01
       - tur_dun02
-    DungeonsPopulation: 30
+      - alde_dun01
+      - alde_dun02
+    DungeonsPopulation: 17
 
-  - Profile: pve_taekwon    # Taekwon / Star Gladiator / Soul Linker
+  - Profile: pve_creator
     Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
       - aldebaran
-      - xmas
       - comodo
-      - yuno
+      - hugel
       - amatsu
       - gonryun
-      - umbala
-      - niflheim
       - louyang
-    TownsPopulation: 60
+      - umbala
+      - xmas
+    TownsPopulation: 16
+    Fields:
+      - gef_fild02
+      - gef_fild03
+      - gef_fild05
+      - pay_fild02
+      - pay_fild04
+      - pay_fild05
+      - pay_fild06
+    FieldsPopulation: 8
+    Dungeons:
+      - iz_dun00
+      - iz_dun01
+      - iz_dun02
+      - tur_dun01
+      - tur_dun02
+      - alde_dun01
+      - alde_dun02
+    DungeonsPopulation: 8
+
+  - Profile: pve_taekwon
+    Towns:
+      - aldebaran
+      - comodo
+      - hugel
+      - amatsu
+      - gonryun
+      - louyang
+      - umbala
+      - xmas
+    TownsPopulation: 50
     Fields:
       - yuno_fild01
       - yuno_fild02
@@ -718,7 +709,7 @@ Body:
       - cmd_fild02
       - cmd_fild03
       - cmd_fild04
-    FieldsPopulation: 80
+    FieldsPopulation: 70
     Dungeons:
       - beach_dun
       - beach_dun2
@@ -731,26 +722,28 @@ Body:
       - tur_dun02
       - tur_dun03
       - tur_dun04
-    DungeonsPopulation: 60
+    DungeonsPopulation: 50
 
-  - Profile: pve_gunslinger  # Gunslinger
+  - Profile: pve_gunslinger  # 40-99: no second class, so one profile spans the mid and high tiers
     Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
       - aldebaran
-      - xmas
       - comodo
-      - yuno
+      - hugel
       - amatsu
       - gonryun
-      - umbala
-      - niflheim
       - louyang
-    TownsPopulation: 60
+      - umbala
+      - xmas
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 80
     Fields:
       - moc_fild01
       - moc_fild02
@@ -763,7 +756,17 @@ Body:
       - cmd_fild02
       - cmd_fild03
       - cmd_fild04
-    FieldsPopulation: 60
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 110
     Dungeons:
       - tur_dun01
       - tur_dun02
@@ -772,26 +775,57 @@ Body:
       - beach_dun
       - beach_dun2
       - beach_dun3
-    DungeonsPopulation: 40
+      - glast_01
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - ra_san01
+      - ra_san02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 95
 
-  - Profile: pve_ninja       # Ninja
+  - Profile: pve_ninja  # 40-99: no second class, so one profile spans the mid and high tiers
     Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
       - aldebaran
-      - xmas
       - comodo
-      - yuno
+      - hugel
       - amatsu
       - gonryun
-      - umbala
-      - niflheim
       - louyang
-    TownsPopulation: 45
+      - umbala
+      - xmas
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 70
     Fields:
       - lou_fild01
       - ama_fild01
@@ -799,7 +833,17 @@ Body:
       - gef_fild03
       - gef_fild05
       - gef_fild06
-    FieldsPopulation: 50
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 105
     Dungeons:
       - ama_dun01
       - ama_dun02
@@ -812,945 +856,830 @@ Body:
       - in_sphinx3
       - in_sphinx4
       - in_sphinx5
-    DungeonsPopulation: 40
+      - glast_01
+      - gl_church
+      - gl_chyard
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - ra_san01
+      - ra_san02
+      - ra_san03
+      - ice_dun01
+      - ice_dun02
+      - ice_dun03
+    DungeonsPopulation: 95
+
+  # =========================================================================
+  # HIGH TIER (Lv 70–99): T3 2nd classes, T6 transcendent 2nd classes
+  # Cities: yuno, einbroch, einbech, lighthalzen, rachel, veins, niflheim, moscovia, ayothaya
+  # =========================================================================
+
+  - Profile: combat_pve_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 100
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - yuno_fild05
+      - yuno_fild06
+      - yuno_fild07
+      - yuno_fild08
+      - yuno_fild09
+      - yuno_fild10
+      - yuno_fild11
+      - yuno_fild12
+      - ein_fild01
+      - ein_fild02
+      - ein_fild03
+      - ein_fild04
+      - ein_fild05
+      - ein_fild06
+      - ein_fild07
+      - ein_fild08
+      - ein_fild09
+      - ein_fild10
+      - lhz_fild01
+      - lhz_fild02
+      - lhz_fild03
+      - ra_fild01
+      - ra_fild02
+      - ra_fild03
+      - ra_fild04
+      - ra_fild05
+      - ra_fild06
+      - ra_fild07
+      - ra_fild08
+      - ra_fild09
+      - ra_fild10
+      - ra_fild11
+      - ra_fild12
+      - ra_fild13
+      - ve_fild01
+      - ve_fild02
+      - ve_fild03
+      - ve_fild04
+      - ve_fild05
+      - ve_fild06
+      - ve_fild07
+      - nif_fild01
+      - nif_fild02
+      - mosk_fild01
+      - mosk_fild02
+      - ayo_fild01
+      - ayo_fild02
+      - cmd_fild01
+      - cmd_fild02
+      - cmd_fild03
+      - cmd_fild04
+      - lou_fild01
+      - ama_fild01
+    FieldsPopulation: 400
+    Dungeons:
+      - glast_01
+      - gl_in01
+      - gl_church
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gl_knt01
+      - gl_knt02
+      - gl_prison
+      - gl_prison1
+      - gl_sew01
+      - gl_sew02
+      - gl_sew03
+      - gl_sew04
+      - gl_dun01
+      - gl_dun02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - tha_t04
+      - tha_t05
+      - tha_t06
+      - tha_t07
+      - tha_t08
+      - tha_t09
+      - tha_t10
+      - tha_t11
+      - tha_t12
+      - ra_san01
+      - ra_san02
+      - ra_san03
+      - ra_san04
+      - ra_san05
+      - ice_dun01
+      - ice_dun02
+      - ice_dun03
+      - kh_dun01
+      - kh_dun02
+    DungeonsPopulation: 300
+
+  - Profile: pve_knight_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 30
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - ein_fild01
+      - ein_fild02
+      - ein_fild03
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ra_fild03
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 60
+    Dungeons:
+      - glast_01
+      - gl_in01
+      - gl_church
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gl_knt01
+      - gl_knt02
+      - gl_prison
+      - gl_prison1
+      - gl_sew01
+      - gl_sew02
+      - gl_sew03
+      - gl_sew04
+      - gl_dun01
+      - gl_dun02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - tha_t04
+      - tha_t05
+      - tha_t06
+      - tha_t07
+      - tha_t08
+      - tha_t09
+      - tha_t10
+      - tha_t11
+      - tha_t12
+    DungeonsPopulation: 60
+
+  - Profile: pve_paladin_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 30
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 60
+    Dungeons:
+      - glast_01
+      - gl_in01
+      - gl_church
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gl_knt01
+      - gl_knt02
+      - gl_prison
+      - gl_prison1
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - ra_san01
+      - ra_san02
+      - ra_san03
+      - ra_san04
+      - ra_san05
+    DungeonsPopulation: 60
+
+  - Profile: pve_caster_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 15
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - ein_fild01
+      - ein_fild02
+      - ein_fild03
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 30
+    Dungeons:
+      - glast_01
+      - gl_church
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - tha_t04
+      - ra_san01
+      - ra_san02
+      - ra_san03
+      - ra_san04
+      - ra_san05
+    DungeonsPopulation: 30
+
+  - Profile: pve_sage_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 15
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - ein_fild01
+      - ein_fild02
+      - ein_fild03
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 30
+    Dungeons:
+      - glast_01
+      - gl_church
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - tha_t04
+      - ra_san01
+      - ra_san02
+      - ra_san03
+      - ra_san04
+      - ra_san05
+    DungeonsPopulation: 30
+
+  - Profile: pve_archer_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 20
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ra_fild03
+      - ve_fild01
+      - ve_fild02
+      - ve_fild03
+    FieldsPopulation: 40
+    Dungeons:
+      - glast_01
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - ra_san01
+      - ra_san02
+      - ra_san03
+      - ra_san04
+      - ra_san05
+      - ice_dun01
+      - ice_dun02
+      - ice_dun03
+    DungeonsPopulation: 30
+
+  - Profile: pve_bard_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 20
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ra_fild03
+      - ve_fild01
+      - ve_fild02
+      - ve_fild03
+    FieldsPopulation: 40
+    Dungeons:
+      - glast_01
+      - gl_chyard
+      - gl_cas01
+      - gl_cas02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - thor_v03
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - ra_san01
+      - ra_san02
+      - ra_san03
+      - ra_san04
+      - ra_san05
+      - ice_dun01
+      - ice_dun02
+      - ice_dun03
+    DungeonsPopulation: 30
+
+  - Profile: pve_monk_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 20
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 40
+    Dungeons:
+      - glast_01
+      - gl_church
+      - gl_chyard
+      - gl_knt01
+      - gl_knt02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - tha_t01
+      - tha_t02
+      - tha_t03
+    DungeonsPopulation: 60
+
+  - Profile: pve_assassin_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 30
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 60
+    Dungeons:
+      - glast_01
+      - gl_sew01
+      - gl_sew02
+      - gl_sew03
+      - gl_sew04
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - tha_t04
+      - ice_dun01
+      - ice_dun02
+      - ice_dun03
+    DungeonsPopulation: 60
+
+  - Profile: pve_rogue_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 20
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 40
+    Dungeons:
+      - glast_01
+      - gl_sew01
+      - gl_sew02
+      - gl_sew03
+      - gl_sew04
+      - gl_dun01
+      - gl_dun02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - ice_dun01
+      - ice_dun02
+      - ice_dun03
+    DungeonsPopulation: 60
+
+  - Profile: pve_merchant_cart_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 15
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 15
+    Dungeons:
+      - glast_01
+      - gl_cas01
+      - gl_cas02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 30
+
+  - Profile: pve_alchemist_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 15
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - lhz_fild02
+      - ra_fild01
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 15
+    Dungeons:
+      - glast_01
+      - gl_cas01
+      - gl_cas02
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - lhz_dun01
+      - lhz_dun02
+      - lhz_dun03
+      - juperos_01
+      - juperos_02
+      - jupe_cave
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 30
+
+  - Profile: pve_taekwon_high
+    Towns:
+      - yuno
+      - einbroch
+      - einbech
+      - lighthalzen
+      - rachel
+      - veins
+      - niflheim
+      - moscovia
+      - ayothaya
+    TownsPopulation: 40
+    Fields:
+      - yuno_fild01
+      - yuno_fild02
+      - yuno_fild03
+      - yuno_fild04
+      - ein_fild01
+      - ein_fild02
+      - lhz_fild01
+      - ra_fild01
+      - ra_fild02
+      - ve_fild01
+      - ve_fild02
+    FieldsPopulation: 80
+    Dungeons:
+      - glast_01
+      - gefenia01
+      - gefenia02
+      - gefenia03
+      - gefenia04
+      - abyss_01
+      - abyss_02
+      - abyss_03
+      - thor_v01
+      - thor_v02
+      - odin_tem01
+      - odin_tem02
+      - odin_tem03
+      - juperos_01
+      - juperos_02
+      - tha_t01
+      - tha_t02
+      - tha_t03
+      - ra_san01
+      - ra_san02
+      - ice_dun01
+      - ice_dun02
+    DungeonsPopulation: 60
 
 # RAGNAROKMAC: the import a mod's table arrives through.
-#
-# Without this the engine reads this file and nothing else, a mod's
-# db/population_spawn.yml lands at db/import/population_spawn.yml where
-# nothing opens it, and the server reports a clean load either way -- which is
-# indistinguishable from a mod that worked and changed nothing.
-#
-# Entries in the imported file are matched to these by Profile name and only
-# the fields they actually name are touched, so a mod adds a profile or edits
-# one without restating the rest. `Header: Clear: true` in the imported file
-# replaces this table outright instead.
-  - Profile: pve_lordknight
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_paladin2
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_highpriest
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_highwizard
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_professor
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_sniper
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_stalker
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_whitesmith
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_creator
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_champion
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_clown
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_gypsy
-    Towns:
-      - prontera
-      - morocc
-      - geffen
-      - payon
-      - alberta
-      - izlude
-      - aldebaran
-      - yuno
-      - lighthalzen
-      - einbroch
-      - hugel
-      - rachel
-      - veins
-      - comodo
-      - jawaii
-      - amatsu
-      - gonryun
-      - louyang
-      - ayothaya
-    TownsPopulation: 2
-    Dungeons:
-      - gl_knt01
-      - gl_knt02
-      - odin_tem01
-      - odin_tem02
-      - ice_dun01
-      - ice_dun02
-    DungeonsPopulation: 3
-
-  - Profile: pve_runeknight
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_royalguard
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_mechanic
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_warlock
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_sorcerer
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_archbishop
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_ranger
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_guillotinecross
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_shadowchaser
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_sura
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_genetic
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_minstrel
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_wanderer
-    Towns:
-      - yuno
-      - lighthalzen
-      - rachel
-      - veins
-    TownsPopulation: 2
-    Dungeons:
-      - juperos_01
-      - juperos_02
-      - mag_dun01
-      - mag_dun02
-      - lhz_dun02
-      - lhz_dun03
-      - odin_tem02
-      - odin_tem03
-    DungeonsPopulation: 3
-
-  - Profile: pve_dragonknight
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_imperialguard
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_meister
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_inquisitor
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_shadowcross
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_abysschaser
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_nightwatch
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_archmage
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_elementalmaster
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_cardinal
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_soulascetic
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_biolo
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_troubadour
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_trouvere
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_windhawk
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_skyemperor
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_shinkiro
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_shiranui
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_hypernovice
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
-  - Profile: pve_spirithandler
-    Towns:
-      - lighthalzen
-      - rachel
-    TownsPopulation: 1
-    Dungeons:
-      - abyss_01
-      - abyss_02
-      - abyss_03
-      - thor_v01
-      - thor_v02
-      - thor_v03
-      - mag_dun02
-      - lhz_dun03
-    DungeonsPopulation: 3
-
 Footer:
   Imports:
-  - Path: db/import/population_spawn.yml
+    - Path: db/import/population_spawn.yml

@@ -50,6 +50,17 @@
 				'character on a map that is not loaded) can make it refuse the character or crash. Change what you understand, ' +
 				'and keep the backup.',
 			saveWarning: 'Saving stops the game for a few seconds; anyone playing is disconnected. A backup is taken first.',
+			// Deleting a row here deletes that row and nothing else. rAthena's
+			// own character delete (char_delete in src/char/char.cpp) also
+			// clears a dozen other tables and leaves the party, guild and
+			// marriage; none of that happens here.
+			deleteWarnings: {
+				char:
+					'This deletes the character row only. Its items (inventory, cart_inventory), skills, hotkeys, ' +
+					'quests, achievements, memos, variables (char_reg_num, char_reg_str), friends, mail, pets and ' +
+					'homunculus stay behind as orphans, and its party, guild and marriage are not left. To remove a ' +
+					'character cleanly, delete it from the character select screen in the game, or with Tools → Control panel.',
+			},
 		},
 	};
 })();

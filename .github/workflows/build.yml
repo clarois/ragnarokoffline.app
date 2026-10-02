@@ -153,6 +153,12 @@ jobs:
           path: |
             vendor/roBrowserLegacy/dist/Web
             vendor/roBrowserLegacy/src/DB/Monsters/MonsterTable.js
+            vendor/roBrowserLegacy/src/DB/Jobs/JobConst.js
+            vendor/roBrowserLegacy/src/DB/Jobs/JobNameTable.js
+            vendor/roBrowserLegacy/src/DB/Jobs/PalNameTable.js
+            vendor/roBrowserLegacy/src/DB/Jobs/HairIndexTable.js
+            vendor/roBrowserLegacy/src/DB/Items/HatTable.js
+            vendor/roBrowserLegacy/src/DB/Items/RobeTable.js
             vendor/ROenglishRE/Translation
             vendor/ROenglishRE/Addons/Navigation Legacy
           retention-days: 1

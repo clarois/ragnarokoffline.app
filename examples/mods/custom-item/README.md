@@ -61,8 +61,9 @@ all work, so the translation's `itemInfo_C.lua` template can be copied as it is.
 
 ## Choosing an id
 
-30001. rAthena's own items stop well below 30000, so there is room up there that
-a client update will not collide with. Pick a block and stay in it.
+50001. Custom items go in **50000–99999** ([Making new things](../../../docs/MODDING.md)):
+stock items sit below 32409 and from 100000 up, so nothing a client or server
+update ships lands there. Pick a block of your own and stay in it.
 
 ## Checking it worked
 

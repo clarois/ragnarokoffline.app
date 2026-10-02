@@ -5,12 +5,16 @@
   --panel-hi:  #1c2030;
   --line:      #272c3d;
   --text:      #e6e8f0;
+  /* Secondary text that is still meant to be read (a mod's description),
+     between --text and --dim, which is for labels and asides. */
+  --text-2:    #b9bed0;
   --dim:       #8b91a6;
   --accent:    #7889c0;
   --accent-hi: #98a4ce;
   --accent-dim:#4a5478;
   --ok:        #6fb98f;
   --bad:       #c97a7a;
+  --warn:      #d9a066;
 }
 * { box-sizing: border-box; }
 body {

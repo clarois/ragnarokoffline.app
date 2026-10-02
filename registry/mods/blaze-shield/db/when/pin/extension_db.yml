@@ -1,0 +1,12 @@
+# Turns on the server's "blaze_shield_knockback" extension (registered in the
+# fork's db/extension_db.yml): a Blaze Shield pillar hits a monster the moment
+# it steps on, and holds it there until the pillar burns out. Only while the
+# mod's "pin" option is ticked.
+
+Header:
+  Type: EXTENSION_DB
+  Version: 1
+
+Body:
+  - Id: blaze_shield_knockback
+    Enabled: true

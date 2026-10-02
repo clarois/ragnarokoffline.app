@@ -1,0 +1,2 @@
+// Lunar Porings in the field south of Prontera.
+prt_fild08,0,0	monster	Lunar Poring	25001,8,60000,30000

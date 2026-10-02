@@ -1,0 +1,11 @@
+{
+  "name": "arpg-equipments",
+  "author": "Iguera",
+  "description": "Six tiers of special equipment chests, earned by killing monsters based on their level, with extra random mods on the gear. Includes a hub of custom NPCs for advanced crafting and for tuning the chests' drop rates.",
+  "tags": ["equipment", "loot", "crafting", "endgame", "npc"],
+  "homepage": "https://github.com/igueradx/ARPG-Equipments-Mod",
+  "source": {
+    "github": "igueradx/ARPG-Equipments-Mod",
+    "asset": "arpg-equipments*.zip"
+  }
+}

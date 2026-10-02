@@ -1,0 +1,9 @@
+-- Which sprite monster 25001 uses: the green Poporing's. A monster with art
+-- of its own ships data/sprite/monster/lunar_poring.spr and .act and names
+-- LUNAR_PORING here instead.
+--
+-- Only this one row. The app loads it after the client's own table and
+-- merges it by id, so every other monster keeps its sprite.
+JobNameTable = {
+	[25001] = "POPORING",
+}

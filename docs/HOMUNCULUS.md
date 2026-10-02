@@ -56,10 +56,12 @@ made.
 scaled `*10`, `intimacy = 2100`, `hunger = 32`, `char_id = sd->status.char_id`) exactly as
 `hom_create_request` does — then call `hom_alloc` instead of the intif call.
 
-**`sd->status.hom_id` stays 0.** This is load-bearing: every char-server call is keyed on
-`hom_id`, so with 0 they become no-ops against real data — including `unit.cpp:4148`, which
-would otherwise delete a homunculus row when the block is freed. It also keeps the login load
-at `pc.cpp:2491` from firing for a shell.
+**`sd->status.hom_id` stays 0.** That keeps the login load at `pc.cpp:2491` from firing for a
+shell, and makes the row delete in `unit.cpp:4148` match nothing. It does **not** make a save a
+no-op: the char server's `mapif_homunculus_save()` reads `hom_id == 0` as a new homunculus and
+INSERTs a `homunculus` row (and its `skill_homunculus` rows) on every `hom_save()`. Patch 0012
+therefore drops `intif_homunculus_requestsave()` for population accounts, as `chrif_save` and
+`intif_saveregistry` already do.
 
 **Gate.** `pc_checkskill(sd, AM_CALLHOMUN) > 0` — the alchemist line's own skill
 (`db/re/skill_db.yml:6824`), the same shape as `HT_FALCON` / `RA_WUGMASTERY` in the vehicle
@@ -91,8 +93,7 @@ summary with the homunculus field, or add a parallel `@CPHOM|...` line, and add 
 `population_engine_sync_shell_homunculus(sd)`, hooked at the same sites as the vehicle sync:
 after the skill-tree grant at spawn, after job change, and **after the recall placement last**.
 Bench/recall frees the block and re-attaches after placement.
-*Acceptance:* `@companion dump` shows the homunculus (class/level/HID/alive); it is present
-after bench → summon → resummon.
+*Acceptance:* the homunculus (class/level/alive) is present after bench → summon → resummon.
 
 **Phase 2 — it acts.**
 Per-tick driver mirroring the shell AI (`population_engine_combat.cpp` uses
@@ -109,8 +110,7 @@ use (`setunitdata UHOM_TARGETID` -> `unit_attack(hd, id, 1)`, `unit_stop_attack(
 chasing is left to `unit_attack`, which walks the unit into range itself - the same thing the mob
 AI relies on. Targets are ranked by distance to the pet (agreed scope 4) and must also sit inside
 the master's 12-cell command radius; past 12 cells from the master the pet leashes home with
-`unit_walktobl(hd, sd, 2, 1)`. `@companion dump` gained `@SHELLHOMAI` carrying the pet's target and
-attack state, so "is it fighting" is server state rather than a sprite to judge.
+`unit_walktobl(hd, sd, 2, 1)`.
 
 Not covered: the arena-observation branch of the tick returns before the hook, and a sitting or
 vending companion leaves its pet standing - both deliberate, since a companion that is not in a
@@ -137,7 +137,7 @@ a tri-state (`-1` = this job cannot have one, `0` = off, `1` = on), and applicab
 from the granted skill tree (`skill_tree_db.find(class_)`, whose `Inherit` is flattened at load)
 because the attach's own gate needs a live shell and a benched companion has none.
 `@companion homunculus <name> [on|off]` (`pet` is an alias; a bare name flips) ships in
-`patches/0010-companion-homunculus-toggle.patch`, so it works for a benched companion too — the
+`patches/0011-companion-homunculus-toggle.patch`, so it works for a benched companion too — the
 stored column is honoured at its next summon.
 
 Both directions are deliberate, and the obvious call is the wrong one for ON:
@@ -161,14 +161,13 @@ shell's `fd == 0` makes them no-ops rather than writes into `session[0]`. `hom_a
 `hd->homunculusDB` and `hd->exp_next`, which is exactly what `hom_levelup` needs, and the class
 this feature picks (`HM_CLASS_BASE + index % 8`, i.e. 6001-6008) is precisely the block
 `hom_class2mapid` accepts. The engine therefore writes no exp of its own, by design — a second
-award path would double-pay. `@companion dump` carries level, exp, exp_next and skill points so
-growth is readable.
+award path would double-pay.
 
 ## Traps
 
 | Trap | Handling |
 | --- | --- |
-| `hom_vaporize()` calls `hom_save()` → char-server save | Harmless with `hom_id = 0`; our own schema is the persistence, never this |
+| `hom_vaporize()`, `hom_call()` and `unit_free()` call `hom_save()` → char-server save | **Not** harmless: with `hom_id = 0` the char server INSERTs a new row each time. Patch 0012 drops the request for population accounts; our own schema is the persistence |
 | `unit.cpp:4148` deletes the row on free | Safe only while `hom_id == 0` — assert it |
 | `clif_send_homdata` guards `master == nullptr` but **not** `fd <= 0` | A shell has no client; verify what `clif_send` does with the shell's fd before relying on stock notify paths |
 | Hunger/intimacy timers call save paths | Short-circuit for shells |
@@ -180,9 +179,9 @@ growth is readable.
 
 - Calibrated tests (fail on the parent, pass after) asserting: the alchemist line reaches
   `hom_alloc`; `hom_id` is never set; no `intif_homunculus_*` call is reachable for a shell.
-- `@companion dump` carries homunculus state — reading state, not judging a sprite, is what
-  settled the vehicle question.
 - **Not verifiable by test:** whether it is drawn and moves. That is the client's word.
+- The `@companion dump` diagnostic (patch 0010, `@SHELL*` lines) used while developing this was
+  temporary and has been removed.
 
 ## To resolve at implementation time
 

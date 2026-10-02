@@ -18,10 +18,14 @@ const CALLS = new Set(['tables', 'describe', 'rows', 'apply']);
 const MAX_REQUEST = 4 * 1024 * 1024;
 const MAX_ANSWER = 32 * 1024 * 1024;
 
-function runDb(deps, args, input, timeoutMs) {
+// One run of the supervisor: `ragnarok-stack <args>`, `input` on stdin.
+// Resolves with what it printed and how it exited; rejects only when it
+// could not be run, ran out of time, or printed too much. The control
+// panel's bridge (cp-bridge.js) uses it too.
+function runStack(deps, args, input, timeoutMs) {
 	const { cwd, env } = deps.stackEnv();
 	return new Promise((resolve, reject) => {
-		const child = spawn(deps.stackBin(), ['db', ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+		const child = spawn(deps.stackBin(), args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 		const out = [];
 		let outBytes = 0;
 		let err = '';
@@ -43,13 +47,16 @@ function runDb(deps, args, input, timeoutMs) {
 		});
 		child.stderr.on('data', chunk => { if (err.length < 16384) err += chunk; });
 		child.on('error', error => finish(error));
-		child.on('close', code => {
-			if (code === 0) finish(null, Buffer.concat(out).toString('utf8'));
-			else finish(new Error(err.trim() || `ragnarok-stack db exited with ${code}`));
-		});
+		child.on('close', code => finish(null, { code, out: Buffer.concat(out).toString('utf8'), err }));
 		child.stdin.on('error', () => {});
 		child.stdin.end(input || '');
 	});
+}
+
+async function runDb(deps, args, input, timeoutMs) {
+	const { code, out, err } = await runStack(deps, ['db', ...args], input, timeoutMs);
+	if (code === 0) return out;
+	throw new Error(err.trim() || `ragnarok-stack db exited with ${code}`);
 }
 
 function json(body, status = 200) {
@@ -104,4 +111,4 @@ function createDbBridge(deps) {
 	};
 }
 
-module.exports = { createDbBridge };
+module.exports = { createDbBridge, runStack };

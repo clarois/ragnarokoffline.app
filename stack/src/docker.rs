@@ -31,6 +31,35 @@ const TOO_MUCH: &str = "That returned more than 64 KiB. Narrow it with a LIMIT, 
 /// The database browser in Settings -> Tools (#200) reads a page of rows and
 /// saves a batch of edits at a time, both hex-encoded. Larger, still bounded.
 pub const TOOL_SQL_LIMIT: usize = 8 * 1024 * 1024;
+const TOO_MUCH_FOR_TOOL: &str = "That answer is more than 8 MiB. Ask for fewer rows per page.";
+const PRIVATE_SQL_FAILED: &str = "The private database operation failed. Start the server to finish any pending credential migration, or restore its matching credential journal and backup.";
+const DB: &str = "ragnarok-db";
+
+/// What `tool_sql` appends to every script, and expects as the last line of
+/// the answer: an answer without it was cut short somewhere.
+pub const END_MARKER: &str = "ragnarok-db-answer-complete";
+
+fn end_marker_statement() -> String {
+    format!("SELECT '{END_MARKER}';\n")
+}
+
+/// The answer without its end marker, or an error when the marker is not its
+/// last line -- the difference between "the table has 12 rows" and "the
+/// answer stopped after 12 rows".
+pub fn strip_end_marker(answer: &str) -> Result<&str, String> {
+    let body = answer.strip_suffix('\n').unwrap_or(answer);
+    let body = body.strip_suffix('\r').unwrap_or(body);
+    match body.strip_suffix(END_MARKER) {
+        Some(rest) if rest.is_empty() || rest.ends_with('\n') => Ok(rest),
+        _ => Err("The database's answer arrived incomplete (it stopped before its end), so none of it was used. Try again.".into()),
+    }
+}
+
+struct Piped {
+    ok: bool,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
 
 /// Storage attached to a container.
 ///
@@ -80,6 +109,13 @@ impl Docker {
         } else {
             Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
         }
+    }
+
+    /// Run and keep everything: exit status, stdout and stderr. For callers
+    /// that have to report exactly how a command failed.
+    pub fn capture<I, S>(&self, args: I) -> Result<std::process::Output, String>
+    where I: IntoIterator<Item = S>, S: AsRef<OsStr> {
+        self.base().args(args).stdin(Stdio::null()).output().map_err(|e| e.to_string())
     }
 
     /// Run for effect, discarding both streams. Used where the shell version
@@ -182,8 +218,11 @@ impl Docker {
     /// in, the process held 0.03s of CPU and killing it let startup continue
     /// with the images already present.
     ///
-    /// So `done` is the real completion test: the images the caller asked for
-    /// exist. A loader that exits first is still the fast path; one that hangs
+    /// So `done` is the real completion test, and it has to be the *bundle's*
+    /// images under the tags, compared by id (see `ensure_images`). "The tags
+    /// exist" is true from the first second of every upgrade, because the
+    /// previous release's images carry them -- which is how 1.1.1 to 1.4.1
+    /// killed the loader after five seconds and kept the old images. A loader that exits first is still the fast path; one that hangs
     /// after doing its work no longer costs anything. It is checked on a slower
     /// cadence than the child is polled because each call runs a docker
     /// command.
@@ -219,10 +258,6 @@ impl Docker {
             }
             sleep(Duration::from_millis(250));
         }
-    }
-
-    pub fn image_exists(&self, image: &str) -> bool {
-        self.quiet(["image", "inspect", image])
     }
 
     pub fn logs(&self, name: &str, tail: &str) -> String {
@@ -275,6 +310,16 @@ impl Docker {
         } else { Ok(vec!["-uragnarok".into(), "-pragnarok".into()]) }
     }
 
+    /// Which credentials the app's database user is reached with, for logs.
+    /// Never the password itself.
+    pub fn sql_auth_kind(&self) -> &'static str {
+        match self.sql_auth() {
+            Ok(auth) if auth.iter().any(|a| a.starts_with("--defaults-extra-file=")) => "service credentials (private defaults file)",
+            Ok(_) => "legacy app user (ragnarok, built-in password)",
+            Err(_) => "unknown (service credentials could not be read)",
+        }
+    }
+
     pub fn database_client(&self, binary: &str) -> Result<String, String> {
         if !["mariadb", "mariadb-dump"].contains(&binary) { return Err("Unsupported database client".into()); }
         Ok(format!("{binary} {} --protocol=TCP -h127.0.0.1", self.sql_auth()?.join(" ")))
@@ -292,14 +337,6 @@ impl Docker {
         self.sql(sql, &self.sql_auth()?, true, true, SQL_LIMITS)
     }
 
-    /// For the database browser: no header row, errors reported (they name
-    /// the failing line, which is how a save says which change failed), and
-    /// room for a page of rows or a batch of edits. Every value in the SQL it
-    /// is given is built by `database`, never typed.
-    pub fn tool_sql(&self, sql: &str) -> Result<String, String> {
-        self.sql(sql, &self.sql_auth()?, false, true, (TOOL_SQL_LIMIT, TOOL_SQL_LIMIT))
-    }
-
     /// No query or generated password enters argv, logs or raw error text.
     pub fn private_sql(&self, sql: &str) -> Result<String, String> {
         self.sql(sql, &self.sql_auth()?, false, false, SQL_LIMITS)
@@ -313,19 +350,33 @@ impl Docker {
 
     fn sql(&self, sql: &str, auth: &[String], headers: bool, report: bool, (input_limit, output_limit): (usize, usize)) -> Result<String, String> {
         self.require_private_sql()?;
-        let failure = || "The private database operation failed. Start the server to finish any pending credential migration, or restore its matching credential journal and backup.".to_string();
+        let failure = || PRIVATE_SQL_FAILED.to_string();
         if sql.len() > input_limit { return Err(TOO_LONG.into()); }
         let mut args: Vec<String> = ["exec", "-i", "ragnarok-db", "mariadb"].iter().map(|s| s.to_string()).collect();
         args.extend(auth.iter().cloned());
         args.extend(["--protocol=TCP", "-h127.0.0.1", "--batch", "--raw"].iter().map(|s| s.to_string()));
         if !headers { args.push("--skip-column-names".into()); }
         args.push("ragnarok".into());
+        let run = self.piped(&args, sql.as_bytes(), output_limit, report, Duration::from_secs(30))?;
+        if run.stdout.len() > output_limit { return Err(TOO_MUCH.into()); }
+        if !run.ok {
+            let said = String::from_utf8_lossy(&run.stderr).trim().to_string();
+            return Err(if report && !said.is_empty() { said } else { failure() });
+        }
+        String::from_utf8(run.stdout).map_err(|_| failure())
+    }
+
+    /// Run the docker client with `input` on its stdin, collecting at most
+    /// `output_limit + 1` bytes of stdout and (when `keep_stderr`) 8 KiB of
+    /// stderr, and killing it at `timeout`.
+    fn piped(&self, args: &[String], input: &[u8], output_limit: usize, keep_stderr: bool, timeout: Duration) -> Result<Piped, String> {
+        let failure = || PRIVATE_SQL_FAILED.to_string();
         let mut child = self.base().args(args)
             .stdin(Stdio::piped()).stdout(Stdio::piped())
-            .stderr(if report { Stdio::piped() } else { Stdio::null() })
+            .stderr(if keep_stderr { Stdio::piped() } else { Stdio::null() })
             .spawn().map_err(|_| failure())?;
         let mut stdin = child.stdin.take().ok_or_else(failure)?;
-        let input = sql.as_bytes().to_vec();
+        let input = input.to_vec();
         let writer = std::thread::spawn(move || stdin.write_all(&input));
         let stdout = child.stdout.take().ok_or_else(failure)?;
         let reader = std::thread::spawn(move || {
@@ -341,7 +392,7 @@ impl Docker {
                 bytes
             })
         });
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let deadline = Instant::now() + timeout;
         let status = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break Some(status),
@@ -350,14 +401,75 @@ impl Docker {
             }
         };
         let wrote = writer.join().ok().and_then(Result::ok).is_some();
-        let bytes = reader.join().ok().and_then(Result::ok).ok_or_else(failure)?;
-        let said = complaint.and_then(|t| t.join().ok()).unwrap_or_default();
-        if bytes.len() > output_limit { return Err(TOO_MUCH.into()); }
-        if !wrote || !status.map(|s| s.success()).unwrap_or(false) {
-            let said = String::from_utf8_lossy(&said).trim().to_string();
-            return Err(if report && !said.is_empty() { said } else { failure() });
+        let stdout = reader.join().ok().and_then(Result::ok).ok_or_else(failure)?;
+        let stderr = complaint.and_then(|t| t.join().ok()).unwrap_or_default();
+        Ok(Piped { ok: wrote && status.map(|s| s.success()).unwrap_or(false), stdout, stderr })
+    }
+
+    /// For the database browser: no header row, errors reported (they name
+    /// the failing line, which is how a save says which change failed), and
+    /// room for a page of rows or a batch of edits. Every value in the SQL it
+    /// is given is built by `database`, never typed.
+    ///
+    /// The answer does not come back over `docker exec`'s stdout. docker-slim
+    /// demultiplexes that stream one 8 KiB socket read at a time and drops a
+    /// frame that straddles two reads -- and in practice everything after
+    /// it -- while still exiting 0. A page of `char` (80 columns,
+    /// hex-encoded) is well over 8 KiB, so it arrived cut off at a varying
+    /// point, depending on how the reads happened to fall: a page that loaded
+    /// once could fail the next time, typically right after a save, while the
+    /// VM was busy starting the map server again.
+    ///
+    /// So mariadb writes its answer, and its errors, to files in `/backups` --
+    /// where `backup` already writes multi-megabyte dumps -- and they are read
+    /// from the host side, where nothing can cut them short. The script also
+    /// ends by selecting a marker, and an answer without it is refused as
+    /// incomplete rather than read as fewer rows.
+    pub fn tool_sql(&self, sql: &str) -> Result<String, String> {
+        self.require_private_sql()?;
+        if sql.len() > TOOL_SQL_LIMIT { return Err(TOO_LONG.into()); }
+        let tag = format!("db-browser-{}-{}", std::process::id(), crate::private_fs::random_hex(12)?);
+        let (out_name, err_name) = (format!("{tag}.out"), format!("{tag}.err"));
+        let backups = self.state.join("backups");
+        fs::create_dir_all(&backups).map_err(|e| e.to_string())?;
+        crate::private_fs::directory(&backups)?;
+        let script = format!("{sql}\n{}", end_marker_statement());
+        let command = format!(
+            "umask 077; {} --batch --raw --skip-column-names ragnarok > /backups/{out_name} 2> /backups/{err_name}",
+            self.database_client("mariadb")?
+        );
+        let args: Vec<String> = ["exec", "-i", DB, "sh", "-c", &command].iter().map(|s| s.to_string()).collect();
+        let run = self.piped(&args, script.as_bytes(), 64 * 1024, true, Duration::from_secs(60));
+        let fetch = |name: &str| -> Option<Vec<u8>> {
+            let host = backups.join(name);
+            if cfg!(windows) {
+                // No bind mount there: /backups is a named volume.
+                self.copy_out(DB, &format!("/backups/{name}"), &host).ok()?;
+            }
+            let bytes = fs::File::open(&host).ok().and_then(|f| {
+                let mut bytes = Vec::new();
+                f.take(TOOL_SQL_LIMIT as u64 + 1).read_to_end(&mut bytes).ok().map(|_| bytes)
+            });
+            let _ = fs::remove_file(&host);
+            bytes
+        };
+        let answer = fetch(&out_name);
+        let complaint = fetch(&err_name).unwrap_or_default();
+        if cfg!(windows) {
+            self.quiet(["exec", DB, "rm", "-f", &format!("/backups/{out_name}"), &format!("/backups/{err_name}")]);
         }
-        String::from_utf8(bytes).map_err(|_| failure())
+        let run = run?;
+        if !run.ok {
+            let mut said = String::from_utf8_lossy(&complaint).trim().to_string();
+            if said.is_empty() {
+                said = String::from_utf8_lossy(&run.stderr).trim().to_string();
+            }
+            return Err(if said.is_empty() { PRIVATE_SQL_FAILED.to_string() } else { said });
+        }
+        let answer = answer.ok_or("The database answered, but its answer could not be read back from the backups folder.")?;
+        if answer.len() > TOOL_SQL_LIMIT { return Err(TOO_MUCH_FOR_TOOL.into()); }
+        let answer = String::from_utf8(answer).map_err(|_| PRIVATE_SQL_FAILED.to_string())?;
+        strip_end_marker(&answer).map(str::to_string)
     }
 
     pub fn require_private_sql(&self) -> Result<(), String> {
@@ -532,4 +644,21 @@ fn copy_dir_all(from: &Path, to: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_answer_counts_only_when_it_reaches_its_end_marker() {
+        let end = format!("{END_MARKER}\n");
+        assert_eq!(strip_end_marker(&format!("c\t1\nr\t30\n{end}")).unwrap(), "c\t1\nr\t30\n");
+        assert_eq!(strip_end_marker(&end).unwrap(), "");
+        assert_eq!(strip_end_marker(&format!("a\r\n{END_MARKER}\r\n")).unwrap(), "a\r\n");
+        for cut in ["", "c\t1\nr\t3", "c\t1\nragnarok-db-answer-comp", "c\t1\nxragnarok-db-answer-complete\n"] {
+            assert!(strip_end_marker(cut).is_err(), "{cut:?}");
+        }
+        assert_eq!(end_marker_statement(), format!("SELECT '{END_MARKER}';\n"));
+    }
 }

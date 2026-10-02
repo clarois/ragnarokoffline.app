@@ -26,7 +26,7 @@ const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const HPP = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.hpp');
 const STATE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'core', 'population_shell_state.hpp');
-const PATCH6 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0006-companion-gear-return.patch');
+const PATCH6 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0007-companion-gear-return.patch');
 
 const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 const hpp = fs.readFileSync(HPP, 'utf8').replace(/\r\n/g, '\n');
@@ -36,7 +36,7 @@ const patch6 = fs.readFileSync(PATCH6, 'utf8').replace(/\r\n/g, '\n');
 test('recall can target a single companion index', () => {
 	assert.match(hpp, /population_engine_recall_companions\(map_session_data \*owner, uint32_t only_index = 0\)/,
 		'recall needs an optional only_index so one companion can be recalled alone');
-	assert.match(src, /WHERE owner_account_id=%u AND active=1%s/, 'the recall query must be able to filter by shell_index');
+	assert.match(src, /WHERE owner_account_id=%u AND owner_char_id=%u AND active=1%s/, 'the recall query must be able to filter by shell_index');
 	assert.match(src, /only_index != 0 \? " AND shell_index=" : ""/, 'the filter must be applied from only_index');
 });
 
@@ -85,7 +85,7 @@ test('the post-recall resync registers locally instead of asking the char server
 // memcpy's the char server's party over the map's own, then clears data[]: the
 // char server has no companion rows (a shell has no `char` row), so every rebuild
 // dropped them. The companions now have to be re-asserted after each rebuild.
-const PATCH5 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0005-population-companion-persistence.patch');
+const PATCH5 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0006-population-companion-persistence.patch');
 const patch5 = fs.readFileSync(PATCH5, 'utf8').replace(/\r\n/g, '\n');
 
 test('a drafted companion is added to the shell registry', () => {
@@ -165,7 +165,7 @@ test('both spawn paths share one row-creating function', () => {
 	// Recruit and draft must not be able to drift again - this is the third
 	// omission of the same class on this project (registry push, then party
 	// registration, now the insert).
-	assert.match(src, /bool population_engine_persist_companion_row\(map_session_data \*sd, uint32_t owner_account\)/,
+	assert.match(src, /bool population_engine_persist_companion_row\(map_session_data \*sd, const map_session_data \*owner\)/,
 		'the shared row insert is missing');
 	const calls = (src.match(/population_engine_persist_companion_row\(/g) || []).length;
 	assert.ok(calls >= 3, `expected the helper to be declared and called from both paths, saw ${calls} mentions`);
@@ -246,6 +246,6 @@ test('the re-assert matches the owner character, not just the account', () => {
 	const body = fn.slice(0, 3500);
 	assert.match(body, /owner->status\.party_id != party_id/,
 		'the account-resolved session must be rejected when it is in another party');
-	assert.match(body, /cand->status\.account_id == sd->pop\.companion_owner_account/,
+	assert.match(body, /pop_companion_owned_by\(sd, cand\)/,
 		'and the party must be scanned for the right real member');
 });

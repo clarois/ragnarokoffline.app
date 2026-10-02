@@ -1,0 +1,36 @@
+{
+  "name": "blaze-shield",
+  "version": "1.0.0",
+  "author": "BlaXun, Ragnarok Offline",
+  "description": "Make Blaze Shield (NJ_KAENSIN) a real Ninja build. Each option has its own checkbox: drain bonuses on every pillar hit, Hylozoist Card's polymorph on every pillar hit, and pillars that hold monsters in place instead of letting them walk through.",
+  "requires": {
+    "app": ">=1.4.3",
+    "era": "any"
+  },
+  "tags": ["blaze-shield", "lua", "ninja"],
+  "icon": "images/icon.png",
+  "screenshots": ["images/pin.png"],
+  "settings": [
+    {
+      "key": "drain",
+      "type": "boolean",
+      "default": true,
+      "label": "Drain on every pillar hit",
+      "description": "HP/SP drain bonuses (Moonlight Dagger's SP drain and the rest) fire on each pillar hit, not only on weapon attacks."
+    },
+    {
+      "key": "classchange",
+      "type": "boolean",
+      "default": true,
+      "label": "Hylozoist Card on every pillar hit",
+      "description": "Hylozoist Card's polymorph rolls on each pillar hit. Bosses and status-immune monsters are never changed."
+    },
+    {
+      "key": "pin",
+      "type": "boolean",
+      "default": false,
+      "label": "Pillars hold monsters",
+      "description": "A monster stepping onto a pillar is hit at once and held there until the pillar burns out, so fast monsters cannot walk through the field. Endure and boss monsters still walk on."
+    }
+  ]
+}

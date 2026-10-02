@@ -1,0 +1,10 @@
+-- Which headgear sprite view id 5001 (Moon_Ribbon's View:) uses: the
+-- Ribbon's. Headgear sprite names are the client's own Korean file names,
+-- read as raw bytes, so this file is saved in CP949 -- a UTF-8 copy would
+-- name a file that is not there, and the ribbon would be invisible.
+--
+-- A headgear with art of its own ships data/sprite/accessory/<sex>/<sex>_<name>.spr
+-- and names "_<name>" here (an ASCII name needs no CP949).
+AccNameTable = {
+	[5001] = "_¸®º»",
+}

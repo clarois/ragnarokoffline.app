@@ -6,7 +6,7 @@ rebuild, no compiler, no Docker.
 ```
 <app data>/state/mods/my-mod/
 ├── mod.json     name, version, author, description, what it requires
-├── db/          server tables: mob stats, item stats, drops, skills
+├── db/          server tables: mob stats, item stats, drops, skills — new ones too
 ├── npc/         server scripts: NPCs, warps, monster spawns, quests
 ├── lua/         skill hooks: damage formulas, accuracy, what a hit does
 ├── conf/        a few server settings, from a short allowlist
@@ -79,7 +79,60 @@ mod safe to hand to a stranger:
 
 `"after": ["other-mod"]`, beside `requires`, is about precedence rather than
 need: when both are on, this mod is applied later and wins where the two
-disagree. [Publishing](mods/publishing.md) covers both.
+disagree. [Adding a mod to the registry](MOD_REGISTRY.md) covers both.
+
+`"kind": "skin"` or `"kind": "cursor"` marks a mod as one of a set of which
+only one is on at a time: switching it on switches every other mod of the same
+kind off. It is for mods that replace the same files as each other — every UI
+skin overlays the whole interface folder — where two at once would be a
+patchwork. Any other value is refused by name; leave it out for everything
+else. See [UI skins](#ui-skins). (An app from before
+this key ignores it, so a skin still loads there, just without the others
+being switched off.)
+
+### renewalFolder / prerenewalFolder — one mod for both eras
+
+Some files only work in one era. An item script that calls a renewal-only
+command, a monster with renewal-only stats, an NPC that warps to a renewal map:
+in the other era the server refuses the table or the script and says so on
+every start. `requires.era` keeps such a mod out of the other era entirely.
+When most of the mod works in both and only a few files differ, name a folder
+for each era instead:
+
+```json
+{
+  "name": "my-island",
+  "renewalFolder": "renewal",
+  "prerenewalFolder": "pre-renewal"
+}
+```
+
+```
+my-island/
+├── mod.json
+├── db/item_db.yml              both eras, unless the era folder has its own
+├── npc/ferry.txt               both eras
+├── renewal/
+│   ├── db/item_db.yml          renewal only: replaces db/item_db.yml
+│   └── npc/renewal-quest.txt   renewal only: added to npc/
+└── pre-renewal/
+    └── db/item_db.yml          pre-renewal only: replaces db/item_db.yml
+```
+
+An era folder is laid out like the mod itself, with the same `db/`, `npc/`,
+`conf/`, `lua/`, `data/`, `System/`, `BGM/` and `client/` folders, and
+everything in this guide applies inside it. While its era is running it is
+applied **over** the mod's own folders. A file at the same path replaces the
+mod's copy (`renewal/db/item_db.yml` is the item table, not an addition to
+`db/item_db.yml`), and anything else is added. The other era's folder is not
+read at all. You may declare either key or both; with neither, nothing changes.
+Switching era in Settings is enough to switch which copy is in effect.
+
+Each value must be a folder inside the mod, written with forward slashes. It
+cannot be one of the layer folders themselves (`"db"` is refused), and a name
+that is not there is refused with the reason. An app from before 1.4.3 ignores
+both keys and reads only the mod's own folders, so a mod relying on them should
+say `"requires": { "app": ">=1.4.3" }`.
 
 A refused mod is **named in Settings, next to the ones that loaded, with the
 reason**:
@@ -181,12 +234,21 @@ the mod is switched off or an older app is running it. A boolean arrives as
 and a string as a string. These are the same checked values the client gets,
 and they change on **Apply**, like everything else about the server.
 
-Only `groups.yml`, `atcommands.yml` and files under `npc/` can be switched this
-way. Put conditional NPC scripts under `npc/when/<setting key>/`; ordinary
-files under `npc/` remain unconditional. A folder named for a setting the mod
-does not declare, or for one that is not a boolean, is ignored and the log says
-so. See
-[`mods/player-commands`](../mods/player-commands).
+The same `when/<setting key>/` folder works in four layers:
+
+| Folder | What it switches |
+|---|---|
+| `conf/when/<key>/` | `groups.yml` and `atcommands.yml` only |
+| `npc/when/<key>/` | scripts, loaded only while the setting is on |
+| `db/when/<key>/` | tables, added to the mod's own copy of the same table (1.4.3) |
+| `lua/when/<key>/` | skill and item hooks, run only while the setting is on (1.4.3) |
+
+Files outside `when/` stay unconditional. A folder named for a setting the mod
+does not declare, or for one that is not a boolean, is ignored, and the log
+says so. See [`mods/player-commands`](../mods/player-commands), and
+[Several hooks in one mod](#several-hooks-in-one-mod-each-with-its-own-checkbox)
+for `lua/` and `db/`. Inside an [era folder](#renewalfolder--prerenewalfolder--one-mod-for-both-eras)
+the same switches work the same way.
 
 ### settingsPage — a settings window of your own
 
@@ -238,12 +300,21 @@ options in the Mods tab as before. See
 
 ## Installing a mod
 
-**Settings → Mods → Install a mod…** takes a folder or a `.zip` and puts it in
-the right place. A zip must contain exactly one folder, named for the mod;
-anything with two top-level folders, or with a path that would escape the mods
-directory, is refused rather than unpacked.
+**Settings → Mods → Install a mod…** takes a folder, a `.zip` or a `.rar` and
+puts it in the right place. An archive must contain exactly one folder, named
+for the mod; anything with two top-level folders, a link, or a path that would
+escape the mods directory, is refused rather than unpacked.
+
+What the file is decides how it is opened, not its extension: a RAR named
+`.zip` opens as a RAR. A zip opens everywhere. A RAR is opened with
+libarchive's `bsdtar`, which macOS and Windows 10 and 11 have built in; on
+Linux install it first (`libarchive-tools` on Debian and Ubuntu, `libarchive`
+on Arch and SteamOS) or unpack the archive and choose the folder.
 
 Or do it by hand: drop the folder in the mods directory yourself. Same result.
+
+A UI skin or a cursor pack in the official client's format is not a mod yet;
+**Install a UI skin…** makes it one. See [UI skins](#ui-skins).
 
 A mod adds scripts and tables to your server and can run JavaScript in the game
 window. Installing one is running somebody's code — install ones you trust.
@@ -400,6 +471,117 @@ every key, how the headcount is divided between maps, which tables are still
 unreachable, and the two ways this data fails without the server saying
 anything.
 
+## Making new things: items, monsters, and how they look
+
+A mod can add items and monsters that exist in no client and no server, with
+ids of their own. Nothing is replaced: every stock item and monster keeps its
+own entry. A new thing needs up to three layers: `db/` for what it *does*,
+`System/` for what the client *calls* it and *draws*, and `npc/` to put it in
+the world.
+
+[`examples/mods/custom-monster`](../examples/mods/custom-monster) has one of
+each: a monster, a headgear with its own look, and a card that casts a spell.
+
+### Ids
+
+| | Use | Why there |
+|---|---|---|
+| Monsters | **25000–31998** | rAthena accepts 1001–3998 and 20021–31998 and keeps 3999–20020 for player clones. Its own monsters reach about 22700 and grow with each update. |
+| Items | **50000–99999** | Item ids are 32-bit. Stock items sit below 32409 and from 100000 up, so this block is empty. |
+| Headgear/garment looks (`View:`) | **5000+** | Stock view ids stop at 2822. |
+
+Pick a number in the middle rather than the first one, since other authors
+start at the start too. If two enabled mods define the same id, Settings →
+Mods says so under the one whose version isn't in effect.
+
+### A new item
+
+`db/item_db.yml` says what it is and does; `System/itemInfo.lua` holds its
+name, description and icon, **only your entries**. The app lists your table
+ahead of the client's own, so nothing else changes.
+[`examples/mods/custom-item`](../examples/mods/custom-item) explains the
+details: which icon a resource name gives you, and how to rename a stock
+item.
+
+What an item *does* is its `Script:`, rAthena's item script. The common
+forms:
+
+| Script | Effect |
+|---|---|
+| `bonus bStr,5;` `bonus bMaxHPrate,10;` | stats (`doc/item_bonus.txt` in rAthena lists them all) |
+| `bonus2 bAddRace,RC_Undead,20;` | +20% damage against a race |
+| `bonus3 bAutoSpell,"AS_SONICBLOW",5,50;` | 5% chance to cast Sonic Blow Lv 5 **when you attack** |
+| `bonus3 bAutoSpellWhenHit,"CR_REFLECTSHIELD",1,30;` | 3% chance to cast Reflect Shield **when you are hit** |
+| `bonus4 bAutoSpellOnSkill,"MG_FIREBOLT","MG_COLDBOLT",3,200;` | 20% chance to follow Fire Bolt with Cold Bolt Lv 3 |
+| `autobonus "{ bonus bAtk,50; }",10,5000;` | 1% on attack: +50 ATK for 5 seconds |
+| `itemheal rand(120,180),0;` | a potion |
+
+The chances in `bAutoSpell…` and `autobonus` are out of 1000. Anything a bonus can't express
+("only below 30% HP", "every fifth hit") is what [Lua](#lua--changing-how-a-skill-works)
+is for.
+
+### A new monster
+
+`db/mob_db.yml` with the new id, and a spawn in `npc/`:
+
+```
+prt_fild08,0,0	monster	Lunar Poring	25001,8,60000,30000
+```
+
+What it looks like is up to you:
+
+- **A stock monster's look, no client change:** `db/mob_avail.yml` tells the
+  server to show it as another monster.
+  ```yaml
+  Body:
+    - Mob: LUNAR_PORING
+      Sprite: POPORING
+  ```
+  The server sends Poporing's id, so the client never learns the new one:
+  the monster's name still comes from the server, but tools that go by id
+  see the stock monster.
+- **Its own entry on the client:** `System/jobname.lub` maps the new id to a
+  sprite, with only your rows:
+  ```lua
+  JobNameTable = {
+  	[25001] = "LUNAR_PORING",
+  }
+  ```
+  `LUNAR_PORING` can be a stock sprite's name (`POPORING`), or your own art
+  in `data/sprite/monster/lunar_poring.spr` and `.act`. The official format,
+  `System/npcidentity.lub` defining `jobtbl.JT_LUNAR_PORING = 25001` with
+  `[jobtbl.JT_LUNAR_PORING]` in `jobname.lub`, works too. Add to `jobtbl`
+  rather than replacing it.
+
+### A new look for headgear, garments and weapons
+
+An equipment item's `View:` is a number; the client turns it into a sprite
+through a table, and a mod adds rows to those tables the same way:
+
+| Equipment | Files in `System/` | Art, if it's your own |
+|---|---|---|
+| Headgear | `accname.lub` (+ `accessoryid.lub` for named ids) | `data/sprite/accessory/남/남_<name>.spr`, `여/여_<name>.spr` |
+| Garments | `spriterobename.lub` (+ `spriterobeid.lub`) | `data/sprite/robe/…` |
+| Weapons | `weapontable.lub` | `data/sprite/human/…` |
+
+```lua
+AccNameTable = {
+	[5001] = "_리본",   -- Moon_Ribbon's View: 5001 looks like the Ribbon
+}
+```
+
+**Save these three tables in CP949, not UTF-8,** whenever a name in them is
+Korean. They name the client's own sprite files byte for byte; a UTF-8 copy
+names a file that isn't there and the item is invisible on you. An ASCII
+name for your own art has no such problem. The sex folders and file prefix
+(`남`, `여`) have no ASCII alias yet.
+
+### Checking your work
+
+**Settings → Tools → Item browser** and **Monster browser** read the same
+tables the client does, your mods' included: a new item appears with its
+name and icon, and a new monster with its sprite and drops.
+
 ## npc/ — adding things to the world
 
 Every `.txt` under `npc/` is loaded as an rAthena script. That covers NPCs,
@@ -469,13 +651,16 @@ rather than where it stands.
 
 See [`examples/mods/quest-npc`](../examples/mods/quest-npc).
 
-## lua/ — changing how a skill works
+## lua/ — changing how a skill or item works
 
-`db/` changes a skill's numbers: its cast time, cooldown, SP cost, element,
-hit count, how long its status lasts. What it cannot change is the **formula**
-— how much damage a skill does, from what — or what happens when it hits.
-Those are C++ in the server. A mod's `lua/` folder reaches them without a
-change to the server.
+`db/` changes a skill's or item's numbers: cast time, cooldown, SP cost,
+element, hit count, how long its status lasts. What it cannot change is the
+**formula** — how much damage a skill does, from what — or what happens
+when a hit lands or an attack is received. Those are C++ in the server. A
+mod's `lua/` folder reaches them without a change to the server, from two
+sides: `skill(...)` hooks the damage calculation and outcome of a specific
+skill, and `item(...)` hooks any attack by or against the wearer of a
+specific piece of equipment.
 
 ```lua
 -- my-mod/lua/firebolt.lua: Fire Bolt scales with INT as well as its level.
@@ -487,19 +672,88 @@ skill("MG_FIREBOLT", {
 ```
 
 Every `.lua` file in `lua/` (subfolders too) runs once when the server
-starts, in the same order mods are applied, so where two mods hook the same
-part of the same skill the later one wins — but only that part: one mod's
-`ratio` and another's `on_hit` on the same skill both apply. **Apply**
-restarts the server, so an edited file takes effect then.
+starts, in the same order mods are applied. **Apply** restarts the server,
+so an edited file takes effect then.
 
-### The hooks
+**Two mods can hook the same part of the same skill or item.** Both run,
+in ascending priority order — a mod sets `priority = N` (0..10, default 5)
+in the registration table to say where it goes in the chain; lower runs
+first, ties broken by mod load order (the alphabetical order of folder
+names). `ratio`, `hit` and `element` thread the value through: each hook
+sees the previous one's return as `stock`, so the chain composes. `on_hit`,
+`on_attack` and `on_hit_taken` run every hook; each may queue its own
+drain/heal/status/polymorph actions, which are applied together once the
+hit is dealt. A hook that fails is switched off and the rest of the chain
+carries on.
 
-`skill("<AegisName>", { ... })` takes any of four functions. The name is the
-one in `skill_db.yml` — `MG_FIREBOLT`, not "Fire Bolt".
+```lua
+-- my-mod/lua/firebolt.lua: run after mods using the default priority of 5.
+skill("MG_FIREBOLT", {
+  priority = 7,
+  ratio = function(c, stock) return stock + c.caster.int * 2 end,
+})
+```
+
+A mod that registers twice for the same (skill, hook) or (item, hook)
+replaces its own previous entry rather than stacking against itself. The
+`priority` key is optional: omit it and the default (5) is used. Priority
+is per call, applying to every hook declared in that call; a mod wanting
+different priorities for two hooks makes two calls.
+
+### Several hooks in one mod, each with its own checkbox
+
+One mod can carry several independent hooks and let the player choose which
+are on. Declare a yes/no setting for each, and put each hook under
+`lua/when/<setting key>/`. Settings → Mods draws the checkboxes, and **Apply**
+loads exactly the ticked ones:
+
+```json
+{
+  "name": "blaze-shield",
+  "requires": { "app": ">=1.4.3" },
+  "settings": [
+    { "key": "drain", "type": "boolean", "default": true,
+      "label": "Drain", "description": "Pillar hits drain HP and SP for the ninja." },
+    { "key": "classchange", "type": "boolean", "default": false,
+      "label": "Class change", "description": "Pillar hits can turn a monster into another." },
+    { "key": "pin", "type": "boolean", "default": false,
+      "label": "Pin on entry", "description": "Monsters cannot walk through the pillars." }
+  ]
+}
+```
+
+```
+blaze-shield/
+├── mod.json
+├── lua/
+│   ├── when/drain/drain.lua               skill("NJ_KAENSIN", { on_hit = ... })
+│   └── when/classchange/classchange.lua   skill("NJ_KAENSIN", { on_hit = ... })
+└── db/
+    └── when/pin/extension_db.yml          Enabled: true for blaze_shield_knockback
+```
+
+Each part is loaded under its own name, `<mod>/<setting key>` (`blaze-shield/drain`
+above). That is the name its errors are logged under, and it is why two parts
+of one mod can hook the same skill: they chain like two mods, in `priority`
+order, instead of the second replacing the first as a second registration
+from the same file would. Files directly in `lua/` are loaded as the mod itself,
+as before, and run before its switched parts. `setting("blaze-shield", "<key>", ...)`
+still reads the mod's settings from any of them.
+
+`db/when/<key>/` works the same way for tables. A switched part's copy of a
+table is **added** to the mod's own copy rather than replacing it, the way two
+mods' copies are combined. That makes it the place for a server extension the
+player should be able to turn on: ship `db/when/<key>/extension_db.yml` with
+just that extension's `Id` and `Enabled: true`.
+
+### `skill("<AegisName>", { ... })` — the four skill hooks
+
+Takes any of four functions, keyed by the name in `skill_db.yml` —
+`MG_FIREBOLT`, not "Fire Bolt".
 
 | Hook | Called | Return |
 |---|---|---|
-| `ratio(c, stock)` | when the skill's damage is calculated | the skill's damage percentage; `stock` is the server's own, so `stock * 2` doubles it |
+| `ratio(c, stock)` | when the skill's damage is calculated | the skill's damage percentage; `stock` is the running value — the server's own on the first hook in the chain, the previous hook's return thereafter |
 | `hit(c, stock)` | when a weapon skill's accuracy is calculated | the hit rate bonus |
 | `element(c, stock)` | when the attack's element is decided | an element, e.g. `const("ELE_FIRE")` |
 | `on_hit(c)` | on every hit, once its damage is known | nothing; call the actions below |
@@ -510,39 +764,134 @@ given their own C++ class, which includes every damaging player skill. For
 the rest, the server says so in the log when it starts, and `on_hit` still
 works.
 
-`c` describes the hit:
+### `item("<AegisName>", { ... })` — the two equipment hooks
 
-| | |
+Takes any of two functions, keyed by the item's AegisName in
+`item_db.yml` — `KNIFE`, `MOONLIGHT_DAGGER`, or a custom item a mod has
+added. The hook fires for every attack by or against a unit **wearing**
+that item; a mob or a player with the item in inventory but not equipped
+does not fire it.
+
+| Hook | Called | Return |
+|---|---|---|
+| `on_attack(c)` | when the wearer attacks (skill or normal, hit or miss), once damage is finalized | nothing; call the actions below |
+| `on_hit_taken(c)` | when an attack lands or misses against the wearer, once damage is finalized | nothing; call the actions below |
+
+Both fire for weapon attacks and skill attacks alike; `c.skill_id` is `0`
+for a normal attack and the skill's id otherwise. Both fire for misses and
+dodges too — gate on `c.connected` and `c.damage` if your hook only cares
+about damage that landed. An item equipped in several slots (an accessory
+in both rings) fires its hooks once per attack, not once per copy.
+
+### What `c` describes
+
+Common to every hook (skill *and* item):
+
+| Field | Means |
 |---|---|
-| `c.skill`, `c.skill_id`, `c.skill_lv` | the skill and the level used |
+| `c.skill` | the skill's AegisName, or `""` for a normal attack |
+| `c.skill_id`, `c.skill_lv` | the skill id and the level used; `0` for a normal attack |
 | `c.caster`, `c.target` | the two units (below) |
-| `c.damage` | `on_hit` only: the damage this hit deals |
 | `c:chance(n)` | true `n` times in 10000, from the server's own random numbers |
 
-and each unit has `id`, `kind` (`"pc"`, `"mob"`, `"homun"`, `"merc"`,
-`"elemental"`, `"pet"`, `"npc"`), `name`, `level`, `str` `agi` `vit` `int`
-`dex` `luk`, `hp` `maxhp` `sp` `maxsp`, `race`, `element`, `size`, `boss`,
-`dead`, and `has_status("SC_…")`. A player also has `job`, `job_level` and
-`classchange` (the Hylozoist Card bonus); a monster has `mob_id`. They are a
-copy: changing them changes nothing.
+Additional fields in a damage hook (`on_hit`, `on_attack`, `on_hit_taken`):
 
-In `on_hit`, `c` can also ask for something to happen. It happens once the hit
-has been dealt, and not at all if the unit has died by then:
-
-| Action | |
+| Field | Means |
 |---|---|
-| `c:drain()` | the caster's HP/SP drain bonuses, on this hit's damage — what weapon attacks already do |
-| `c:heal(hp, sp)` | restores the caster |
-| `c:status("SC_STUN", rate, ms, val1, who)` | a status on `"target"` (default) or `"caster"`; `rate` is out of 10000 |
-| `c:polymorph()` | Hylozoist Card's effect: the target becomes a random monster. Never a boss |
+| `c.damage` | the final damage this hit deals (0 if it did not connect) |
+| `c.connected` | `true` if damage was applied, `false` if dodged, missed or blocked to zero |
+| `c.critical` | `true` if the attack was a critical |
+| `c.element` | the attack's element (an `ELE_*` constant) |
+| `c.weapon_type` | `"weapon"`, `"magic"` or `"misc"` — the `BF_WEAPON`/`BF_MAGIC`/`BF_MISC` class |
+
+Each unit (`c.caster`, `c.target`) has:
+
+| Field | Means |
+|---|---|
+| `id`, `kind`, `name`, `level` | `kind` is `"pc"`, `"mob"`, `"homun"`, `"merc"`, `"elemental"`, `"pet"` or `"npc"` |
+| `str` `agi` `vit` `int` `dex` `luk` | base stats |
+| `hp` `maxhp` `sp` `maxsp` | current and maximum vitals |
+| `race`, `element`, `size`, `boss`, `dead` | the usual flags; `boss` is true for MVPs |
+| `has_status("SC_...")` | status probe, returns a boolean |
+
+A **player** unit also has:
+
+| Field | Means |
+|---|---|
+| `job`, `job_level` | job id and job level |
+| `classchange` | the Hylozoist Card bonus |
+| `weapon_id`, `shield_id`, `armor_id`, `shoes_id`, `robe_id` | equipped item ids; `0` when the slot is empty |
+| `helm_top_id`, `helm_mid_id`, `helm_bottom_id` | the three head slots |
+| `accessory_1_id`, `accessory_2_id` | the two accessory slots |
+
+A **monster** unit also has:
+
+| Field | Means |
+|---|---|
+| `mob_id` | the `mob_db.yml` id |
+
+Unit tables are a snapshot: changing them changes nothing on the server.
+
+### Actions you can request
+
+In any damage hook (`on_hit`, `on_attack`, `on_hit_taken`), `c` can ask for
+something to happen. It happens once the hit has been dealt, and not at all
+if the unit has died by then:
+
+| Action | What it does |
+|---|---|
+| `c:drain()` | apply the attacker's HP/SP drain item bonuses to this hit's damage — what a weapon attack already does. Direction is fixed (attacker drains defender) |
+| `c:heal(hp, sp, who)` | restore a unit; `sp` defaults to `0`; `who` is `"caster"` (default, the attacker) or `"target"` (the defender). An `on_hit_taken` hook that restores its wearer passes `"target"` |
+| `c:status("SC_STUN", rate, ms, val1, who)` | start a status; `who` is `"target"` (default) or `"caster"`; `rate` is out of 10000; `val1` defaults to `1` |
+| `c:cast("MG_FIREBOLT", level, who)` | cast a skill the way `bAutoSpell` does, at `"target"` (default) or `"caster"`. No Lua hook runs during that cast, so a hook that casts a bolt cannot set itself off again. A ground skill's later ticks (Storm Gust) do run hooks: an `on_attack` that casts one should check `c.skill_id` |
+| `c:polymorph()` | Hylozoist Card's effect: the target becomes a random monster. Bosses and status-immune monsters are left alone |
 
 Three functions work anywhere:
 
-| | |
+| Function | What it does |
 |---|---|
 | `const("SC_STUN")` | any constant a server script can use: `SC_*`, `ELE_*`, `RC_*`, `Job_*` |
 | `setting("<mod>", "<key>", default)` | a [setting](#settings--options-the-app-renders-for-you) from Settings → Mods. Booleans are `true`/`false` and numbers keep their fractions, unlike in an NPC script |
 | `log(...)` | a line in the map server's log, with your mod's name on it |
+
+### Example: a weapon that drains and strikes back
+
+```lua
+-- my-mod/lua/vampiric_blade.lua -- an item() hook combining both directions.
+item("VAMPIRIC_BLADE", {
+  priority = 5,
+
+  on_attack = function(c)
+    -- Honour the weapon's drain bonuses on every connecting hit, and
+    -- heal an extra 10% of the damage on a critical.
+    if not c.connected then return end
+    c:drain()
+    if c.critical then c:heal(c.damage // 10, 0) end
+  end,
+
+  on_hit_taken = function(c)
+    -- Someone critted me while I was holding this. Stun them.
+    if c.critical then
+      c:status("SC_STUN", 10000, 2000, 1, "caster")
+    end
+  end,
+})
+```
+
+Four complete worked examples, each showing a different gating pattern
+on `item()`:
+
+| Mod | Hooks | Fires on | Shows |
+|---|---|---|---|
+| [`vampiric-blade`](../examples/mods/vampiric-blade) | `on_attack` + `on_hit_taken` on a weapon | both directions | lifesteal, crit heal, retaliation stun on being critted |
+| [`thorns-plate`](../examples/mods/thorns-plate) | `on_hit_taken` on armor | **physical** hits only (`c.weapon_type == "weapon"`) | filtering by attack type, delivering percent damage via `SC_BLEEDING` |
+| [`arcane-ward`](../examples/mods/arcane-ward) | `on_hit_taken` on an accessory | **magical** hits only (`c.weapon_type == "magic"`) | the opposite filter, routing a `c:heal` to `"target"` so the wearer gains SP |
+| [`mirage-cloak`](../examples/mods/mirage-cloak) | `on_hit_taken` on a garment | hits that **missed** (`c.connected == false`) | reacting to dodges, picking a random status with `math.random`, routing it to `"caster"` |
+
+The four together cover the three questions an `on_hit_taken` hook
+usually wants to answer: *what kind of attack was it* (`c.weapon_type`),
+*did it land* (`c.connected`, `c.critical`), and *who did what to whom*
+(`c.caster`, `c.target`, with every equip slot's item id on both).
 
 ### What a script cannot do
 
@@ -574,8 +923,9 @@ needs anything more than a mod:
 |---|---|---|
 | A monster, item, drop, skill's cast time/cooldown/cost/duration | `db/` | Only the fields you name |
 | An NPC, a quest, a warp, a shop, what happens on an event | `npc/` | rAthena's script language |
-| A skill's damage formula, accuracy or element | `lua/` | `ratio`, `hit`, `element` |
-| What a skill does when it hits: drain, heal, a status, polymorph | `lua/` | `on_hit` |
+| A skill's damage formula, accuracy or element | `lua/` | `skill("...", { ratio, hit, element })` |
+| What a skill does when it hits: drain, heal, a status, polymorph | `lua/` | `skill("...", { on_hit })` |
+| What an equipped weapon or piece of armor does on an attack or an incoming hit | `lua/` | `item("...", { on_attack, on_hit_taken })` |
 | A server setting from the allowlist | `conf/` | |
 | Switch on one of the fork's server extensions, or set its values | `db/extension_db.yml` | `@extensions` in game lists them; `@extensioninfo <id>` shows what one does |
 | How the client looks or behaves | `data/`, `System/`, `client/` | |
@@ -807,6 +1157,92 @@ for nothing.
   browser, which sniffs content rather than trusting the name, so a JPEG saved
   as `.bmp` works and is roughly a tenth of the size.
 
+## UI skins
+
+A UI skin is a `data/` mod over the client's interface folder,
+`data/texture/유저인터페이스/` — written `data/texture/ui/`. roBrowser draws its
+windows' title bars, buttons, slots, tabs and scroll bars from the pictures
+there, the same names the official client uses, so the official client's skin
+format maps onto it almost one to one: a skin's root is that folder's root, and
+its `basic_interface/` is that folder's `basic_interface/`.
+
+**Settings → Mods → Install a UI skin…** does the conversion. Give it a skin
+folder — the one you would put in the official client's `skin/` directory — or
+a `.zip` or `.rar` of one, and it builds a mod named `skin-<name>`, switches it on, and
+switches whichever skin was on off. It is client-side only, so there is no
+server restart: restart the app to see it.
+
+Skins are often handed around flattened, or made for an older client than your
+GRF, so each picture is **placed against your GRF's own list of names**, read
+from the archive's file table:
+
+1. its own path, if the GRF has a file there (letter case does not matter);
+2. otherwise the root, if the GRF has that name at the root;
+3. otherwise `basic_interface/`, then `login_interface/`;
+4. otherwise the one other folder that has that name, if exactly one does.
+
+A picture that matches nothing is **left out and listed** — in the message
+Settings shows, and in full in `skin-import.txt` in the mod's folder. A file the
+client never asks for would sit in the overlay looking like part of the skin
+and do nothing. So is a second copy of a file already placed. Across 58
+community skins from 2016 this placed 98% of 15,068 pictures; what was left
+out is mostly buttons the client has since dropped or renamed
+(`btn_num*.bmp`, `btn_rec_*.bmp`, `btn_vip.bmp`) and files the skin's author
+had renamed by hand (`equipwin_bg3 (1).bmp`, `#shop.bmp`).
+
+Two things are left out on purpose:
+
+- **`option/`** holds the official client's per-skin choices — alternative
+  bars and buttons the player picks between in that client's own settings.
+  roBrowser has no such setting. To use one, copy its pictures over the mod's
+  own by hand.
+- Anything that is not a picture: read-me files, thumbnails.
+
+What a skin cannot change:
+
+- **Window bodies, fonts and text colours.** roBrowser draws those in CSS, not
+  from pictures. A skin mod can add a `client/index.js` that adopts a
+  stylesheet for them — see [client/](#client--restyling-the-client-itself).
+- **The login window, with most skins.** For the packet versions this app ships
+  the client draws a newer login window (`login_interface/bg_login.tga`,
+  `bt_start_*.bmp`) than any skin made before 2018 carries pictures for. The
+  game windows behind it are the ones a skin restyles.
+
+`"kind": "skin"` in `mod.json` is what makes a skin one of a set: see
+[mod.json](#modjson). A skin you lay out by hand works the same way;
+[`examples/mods/ui-skin`](../examples/mods/ui-skin) is three pictures.
+
+### Cursor packs
+
+The mouse pointer is a sprite, `data/sprite/cursors.spr` and `cursors.act`,
+and a mod that ships those two replaces it. Give **Install a UI skin…** a
+folder or archive holding them — most travel as a `.rar`, which macOS and
+Windows open with their built-in `tar`, and Linux with `bsdtar` if it is
+installed; otherwise unpack it and choose the folder — and it builds a
+`cursor-<name>` mod of `"kind": "cursor"`: one cursor pack at a time, alongside
+any skin. A skin folder that carries the two files keeps them in the skin.
+
+**The pack is only drawn while the game's Graphics option "Show official
+cursor" is on.** Without it the client draws the system pointer and never asks
+for the sprite. It is on unless somebody switched it off, and the mod the
+importer builds switches it back on for you: if the saved option is off, it
+turns it on and reloads the game page once. Its setting, *Turn on "Show
+official cursor"*, lets a player who wants it off keep it off. The client draws
+its cursor from the game's render loop, so expect the system pointer on the
+login screen and the pack's once you are in a map. (Thanks to
+Clarois, whose custom-cursor mod worked out how that option draws the sprite.)
+
+### Switching skins and the client's cache
+
+The client keeps every interface picture it has downloaded, by filename, and
+every skin replaces the same filenames — so a switch would show the old skin's
+pictures from that cache. It does not, because each enabled mod's *name* is
+part of the [overlay fingerprint](#the-client-caches-hard): switching from one
+skin to another, or switching skins off, moves it, and the app clears the
+client's cache on the next launch. Switching back to a skin you had before
+moves it back, which is a second clear and a short re-download, not a stale
+screen.
+
 ## BGM/ — music
 
 `BGM/` is merged over the client's own tracks, so a mod can add a piece of music
@@ -923,7 +1359,7 @@ items:
 ```lua
 -- my-mod/System/itemInfo.lua, saved as UTF-8
 tbl = {
-	[30001] = {
+	[50001] = {
 		unidentifiedDisplayName = "Bottle",
 		unidentifiedResourceName = "빨간포션",
 		identifiedDisplayName = "Islander Brew",
@@ -1043,8 +1479,8 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 
 | API | Contract |
 | --- | --- |
-| `api.on(event, listener, { replay: true })` | Returns an unsubscribe function; subscriptions also end at disposal. Events: `map:enter`, `map:leave`, `connection`, `ui:append`, `ui:remove`, `movement:clear`, `preferences:change`, and `item:use` (`{ itemId }`, the item's id, sent when the client asks to use it -- before the server says whether it worked). |
-| `api.snapshot()` | Frozen copy of map, connection, player position/HP/SP, selected target identity/name/HP, camera, packet version and movement counters. Server movement acknowledgements are read-only evidence. |
+| `api.on(event, listener, { replay: true })` | Returns an unsubscribe function; subscriptions also end at disposal. Events: `map:enter`, `map:leave`, `connection`, `ui:append`, `ui:remove`, `movement:clear`, `preferences:change`, `item:use` (`{ itemId }`, the item's id, sent when the client asks to use it -- before the server says whether it worked), and `exit` (`{ to, from }`, the player chose to leave -- [below](#leaving-the-game-and-remembered-logins--exit-and-apiaccount)). |
+| `api.snapshot()` | Frozen copy of map, connection, player position/HP/SP/name/`characterId`, selected target identity/name/HP, camera, packet version and movement counters. Server movement acknowledgements are read-only evidence. |
 | `api.components.current()` | Mounted `{ name, root, host }` descriptors. DOM references support styling; do not retain detached components after `ui:remove`. |
 | `api.preferences.get(key, fallback)` / `.set(key, value)` | JSON values isolated by plugin, browser and server origin. Storage failure is reported by `set`. Do not store secrets. |
 | `api.movement.register(name, onCancel)` | Returns `begin(x,y)`, `update(x,y)`, `end()`, `dispose()`. Screen-up is positive Y. Only a deliberate `begin` can take ownership; a stale `update` cannot. |
@@ -1053,7 +1489,173 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 | `api.actions.perform(name, payload)` | Native actions: `attack`, `target` (toggle auto-target), `interact`, `pickup`, `menu` (game options), `shortcut` with `{ index: 0…35 }`, `shortcut:assign` and `storage:transfer` (below), or `window` with an allowed `{ name }`. Returns whether the action was dispatched, not whether the server accepted it. |
 | `api.targeting.pick({ type, label })` | Raises the client's own target cursor and resolves to a frozen `{ classId, gid, name, kind }` for what the player clicks, or `null` for ESC, empty ground, a client too old to offer it, or the player starting a skill of their own (their action wins). `type` is `mob` (default), `player` or `any`; NPCs cannot be picked. One pick at a time: a new one cancels the last, and so does disposal. |
 | `api.server.command(text)` | Sends an `@` or `#` command as if the player had typed it in chat, so the server allows exactly what the player's group allows. Anything else is refused; returns whether it was sent. |
+| `api.graphics.registerPass({ name, fragment, uniforms, enabled })` | A full-screen GLSL pass over each frame, after bloom and before anti-aliasing. Returns a function that removes it; it also goes when the plugin does. See [Graphics passes](#graphics-passes). |
+| `api.ui.window({ id, title, width, height, resizable })` | A window of the plugin's own; fill its `body`. `show`, `hide`, `toggle`, `isOpen`, `setTitle`, `onClose`. See [Windows and server requests](#windows-and-server-requests). |
+| `api.items.search(text, limit)` / `.get(id)` / `.icon(id)` | Items from the client's own tables, mods' included: `{ id, name, description, slots }`, and an icon URL for an `<img>`. |
+| `api.server.request(command, text, { timeout })` | Ask the mod's server script for something; resolves with its answer. See [Windows and server requests](#windows-and-server-requests). |
 | `api.cleanup(fn)` | Register idempotent cleanup immediately after allocating a resource. The returned function can release it early. Runs on failure, scope replacement and page teardown. |
+| `api.screens.replace(screen, hook)` / `.stage(canvas)` / `.image(path)` | Draw the login screen, server list, character select or character creation yourself. See [below](#the-screens-before-the-game--apiscreens). |
+| `api.account.status()` / `.remember()` / `.resume()` / `.forget()` | A remembered login the page never holds, traded for a one-time login token. See [below](#leaving-the-game-and-remembered-logins--exit-and-apiaccount). |
+
+### Graphics passes
+
+`api.graphics.registerPass` runs a GLSL fragment shader over every frame of the
+3D view. Write `void main()` and set `fragColor`; everything else is provided:
+
+| | |
+|---|---|
+| `vUv` | where on screen, 0..1 |
+| `uTexture` | the frame so far |
+| `uDepth`, `uHasDepth`, `linearDepth(uv)` | the scene's depth, and the distance from the camera at a point. `uHasDepth` is false on WebGL 1, where there is none |
+| `uResolution`, `uTime` | pixels, seconds |
+| `uSunDirection`, `uSunColor`, `uAmbient` | the map's light |
+| `uLights[i]`, `uLightColors[i]`, `uLightCount` | up to 32 of the map's lamps and torches already on screen: `xy` position, `z` radius, nearest first |
+
+```js
+export default function init(parameters, api) {
+    api.graphics.registerPass({
+        name: 'Sepia',
+        fragment: `
+            uniform float uAmount;
+            void main() {
+                vec3 c = texture(uTexture, vUv).rgb;
+                vec3 sepia = vec3(dot(c, vec3(0.393, 0.769, 0.189)), dot(c, vec3(0.349, 0.686, 0.168)), dot(c, vec3(0.272, 0.534, 0.131)));
+                fragColor = vec4(mix(c, sepia, uAmount), 1.0);
+            }`,
+        uniforms: () => ({ uAmount: parameters.amount / 100 }),
+    });
+}
+```
+
+Some things have to be drawn inside the 3D scene rather than over the
+finished frame: grass among the models, other water, a shadow map. A
+**map hook** does that, with `api.graphics.hook`:
+
+```js
+api.graphics.hook({
+    name: 'Grass',
+    init(gl, map) { /* the map's ground is ready: build buffers */ },
+    render(stage, ctx) { if (stage === 'models') { /* draw */ } },
+    free(gl) { /* the map, or the mod, is going away: delete what you made */ },
+});
+```
+
+| | |
+|---|---|
+| `render(stage, ctx)` | each frame, at each stage: `'begin'` before the ground (draw into targets of your own, then `ctx.restoreTarget()`), `'ground'` the ground is drawn, `'models'` the map's models are drawn and the sprites not yet, `'end'` everything is drawn. With `replaces: ['water']`, also `'water'`, where you draw the water in the client's place |
+| `ctx` | `gl`, `modelView`, `projection`, `fog`, `light`, `tick`, `player` (position), `lightmap`, and `drawScene(view, projection)` (sky, ground and models again, depth tested, into whatever is bound), `drawModelsDepth(program)` (the models with your program: `aPosition`, `aTextureCoord`), `restoreTarget()`, `createProgram(vertex, fragment)` |
+| `init(gl, map)` | `map`: `name`, `width`, `height`; per ground cell `cellTexture`, `cellHeights`, `cellUv`; `textureNames`; `groundTextures()` (atlas, lightmap); `water()` (mesh, animation frames, waves, level; `null` without water); `altitude` (`cellType`, `cellHeight`, `TYPE`); `lights` |
+| `light(light)` | return `{ ambient: [r,g,b], diffuse: [r,g,b] }` to light this frame with a sun and sky of your own (a warmer sun, a cooler sky), `null` for the map's |
+| `free(gl)` | delete every buffer, texture, program and framebuffer you made: the map is going away, or your mod is |
+
+A hook that throws is taken out (and freed), and says so in the console; it
+never takes the frame down. Hooks go with the mod that added them.
+
+Lighting per map, for instance -- warm in the fields, the map's own
+underground:
+
+```js
+let sun = null;
+api.on('map:enter', ({ name }) => {
+    sun = name.includes('_dun') ? null : { ambient: [0.16, 0.2, 0.3], diffuse: [1.1, 0.92, 0.68] };
+});
+api.graphics.hook({ name: 'Sunlight', light: () => sun });
+```
+
+**glTF models in place of the map's.** `api.models.replace` draws a glTF
+2.0 model (`.glb`, or `.gltf` with its files beside it) wherever a map
+places one of the client's own models:
+
+```js
+const here = file => new URL(file, import.meta.url).href;   // beside index.js
+api.models.replace({
+    '나무잡초꽃/나무01.rsm': { url: here('tree_oak.glb'), size: 1, colors: { leafsGreen: [0.33, 0.55, 0.2] } },
+});
+```
+
+The key is the model's file under `data/model/` (Korean and all, `/` or
+`\`). Every placement, on every map, gets the glTF instead: fitted to the
+original's height (`size` multiplies that; `scale` sets an exact scale),
+standing on its base, turned as it was, and lit by the map's sun, ambient
+light and fog. `colors` replaces named materials' base colour. It applies
+to maps loaded after the call, so call it when the plugin starts.
+
+Supported: triangle meshes with normals and texture coordinates, node
+hierarchies, base colour factors and textures, alpha mask and blend. Not
+skins, animation, morph targets or extensions. Keep models light -- a
+field may place the same tree a few hundred times (they are instanced: one
+draw per material). `examples/mods/gltf-trees` replaces two field trees
+with Kenney's Nature Kit trees (CC0).
+
+**Higher-resolution textures.** A texture pack replaces a texture by
+shipping a larger file at the same path, e.g.
+`data/texture/필드바닥/prt_흙02.bmp` at 1024x1024 (the Korean path is the
+client's own; `link-assets` serves it the way the client asks for it). The
+client shrinks every ground texture to 256x256 in the map's atlas; with
+Graphics+ "High-resolution ground" on, the atlas is rebuilt at up to four
+times that, capped at 4096x4096 (every texture in the atlas is scaled, so a
+map with many textures gets 512). The gain shows close up: at the default
+zoom a ground tile is about 64 pixels on screen. Replace a map's whole set,
+including the hand-painted edge tiles, or the new texture's tile shows next
+to the old ones. `examples/mods/hd-ground-texture` replaces Prontera field
+dirt with a CC0 texture from ambientCG.
+
+Graphics+ is the worked example: its grass (`grass.js`), water and
+reflections (`water.js`, `reflection.js`) and shadows (`shadows.js`) are
+each a map hook. Its sunlight is the example above as settings: off
+everywhere by default, "Warm sunlight" to turn it on for every map, and
+"Sunlight per map" for the exceptions -- `izlude:100 prt_fild*:80` to warm
+only those maps, or `*_dun*:0` to leave dungeons alone when it is on
+everywhere.
+
+`uniforms()` is called every frame and returns your own uniforms by name
+(numbers, or arrays of 2, 3, 4 or 16). `enabled()` turns the pass off without
+removing it. A shader that doesn't compile is reported in the client log and
+stays off; it can't affect anything outside the picture.
+[`mods/graphics-plus`](../mods/graphics-plus) is a complete one: grading,
+lamp glow, haze, tone mapping and more in a single pass.
+
+### Windows and server requests
+
+`api.ui.window` gives a plugin a window in the game's style: a title bar to
+drag it by, a close button, a corner to resize it, and a `body` element that is
+the plugin's to fill. It sits in its own shadow root, so a mod's CSS and the
+game's never meet. The game remembers where the player left it, and typing in
+it doesn't move the character or fire shortcuts.
+
+```js
+const win = api.ui.window({ id: 'notes', title: 'Notes', width: 300, height: 200 });
+win.body.innerHTML = '<textarea style="width:100%;height:100%"></textarea>';
+win.show();
+```
+
+When a window needs something only the server knows, `api.server.request`
+asks the mod's own NPC script. The script binds an @command and answers with
+`dispbottom` lines in a fixed form; the client collects them, hands their text
+to the plugin, and keeps them out of chat:
+
+```c
+-	script	MyMod	-1,{
+OnInit:
+	bindatcmd "mymod", strnpcinfo(3) + "::OnQuery", 0, 99;
+	end;
+OnQuery:
+	// .@atcmd_parameters$[0] is the request's number; the rest is what the plugin sent.
+	dispbottom "@@reply " + .@atcmd_parameters$[0] + " 1/1 " + getmonsterinfo(.@atcmd_parameters$[1], MOB_LV);
+	end;
+}
+```
+
+```js
+const level = await api.server.request('mymod', 'Poring');   // "1"
+```
+
+A long answer can be split: `@@reply <n> 1/3 …`, `2/3 …`, `3/3 …`, and the
+parts are joined in order. A request that gets no answer rejects after its
+timeout (5 seconds by default). Only the server can send these lines, because
+anything a player says arrives with their name in front of it.
+[`mods/ingame-database`](../mods/ingame-database) is a complete one: an item
+and monster lookup window.
 
 Allowed window actions currently cover Inventory, Equipment, SkillList, Quest,
 WorldMap, PartyFriends, WinStats and already-open Storage. Set `{ name, open: true }`
@@ -1094,6 +1696,158 @@ be assigned from the inventory and skills toolbars. Storage adds quantity and
 whole-stack deposit/withdraw controls, with explicit focus buttons between it
 and inventory. Shops reuse the native buy/sell selection, quantity dialog and
 transaction callbacks. Their nested geometry also has a separate phone bank.
+
+### The screens before the game — `api.screens`
+
+A mod can draw the login screen, the server list, character select and
+character creation itself: its own background, its own layout, the character
+standing on a stage of its own. The client's window for that screen is still
+there, hidden, and still does the work — it holds the character list, sends
+the packets, and raises its own dialogs ("wrong password", "delete this
+character?") above whatever the mod drew. The mod gets the screen's data and
+the window's own buttons.
+
+```js
+export default function (params, api) {
+	if (!api.screens?.supported()) return; // an older app: the stock screens stay
+
+	api.screens.replace('charSelect', {
+		show(view) {
+			view.root.innerHTML = `<link rel="stylesheet" href="${new URL('./style.css', import.meta.url)}">
+				<ul class="slots"></ul><canvas width="300" height="300"></canvas><button>Play</button>`;
+			const stage = api.screens.stage(view.root.querySelector('canvas'), { scale: 2 });
+			this.stage = stage;
+			this.update(view);
+			view.root.querySelector('button').onclick = () => this.view.play();
+		},
+		update(view) {
+			this.view = view;
+			view.root.querySelector('.slots').replaceChildren(...view.characters.map(c => {
+				const li = document.createElement('li');
+				li.textContent = `${c.name} — Lv. ${c.level} ${c.jobName}`;
+				li.onclick = () => view.select(c.slot);
+				return li;
+			}));
+			this.stage.clear();
+			if (view.selected) this.stage.add(view.selected.look, { action: 'ready' });
+		},
+		hide() { this.stage.dispose(); },
+	});
+}
+```
+
+`show(view)` runs when the screen opens; `update(view)` whenever its data
+changes — a character arrives, the selection moves, a deletion is answered —
+and without one, `show` is called again on an emptied layer; `hide()` when it
+closes. `view.root` is a shadow root covering the window, above the 3D canvas
+and below every client window. It is emptied and removed when the screen
+closes, so there is nothing to clean up in it.
+
+| screen | data | actions |
+|---|---|---|
+| `login` | `savedId`, `saveId` | `login(user, password, { saveId })`, `signup()`, `exit()` |
+| `serverList` | `servers: [{ index, label }]`, `index` | `select(index)`, `exit()` |
+| `charSelect` | `characters`, `selected`, `index`, `maxSlots`, `sex`, `enabled`, `deleteReservation` | `select(slot)`, `play(slot?)`, `create(slot?)`, `requestDelete(slot?)`, `cancelDelete(slot?)`, `confirmDelete(slot?)`, `exit()` |
+| `charCreate` | `races: [{ job, name, hair: {min,max}, hairColor: {min,max} }]`, `sex`, `chooseSex`, `hasStats` | `create({ name, job, sex, hair, hairColor, stats? })`, `exit()` |
+
+Each action is what the matching button of the client's window does, so the
+same things follow from it: `login` runs the client's login (the password is
+what the login packet carries — a password, or a token a sign-in service gave
+in place of one), `play` the loading screen and the map, `exit` on character
+select asks "are you sure?" first, and a name the server refuses comes back as
+the client's own message box. Arguments are checked first: a slot outside
+`0…maxSlots-1`, a hair style outside the race's range or a job that is not one
+of `races` throws, and the window never sees it.
+
+A character is `{ id, slot, name, job, jobName, level, jobLevel, exp, jobExp,
+hp, maxHp, sp, maxSp, zeny, stats: { str, agi, vit, int, dex, luk }, map,
+mapName, sex, deletePending, look }`. Everything in a view is a frozen copy.
+
+**`api.screens.stage(canvas, { scale })`** draws characters on a canvas of
+yours, the way character select draws its slots. `stage.add(look, place)`
+takes a character's `look` — or any of `job`, `sex`, `head`, `headpalette`,
+`bodypalette`, `weapon`, `shield`, `accessory`, `accessory2`, `accessory3`,
+`robe`, `effectState` — and `place`: `x` and `y` as fractions of the canvas
+(where the feet go; beyond 0…1 crops, which is how a portrait is made),
+`direction` 0…7 (0 faces the viewer), `action` (`idle`, `walk`, `sit`,
+`ready`, `attack`, `hurt`, `die`, `pickup`) and `kind: 'monster'` for a pet
+or a companion beside the character. It returns `{ set(look), place(place),
+action(name), remove() }`. A mount is part of the look: it is the
+`effectState` bits the server sent, and is drawn as the game draws it.
+`stage.dispose()` stops it; disposal of the plugin does too.
+
+**`api.screens.image(path)`** resolves to a URL for a picture in the game
+data — BMPs with their magenta made transparent, as the client draws them —
+or `null`. A bare name is looked up in the interface folder, so
+`api.screens.image('renewalparty/icon_jobs_4008.bmp')` is the Lord Knight
+icon. Use it for the client's own art; ship your own beside `index.js`.
+
+Three things to know:
+
+- **A mod that throws gets the screen taken away from it.** An error in
+  `show`, `update` or `hide` is reported under the plugin's name, the hook is
+  switched off, and the client's own window comes back, so a broken mod never
+  leaves a player unable to log in. Two mods that replace the same screen:
+  the one loaded later draws it, and the other takes over if it goes.
+- **Keys are yours while your screen is up.** The hidden client window
+  ignores them; handle Enter and Escape in your own markup if you want them.
+- **Character creation only sends what the server accepts at creation:**
+  name, job, sex, hair style and hair colour. A body (clothes) colour can be
+  shown on the stage with `bodypalette`, but the server will not store it until
+  a stylist changes it in game.
+
+The hooks themselves are `UI/ScreenHooks.js` in the roBrowser fork:
+`register(screen, { show, update, hide })`, called by each of those windows as
+it opens, changes and closes. `api.screens` is the supported way to reach it.
+See [`examples/mods/pregame-stage`](../examples/mods/pregame-stage).
+
+### Leaving the game, and remembered logins — `exit` and `api.account`
+
+A mod that keeps something in step with where the player is needs to know when
+the player *chose* to leave, as opposed to being disconnected. The `exit` event
+says so, before the client acts:
+
+| `{ to, from }` | The player pressed |
+|---|---|
+| `{ to: 'charSelect', from: 'escape' }` | Escape menu → Character select |
+| `{ to: 'login', from: 'escape' }` | Escape menu → Exit |
+| `{ to: 'login', from: 'charSelect' }` | Cancel (or Escape) on character select, and confirmed |
+
+It is the choice, not the outcome: the server can still refuse to let a
+character leave mid-fight. A disconnect, a kick or a closed window is never
+reported. It comes from `UI/ExitHooks.js` in the roBrowser fork
+(`ExitHooks.on(listener)`, emitted by the Escape window and character select).
+
+`api.account` keeps a login for the player without the page ever holding
+anything that could be replayed later:
+
+```js
+const { available, remembered } = await api.account.status();
+await api.account.remember();                   // in game: remember this account
+const { username, token } = await api.account.resume(); // -> view.login(username, token)
+await api.account.forget();                     // revoke it, here and on the server
+```
+
+`remember()` asks whoever serves the page — the app, for the host's own window;
+the friend gateway, for a friend — to keep a random credential for the account
+the page is logged in to now. The page's proof is the session it is in (the
+login server's web auth token), so a mod cannot remember an account it is not
+playing. The credential stays with the app (a file of its own, for the host's
+window) or in an HttpOnly cookie on the origin the game was loaded from: a
+`__Host-` Secure one through the HTTPS sharing link (quick tunnel or the host's
+own domain), or, for a LAN join, a plain-HTTP one that the asset server's
+`/_friend/remember/` route hands to the app. No script in the page can read
+it. `remember()` resolves `{ username, secure }`, and `secure` is false only
+on a plain-HTTP LAN origin. `resume()` trades it for a
+one-time login token (60 seconds, one use) to hand straight to the login
+screen's `view.login`. It rejects with `.code` `'none'`, `'revoked'` (it is
+already forgotten) or `'unavailable'` (the server is not up; try later).
+Changing an account's password or disabling it in Settings → Accounts revokes
+all of its remembered logins. Where nothing answers, `status()` says
+`available: false`. That covers a LAN join while the host has LAN off, an
+older host, and any other server.
+
+See [`mods/autologin`](../mods/autologin), which uses all three.
 
 ---
 
@@ -1198,7 +1952,10 @@ server that runs and is quietly wrong. Which is the whole point of filling in
 `requires`.
 
 **To have it listed in the app instead**, so anyone can find and install it
-from Settings → Mods, it goes in this repository and the pull request is the
-review: **[docs/mods/publishing.md](mods/publishing.md)**. No zip is involved
-there — the app downloads the reviewed folder file by file and checks every one
-against its digest.
+from Settings → Mods, it goes in the registry, and the pull request is the
+review: **[Adding a mod to the registry](MOD_REGISTRY.md)**. There are two ways
+in. The mod's folder can live in this repository, and the app downloads it file
+by file and checks every one against its digest. Or the entry can point at your
+own GitHub repository, and the app installs your latest release — the same zip
+(or RAR) you would hand a friend — and offers each newer release to players as an
+update, without another pull request here.

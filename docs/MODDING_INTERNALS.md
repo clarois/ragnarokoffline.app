@@ -12,7 +12,8 @@ kRO 2022 client. Where something is a hypothesis it says so.
 
 | layer | lands at | assembled by |
 |---|---|---|
-| `db/` | bound at `/rathena/db/import` | `mods::assemble` |
+| `db/` | bound at `/rathena/db/import`; `db/when/<setting>/` merged in as owner `<mod>/<setting>` only while that yes/no setting is on | `mods::assemble` |
+| `lua/` | copied to `db/import/lua/<name>/`, listed in `load.txt`; `lua/when/<setting>/` listed only while that setting is on, under the identity `<mod>/<setting>` so its hooks chain beside the mod's own rather than replacing them | `mods::write_lua_layer` |
 | `npc/` | bound at `/rathena/npc/mods/<name>/`, plus `npc:` lines; `npc/when/<setting>/` only while that yes/no setting is on (`copy_npc_layer`) | `mods::assemble` |
 | `conf/` | appended to the generated `conf/import/*.txt`; `groups.yml` and `atcommands.yml`, including a mod's `conf/when/<setting>/` fragments, combined across mods with repeated grants removed (`groups.rs`) | `mods::assemble` → `cmds::write_mod_conf_files` |
 | `data/` | copied over `state/assets/data`, served ahead of the GRFs, ASCII aliases and Korean names put in the client's spelling (`cp949.rs`) | `assets::overlay_mods` |
@@ -20,6 +21,13 @@ kRO 2022 client. Where something is a hypothesis it says so.
 | `client/index.js` | copied to `state/assets/plugins/<name>/`, named in `Config.local.js` | `assets::overlay_mods` |
 | custom maps | `map_cache.dat` + `map_index.txt` in the `db/import` tree, plus `map:` lines | `mods::assemble` → `mapcache` |
 | `mod.json` | parsed, and `requires` enforced | `mods::read_manifest` |
+
+Every layer is read from each of the mod's **roots** (`Installed::roots`): its
+folder, then the running era's `renewalFolder` / `prerenewalFolder` when
+`mod.json` declares one. The era root is applied after the mod's own under the
+same owner, so its copy of a file replaces the mod's. `scan` works the roots out
+once, from the era marker, and the server layers and the client overlay both
+read them, which keeps the two in step.
 
 `state/modbuild` is rebuilt from scratch on every start, so a removed mod stops
 affecting the server. A stale merge would be indistinguishable from a mod that

@@ -24,7 +24,7 @@ const { test } = require('node:test');
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const HEADER = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.hpp');
-const PATCH = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0010-companion-homunculus-toggle.patch');
+const PATCH = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0011-companion-homunculus-toggle.patch');
 const PANEL = path.join(ROOT, 'patches', 'CompanionPanel.js');
 
 const engine = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
@@ -57,7 +57,7 @@ test('the engine exposes the switch, in the header and the TU', () => {
 
 test('the switch is stored as an explicit 0 or 1 on the companion row', () => {
 	const body = setterBody();
-	assert.match(body, /UPDATE `cp_companion_persistence` SET hom_enabled=%d"\s*\n?\s*" WHERE owner_account_id=%u AND shell_index=%u/,
+	assert.match(body, /UPDATE `cp_companion_persistence` SET hom_enabled=%d"\s*\n?\s*" WHERE owner_account_id=%u AND owner_char_id=%u AND shell_index=%u/,
 		'the switch must be written to the column, keyed like every other per-companion write');
 	assert.match(body, /if \(want < 0\)\s*\n\s*want = \(enabled == 0\) \? 1 : 0;/,
 		'a request without a state flips the current one');
@@ -164,4 +164,20 @@ test('the recurring snapshot does not write the switch', () => {
 	const body = functionBody(engine, 'void population_engine_persist_companion_gear(map_session_data *sd)');
 	assert.ok(!/hom_enabled/.test(body),
 		'only the switch writes the switch');
+});
+
+test('a 23-character name still leaves room for "on"/"off" after it', () => {
+	const dir = path.join(__dirname, '..', 'third-party', 'population-engine', 'patches');
+	const all = fs.readdirSync(dir).filter(f => f.endsWith('.patch')).sort()
+		.map(f => fs.readFileSync(path.join(dir, f), 'utf8').replace(/\r\n/g, '\n')).join('\n');
+	// The last change to the argument buffer wins: it must hold a full name plus a trailing word.
+	const reads = [...all.matchAll(/^\+\s*if \(!message \|\| !\*message \|\| sscanf\(message, "%31s %(\d+)\[\^\\n\]", cmd, param\) < 1\) \{/gm)];
+	assert.ok(reads.length > 0, 'the @companion argument read must be found');
+	const width = Number(reads[reads.length - 1][1]);
+	assert.ok(width >= 23 + ' off'.length, `the argument must fit a 23-character name and " off" (reads ${width})`);
+	// And a name longer than NAME_LENGTH can never overrun the escape buffer.
+	const engine = fs.readFileSync(path.join(__dirname, '..', 'third-party', 'population-engine', 'files', 'src', 'map',
+		'population_engine.cpp'), 'utf8');
+	assert.equal((engine.match(/Sql_EscapeString\(/g) || []).length, 1, 'names are escaped in one bounded place');
+	assert.match(engine, /safestrncpy\(bounded, name != nullptr \? name : "", sizeof\(bounded\)\);\s*\n\s*Sql_EscapeString\(mmysql_handle, out, bounded\);/);
 });

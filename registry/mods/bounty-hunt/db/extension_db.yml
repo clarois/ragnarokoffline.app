@@ -1,0 +1,18 @@
+# Enable the rAthena extension the mod needs.
+#
+# The mod's lucky-drop refresh (see npc/bounty.txt, OnPCDropItemEvent) is
+# driven by an opt-in server-side flag from the extensions framework:
+# pc_drop_item_event tells rAthena to fire OnPCDropItemEvent once for
+# every item a mob's drop table rolls. Off, the label never runs and the
+# refresh never fires -- the counter would then only clear at payout.
+#
+# The build lands this file at db/import/extension_db.yml (see
+# stack/src/mods.rs: mods' db/ folders are mounted at rAthena's
+# db/import), and db/extension_db.yml's Footer imports that path.
+Header:
+  Type: EXTENSION_DB
+  Version: 1
+
+Body:
+  - Id: pc_drop_item_event
+    Enabled: true

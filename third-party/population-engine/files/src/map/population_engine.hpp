@@ -57,8 +57,12 @@ bool population_engine_is_population_pc(int32_t id);
 void population_engine_persist_recruited_companion(map_session_data *sd, map_session_data *peer = nullptr);
 /// Goal 1: re-spawn an owner's persisted companions after login restores membership. Returns count recalled.
 int population_engine_recall_companions(map_session_data *owner, uint32_t only_index = 0);
+/// A real character is leaving the map server: save and despawn the companions it owns.
+void population_engine_on_owner_quit(map_session_data *owner);
+/// True when `shell` is a companion of exactly this character (account AND char id).
+bool population_engine_companion_owned_by(const map_session_data *shell, const map_session_data *player);
 void population_engine_reassert_companions(int32_t party_id);
-bool population_engine_persist_companion_row(map_session_data *sd, uint32_t owner_account);
+bool population_engine_persist_companion_row(map_session_data *sd, const map_session_data *owner);
 void population_engine_push_companion_list(map_session_data *owner);
 void population_engine_push_companion_list_for_shell(map_session_data *shell);
 /// Goal 3: flag a companion's persistence row active(1)/inactive(0).
@@ -122,12 +126,12 @@ size_t population_engine_companion_parse_skill_override(const char* stored,
 	std::vector<uint16_t>& out);
 uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job_id, int quality, const char *name_hint);
 void population_engine_companion_list_raw(uint32_t owner_account, int fd);
-/// Temporary diagnostic: dump every live population shell's identity and state.
-void population_engine_shell_dump(int fd);
 /// Goal 3 friend list: print the owner's saved companions to their chat (fd = client fd).
 void population_engine_companion_list(uint32_t owner_account, int fd);
-/// Goal 3 friend list: permanently delete a saved companion's row by name (irreversible).
-bool population_engine_companion_delete(uint32_t owner_account, const char* name_);
+/// Goal 3 friend list: permanently delete one saved companion's row, by shell index (irreversible).
+bool population_engine_companion_delete(uint32_t owner_account, uint32_t shell_index);
+/// Whether a saved companion's row records gear its owner gave it.
+bool population_engine_companion_holds_given_gear(uint32_t owner_account, uint32_t shell_index);
 /// True while this real player's party has fewer than four recruited companions.
 bool population_engine_can_recruit_companion(const map_session_data *owner);
 /// Return the real player who should receive a recruited companion's loot.

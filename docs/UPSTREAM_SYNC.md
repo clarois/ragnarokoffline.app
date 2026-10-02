@@ -15,7 +15,7 @@ merge. A person lands them, after playing the build.
 | May | May not |
 |---|---|
 | fetch anything | push to `ragnarokoffline` on either fork |
-| fast-forward a fork's `master` to `upstream/master` and push it (a pure mirror) | force-push anything, anywhere |
+| bring a fork's `master` up to `upstream/master` and push it (see step 1) | force-push anything, anywhere |
 | push `upstream-sync-*` branches to the forks | merge any pull request |
 | open or update pull requests on the forks and on this repository | tag, or run `build.yml` |
 | run `images.yml` by hand on its own branch (review artifacts only) | edit `vendor/` and call it a fix |
@@ -44,9 +44,27 @@ git rev-list --left-right --count origin/ragnarokoffline...upstream/master
 ```
 
 The right-hand number is how far behind we are. Zero: report "nothing new" for
-that fork and stop. `origin/master` behind `upstream/master` by a fast-forward:
-push it (`git push origin upstream/master:master`). If `master` has diverged,
-something is wrong — say so and do not touch it.
+that fork and stop.
+
+Each fork's `master` is upstream's `master` plus **one commit of ours**: a
+`CLAUDE.md` and `AGENTS.md` telling whoever clones the fork (and lands on
+`master`, the default branch) to switch to `ragnarokoffline` and open pull
+requests there. The same two files, byte for byte, are on `ragnarokoffline`. So
+`master` is never a fast-forward of upstream any more. Update it by merging:
+
+```sh
+git switch -C master origin/master
+git merge --no-edit upstream/master     # never rebase, never force-push
+git push origin master
+```
+
+Our commit only adds those two files, except that roBrowserLegacy's `AGENTS.md`
+comes from upstream with our two-line pointer at the top. If upstream changed
+`AGENTS.md`, take upstream's version and put the pointer back as its first
+lines, copied from `origin/ragnarokoffline:AGENTS.md`; then make the same
+change on `ragnarokoffline` in the sync PR, so the two stay identical. Anything
+else in `git diff upstream/master origin/master` besides those two files means
+`master` has diverged: say so and do not touch it.
 
 ## 2. Merge
 

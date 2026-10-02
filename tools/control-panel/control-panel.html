@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Control panel</title>
+<!--
+  The Control panel (#230): every account and character on this server, and
+  the few changes a player actually needs, each made the way the game makes
+  it. Everything goes through the app (electron/cp-bridge.js) to
+  `ragnarok-stack cp` (stack/src/control_panel.rs); the page never sends SQL.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --hit: #eff6ff;
+    --code: #f3f4f6;
+    --warn: #fef3c7;
+    --warn-text: #92400e;
+    --ok: #16a34a;
+    --ok-bg: #dcfce7;
+    --bad-bg: #fee2e2;
+    --danger: #dc2626;
+    --stage: #eef2f7;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --border: #262b36;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --hit: #1e293b;
+      --code: #0d1017;
+      --warn: #3b2f0b;
+      --warn-text: #fcd34d;
+      --ok: #4ade80;
+      --ok-bg: #0f2e1b;
+      --bad-bg: #3a1414;
+      --danger: #f87171;
+      --stage: #11151c;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; font-size: 13px; line-height: 1.4;
+  }
+  button, select, input { font: inherit; color: inherit; }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; box-shadow: var(--shadow); z-index: 2;
+  }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .spacer { flex: 1; }
+  .btn {
+    padding: 5px 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel);
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--danger); }
+  .btn.danger.solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--code); color: var(--muted); white-space: nowrap; }
+  .pill.online { background: var(--ok-bg); color: var(--ok); }
+  .pill.warn { background: var(--warn); color: var(--warn-text); }
+  .muted { color: var(--muted); }
+  .layout { flex: 1; display: flex; min-height: 0; }
+  aside {
+    width: 270px; flex: none; border-right: 1px solid var(--border); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  aside input { margin: 10px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  #accounts { overflow: auto; flex: 1; padding-bottom: 8px; }
+  .account { padding: 8px 12px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .account .gm { text-transform: none; letter-spacing: 0; }
+  .char-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 18px; cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .char-item:hover { background: var(--hit); }
+  .char-item.active { background: var(--hit); border-left-color: var(--accent); }
+  .char-item .name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .char-item .sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: none; }
+  .dot.on { background: var(--ok); }
+  .none { padding: 3px 18px; color: var(--muted); font-style: italic; }
+  main { flex: 1; overflow: auto; min-width: 0; padding: 16px; }
+  .notice { padding: 8px 14px; background: var(--warn); color: var(--warn-text); border-bottom: 1px solid var(--border); white-space: pre-wrap; }
+  .notice.error { background: var(--bad-bg); color: var(--danger); }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+  .empty p { max-width: 520px; margin: 0 auto 14px; white-space: pre-line; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; max-width: 1100px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 14px 16px; }
+  .card h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  .hero { grid-column: 1 / -1; display: flex; gap: 18px; align-items: stretch; }
+  .stage {
+    width: 200px; height: 230px; flex: none; border-radius: 8px; background: var(--stage);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;
+  }
+  .stage canvas { image-rendering: pixelated; }
+  .stage .missing { position: absolute; bottom: 6px; left: 8px; right: 8px; font-size: 11px; color: var(--muted); text-align: center; }
+  .hero-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .hero h2 { margin: 0; font-size: 22px; }
+  .hero .sub { color: var(--muted); }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 18px; margin-top: 4px; }
+  .fact .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .fact .value { font-size: 15px; font-variant-numeric: tabular-nums; }
+  .fact .value small { display: block; color: var(--muted); font-size: 12px; }
+  .bar { height: 4px; border-radius: 2px; background: var(--code); margin-top: 3px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); }
+  .place { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-bottom: 12px; }
+  .place .label { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .why { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  table.equip { width: 100%; border-collapse: collapse; }
+  .equip td { padding: 5px 4px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .equip tr:last-child td { border-bottom: none; }
+  .equip .slot { color: var(--muted); white-space: nowrap; width: 1%; padding-right: 10px; }
+  .equip .item { display: flex; align-items: center; gap: 8px; }
+  .equip img { width: 24px; height: 24px; image-rendering: pixelated; flex: none; }
+  .equip .cards-list { color: var(--muted); font-size: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 14px; }
+  .stats .fact .value { font-size: 14px; }
+  dialog {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text);
+    padding: 0; width: min(520px, calc(100vw - 32px)); box-shadow: 0 10px 40px rgba(0,0,0,.25);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog .body { padding: 16px 20px; }
+  dialog h3 { margin: 0 0 10px; font-size: 15px; }
+  dialog p { margin: 0 0 10px; }
+  dialog label { display: block; margin: 8px 0 3px; color: var(--muted); font-size: 12px; }
+  dialog input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  dialog .inline { display: flex; gap: 8px; }
+  dialog .inline > div { flex: 1; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+  .warning { background: var(--warn); color: var(--warn-text); border-radius: 6px; padding: 8px 10px; margin-top: 10px; }
+  .error-box { background: var(--bad-bg); color: var(--danger); border-radius: 6px; padding: 8px 10px; margin-top: 10px; white-space: pre-wrap; }
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 8px 14px; border-radius: 8px; max-width: 80vw; display: none; z-index: 10;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Control panel</h1>
+  <span id="era" class="pill" hidden></span>
+  <span class="spacer"></span>
+  <span id="summary" class="muted"></span>
+  <button id="create" class="btn" hidden>Create account…</button>
+  <button id="refresh" class="btn">Refresh</button>
+</header>
+<div id="notice" class="notice" hidden></div>
+<div class="layout">
+  <aside>
+    <input id="search" type="search" placeholder="Find an account or character" aria-label="Find an account or character">
+    <div id="accounts" role="listbox" aria-label="Characters"></div>
+  </aside>
+  <main id="main">
+    <div class="empty"><p>Loading characters…</p></div>
+  </main>
+</div>
+
+<dialog id="move-dialog">
+  <div class="body">
+    <h3 id="move-title">Move character</h3>
+    <p class="muted" id="move-about"></p>
+    <div id="move-point">
+      <label for="move-map">Map</label>
+      <input id="move-map" class="mono" placeholder="prontera" autocomplete="off" spellcheck="false">
+      <div class="inline">
+        <div><label for="move-x">x</label><input id="move-x" type="number" min="0" max="1023" value="0"></div>
+        <div><label for="move-y">y</label><input id="move-y" type="number" min="0" max="1023" value="0"></div>
+      </div>
+    </div>
+    <div class="error-box" id="move-error" hidden></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="move-cancel">Cancel</button>
+    <button class="btn primary" id="move-ok">Move</button>
+  </div>
+</dialog>
+
+<dialog id="delete-dialog">
+  <div class="body">
+    <h3 id="delete-title">Delete character</h3>
+    <p id="delete-about"></p>
+    <div class="warning">The game stops for a few seconds while this runs, and anyone playing is disconnected. A backup of the whole database is taken first, and if any step fails the backup is put back.</div>
+    <label for="delete-name" id="delete-label">Type the character's name to confirm</label>
+    <input id="delete-name" autocomplete="off" spellcheck="false">
+    <div class="error-box" id="delete-error" hidden></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="delete-cancel">Cancel</button>
+    <button class="btn danger solid" id="delete-ok" disabled>Delete</button>
+  </div>
+</dialog>
+
+<dialog id="create-dialog">
+  <div class="body">
+    <h3>Create account</h3>
+    <p class="muted">The same as Settings → Accounts. The game is stopped for a moment while the account is written.</p>
+    <label for="create-name">Account name</label>
+    <input id="create-name" autocomplete="off" spellcheck="false" maxlength="23">
+    <label for="create-pass">Password (8–23 characters)</label>
+    <input id="create-pass" type="password" autocomplete="new-password" maxlength="23">
+    <label for="create-confirm">Password again</label>
+    <input id="create-confirm" type="password" autocomplete="new-password" maxlength="23">
+    <div class="error-box" id="create-error" hidden></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="create-cancel">Cancel</button>
+    <button class="btn primary" id="create-ok">Create</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script src="job-names.js"></script>
+<script src="sprite.js"></script>
+<script>
+'use strict';
+// Where the game's images come from: the asset server, which the app answers
+// for this window (electron/tools.js), turning .bmp into .png on the way.
+const ASSET_ORIGIN = 'http://127.0.0.1:3338';
+const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null && v !== false) node.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children) if (c != null) node.append(c);
+  return node;
+};
+
+async function call(name, body) {
+  const res = await fetch(`api/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+  let answer;
+  try { answer = await res.json(); } catch { answer = { error: `The app answered ${res.status}` }; }
+  if (!res.ok || answer.error) throw new Error(answer.error || `The app answered ${res.status}`);
+  return answer;
+}
+
+const state = {
+  context: { host: false, era: '' },
+  accounts: [],
+  selected: null,     // char_id
+  detail: null,       // the `character` answer
+  tables: null,       // look-tables.json, or an Error
+  items: new Map(),   // nameid -> { name, resource, slots }
+  busy: false,
+};
+
+// ---- Words
+
+// The text of a value from the supervisor: a string, or { hex } for bytes
+// that are not UTF-8 (an old CP949 name).
+const text = v => (v && typeof v === 'object' && 'hex' in v) ? `0x${v.hex}` : (v == null ? '' : String(v));
+const num = v => Number(text(v)) || 0;
+const big = v => { try { return BigInt(text(v) || '0').toLocaleString(); } catch { return text(v); } };
+const jobName = id => (window.JOB_NAMES || {})[id] || `Job ${id}`;
+const yes = c => num(c.online) !== 0;
+
+// rAthena's equip positions (enum equip_pos, src/common/mmo.hpp).
+const SLOTS = [
+  [0x000100, 'Top headgear'], [0x000200, 'Middle headgear'], [0x000001, 'Lower headgear'],
+  [0x000010, 'Armor'], [0x000002, 'Right hand'], [0x000020, 'Left hand'], [0x000004, 'Garment'], [0x000040, 'Shoes'],
+  [0x000008, 'Right accessory'], [0x000080, 'Left accessory'],
+  [0x000400, 'Costume top'], [0x000800, 'Costume middle'], [0x001000, 'Costume lower'], [0x002000, 'Costume garment'],
+  [0x008000, 'Ammunition'],
+  [0x010000, 'Shadow armor'], [0x020000, 'Shadow weapon'], [0x040000, 'Shadow shield'], [0x080000, 'Shadow shoes'],
+  [0x100000, 'Shadow right accessory'], [0x200000, 'Shadow left accessory'],
+];
+function slotName(mask) {
+  if ((mask & 0x22) === 0x22) return 'Both hands';
+  const names = SLOTS.filter(([bit]) => mask & bit).map(([, n]) => n);
+  return names.length ? names.join(' + ') : `Slot ${mask}`;
+}
+
+// ---- Notices
+
+function notice(message, error = false) {
+  const n = $('notice');
+  n.hidden = !message;
+  n.textContent = message || '';
+  n.className = error ? 'notice error' : 'notice';
+}
+let toastTimer = 0;
+function toast(message) {
+  const t = $('toast');
+  t.textContent = message;
+  t.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.display = 'none'; }, 4000);
+}
+
+// ---- The list
+
+function allCharacters() {
+  return state.accounts.flatMap(a => a.characters.map(c => ({ ...c, account: a })));
+}
+function accountOnline(accountId) {
+  const a = state.accounts.find(x => text(x.id) === text(accountId));
+  return !!a && a.characters.some(yes);
+}
+
+function paintList() {
+  const list = $('accounts');
+  const q = $('search').value.trim().toLowerCase();
+  list.textContent = '';
+  let shown = 0;
+  for (const a of state.accounts) {
+    const match = c => !q || text(c.name).toLowerCase().includes(q) || text(a.username).toLowerCase().includes(q);
+    const chars = a.characters.filter(match);
+    if (q && !chars.length) continue;
+    list.append(el('div', { class: 'account' },
+      el('span', { text: text(a.username) }),
+      num(a.group) >= 99 ? el('span', { class: 'pill gm', text: 'GM' }) : null,
+      num(a.state) === 5 ? el('span', { class: 'pill warn gm', text: 'disabled' }) : null));
+    if (!chars.length) list.append(el('div', { class: 'none', text: 'No characters' }));
+    for (const c of chars) {
+      shown++;
+      const id = text(c.char_id);
+      list.append(el('div', {
+        class: 'char-item' + (state.selected === id ? ' active' : ''), role: 'option', tabindex: 0,
+        'aria-selected': state.selected === id ? 'true' : 'false',
+        onclick: () => select(id), onkeydown: e => { if (e.key === 'Enter') select(id); },
+      },
+      el('span', { class: 'dot' + (yes(c) ? ' on' : ''), title: yes(c) ? 'In the game' : 'Logged out' }),
+      el('span', { class: 'name', text: text(c.name) }),
+      el('span', { class: 'sub', text: `${num(c.base_level)} · ${jobName(num(c.class))}` })));
+    }
+  }
+  const total = allCharacters().length;
+  $('summary').textContent = `${state.accounts.length} account${state.accounts.length === 1 ? '' : 's'}, ${total} character${total === 1 ? '' : 's'}`;
+  if (q && !shown) list.append(el('div', { class: 'none', text: 'Nothing matches.' }));
+}
+
+async function loadList() {
+  try {
+    const answer = await call('characters');
+    state.accounts = answer.accounts || [];
+    notice('');
+  } catch (e) {
+    state.accounts = [];
+    $('main').replaceChildren(el('div', { class: 'empty' }, el('p', { text: e.message }), el('button', { class: 'btn', text: 'Try again', onclick: refresh })));
+    $('summary').textContent = '';
+    paintList();
+    return false;
+  }
+  paintList();
+  return true;
+}
+
+async function refresh() {
+  if (!(await loadList())) return;
+  if (state.selected && allCharacters().some(c => text(c.char_id) === state.selected)) await select(state.selected);
+  else if (state.selected) { state.selected = null; empty(); }
+  else empty();
+}
+
+function empty() {
+  const none = !allCharacters().length;
+  $('main').replaceChildren(el('div', { class: 'empty' }, el('p', {
+    text: none
+      ? 'No characters yet. Make one at the character select screen in the game.'
+      : 'Pick a character on the left to see it.',
+  })));
+}
+
+// ---- One character
+
+async function lookTables() {
+  if (!state.tables) {
+    try { state.tables = await (await fetch('look-tables.json', { cache: 'no-store' })).json(); }
+    catch (e) { state.tables = e; }
+  }
+  return state.tables;
+}
+
+async function itemNames(ids) {
+  const wanted = [...new Set(ids)].filter(id => id > 0 && !state.items.has(id));
+  if (wanted.length) {
+    try {
+      const got = await (await fetch(`item-names.json?ids=${wanted.join(',')}`, { cache: 'no-store' })).json();
+      for (const id of wanted) state.items.set(id, got[id] || null);
+    } catch { for (const id of wanted) state.items.set(id, null); }
+  }
+}
+
+// The cards slotted in an item. card0 255/254/65280 mark a forged item, a
+// named one and a pet egg (the ids after them are not cards).
+function cardIds(item) {
+  const c0 = num(item.card0);
+  if (c0 === 255 || c0 === 254 || c0 === 65280) return [];
+  return [item.card0, item.card1, item.card2, item.card3].map(num).filter(Boolean);
+}
+
+async function select(id) {
+  state.selected = id;
+  paintList();
+  const run = (select.run = (select.run || 0) + 1);
+  let detail;
+  try {
+    detail = await call('character', { char_id: id });
+  } catch (e) {
+    if (run === select.run) $('main').replaceChildren(el('div', { class: 'empty' }, el('p', { text: e.message })));
+    return;
+  }
+  if (run !== select.run) return;
+  state.detail = detail;
+  await itemNames(detail.equipment.flatMap(i => [num(i.nameid), ...cardIds(i)]));
+  if (run !== select.run) return;
+  paintCharacter();
+}
+
+function fact(label, value, extra) {
+  return el('div', { class: 'fact' }, el('div', { class: 'label', text: label }), el('div', { class: 'value' }, value, extra || null));
+}
+
+function itemLabel(id) {
+  const info = state.items.get(id);
+  return info ? info.name : `Item ${id}`;
+}
+
+function paintCharacter() {
+  const { character: c, equipment, counts } = state.detail;
+  const online = yes(c);
+  const accountBusy = accountOnline(c.account_id);
+  const name = text(c.name);
+
+  // Who and how they look.
+  const canvas = el('canvas', { width: 200, height: 210, 'aria-label': `${name}, standing` });
+  const missing = el('div', { class: 'missing' });
+  const stage = el('div', { class: 'stage' }, canvas, missing);
+  lookTables().then(t => {
+    if (t instanceof Error || !t || !t.classes) { missing.textContent = 'The client\'s sprite tables could not be read.'; return; }
+    return window.PlayerSprite.draw(canvas, c, t).then(gone => {
+      if (gone.includes('body')) missing.textContent = 'No sprite: is the game client set up?';
+      else if (gone.length) missing.textContent = `Not drawn: ${gone.join(', ')}`;
+    });
+  }).catch(e => { missing.textContent = `Not drawn: ${e.message}`; });
+
+  const pills = el('div', { class: 'pills' },
+    el('span', { class: online ? 'pill online' : 'pill', text: online ? 'In the game' : 'Logged out' }),
+    c.guild != null ? el('span', { class: 'pill', text: `Guild: ${text(c.guild)}` }) : null,
+    c.party != null ? el('span', { class: 'pill', text: `Party: ${text(c.party)}` }) : null,
+    num(c.partner_id) ? el('span', { class: 'pill', text: 'Married' }) : null,
+    num(c.homun_id) ? el('span', { class: 'pill', text: 'Has a homunculus' }) : null,
+    num(c.delete_date) ? el('span', { class: 'pill warn', text: 'Waiting to be deleted in game' }) : null);
+
+  const hero = el('section', { class: 'card hero' }, stage, el('div', { class: 'hero-text' },
+    el('h2', { text: name }),
+    el('div', { class: 'sub', text: `${jobName(num(c.class))} · ${c.sex === 'M' ? 'male' : 'female'} · account ${text(c.userid)} · slot ${num(c.char_num) + 1}` }),
+    pills,
+    el('div', { class: 'facts' },
+      fact('Base level', String(num(c.base_level)), el('small', { text: `${big(c.base_exp)} exp` })),
+      fact('Job level', String(num(c.job_level)), el('small', { text: `${big(c.job_exp)} exp` })),
+      fact('Zeny', big(c.zeny)),
+      fact('HP', `${num(c.hp).toLocaleString()} / ${num(c.max_hp).toLocaleString()}`),
+      fact('SP', `${num(c.sp).toLocaleString()} / ${num(c.max_sp).toLocaleString()}`),
+      fact('Points left', `${num(c.status_point)} stat · ${num(c.skill_point)} skill`))));
+
+  // Where.
+  const blocked = online
+    ? `${name} is in the game. Moving and deleting work while every character on the account is logged out: go back to the character select screen or quit the game, then press Refresh.`
+    : accountBusy ? `Another character on ${text(c.userid)} is in the game. Log it out first, then press Refresh.` : '';
+  const where = el('section', { class: 'card' }, el('h3', { text: 'Position' }),
+    el('div', { class: 'place' },
+      el('span', { class: 'label', text: 'Now' }), el('span', { class: 'mono', text: `${text(c.last_map)} (${num(c.last_x)}, ${num(c.last_y)})` }),
+      el('span', { class: 'label', text: 'Save point' }), el('span', { class: 'mono', text: text(c.save_map) ? `${text(c.save_map)} (${num(c.save_x)}, ${num(c.save_y)})` : 'none' })),
+    el('div', { class: 'row-actions' },
+      el('button', { class: 'btn', text: 'Move to save point', disabled: !!blocked || !text(c.save_map), onclick: () => openMove('save') }),
+      el('button', { class: 'btn', text: 'Move to…', disabled: !!blocked, onclick: () => openMove('point') })),
+    el('div', { class: 'why', text: blocked || 'For a character stuck somewhere it cannot leave. It takes effect the next time the character is chosen; the game keeps running.' }));
+
+  // What they wear.
+  const rows = equipment.length ? equipment.map(item => {
+    const id = num(item.nameid);
+    const info = state.items.get(id);
+    const refine = num(item.refine);
+    const cards = cardIds(item).map(itemLabel);
+    const icon = info && info.resource
+      ? el('img', { alt: '', src: `${ASSET_ORIGIN}/data/texture/${encodeURIComponent('유저인터페이스')}/item/${encodeURIComponent(info.resource)}.bmp`, onerror: e => { e.target.style.visibility = 'hidden'; } })
+      : el('img', { alt: '', style: 'visibility:hidden' });
+    return el('tr', {},
+      el('td', { class: 'slot', text: slotName(num(item.equip)) }),
+      el('td', {}, el('div', { class: 'item' }, icon, el('div', {},
+        el('div', { text: `${refine ? `+${refine} ` : ''}${itemLabel(id)}${info && info.slots ? ` [${info.slots}]` : ''}` }),
+        cards.length ? el('div', { class: 'cards-list', text: cards.join(', ') }) : null))));
+  }) : [el('tr', {}, el('td', { class: 'muted', text: 'Nothing equipped.' }))];
+  const gear = el('section', { class: 'card' }, el('h3', { text: 'Equipment' }), el('table', { class: 'equip' }, el('tbody', {}, ...rows)),
+    el('div', { class: 'why', text: `${counts.inventory} item${counts.inventory === 1 ? '' : 's'} in the inventory, ${counts.cart} in the cart, ${counts.storage} in the account's storage.` }));
+
+  const stats = el('section', { class: 'card' }, el('h3', { text: 'Stats' }), el('div', { class: 'stats' },
+    ...['str', 'agi', 'vit', 'int', 'dex', 'luk'].map(k => fact(k.toUpperCase(), String(num(c[k]))))));
+
+  // Deleting.
+  const refuse = blocked
+    || (c.guild != null || num(c.guild_id) ? `${name} is in a guild. rAthena will not delete a character in one: leave the guild in the game first.` : '')
+    || (c.party != null || num(c.party_id) ? `${name} is in a party. rAthena will not delete a character in one: leave the party in the game first.` : '');
+  const remove = el('section', { class: 'card' }, el('h3', { text: 'Delete' }),
+    el('p', { class: 'muted', style: 'margin-top:0', text: 'Removes the character and everything that belongs to it (items, skills, quests, pets, homunculus) the way the game\'s own delete does.' }),
+    el('button', { class: 'btn danger', text: 'Delete character…', disabled: !!refuse, onclick: openDelete }),
+    refuse ? el('div', { class: 'why', text: refuse }) : null);
+
+  $('main').replaceChildren(el('div', { class: 'cards' }, hero, where, gear, stats, remove));
+}
+
+// ---- Writes
+
+function busy(on) {
+  state.busy = on;
+  for (const b of document.querySelectorAll('dialog .actions .btn')) b.disabled = on;
+  if (!on) $('delete-ok').disabled = $('delete-name').value !== text(state.detail && state.detail.character.name);
+}
+
+function showError(id, message) {
+  const box = $(id);
+  box.hidden = !message;
+  box.textContent = message || '';
+}
+
+let moveMode = 'save';
+function openMove(mode) {
+  const c = state.detail.character;
+  moveMode = mode;
+  $('move-title').textContent = mode === 'save' ? `Move ${text(c.name)} to the save point` : `Move ${text(c.name)}`;
+  $('move-about').textContent = mode === 'save'
+    ? `${text(c.name)} will be at ${text(c.save_map)} (${num(c.save_x)}, ${num(c.save_y)}) the next time it is chosen.`
+    : 'The map\'s file name, like prontera or prt_fild08. A map the server does not have sends the character to a major city, and coordinates off the map, or 0, 0, become a random spot on it, as the game does.';
+  $('move-point').hidden = mode === 'save';
+  $('move-map').value = text(c.last_map);
+  $('move-x').value = num(c.last_x);
+  $('move-y').value = num(c.last_y);
+  showError('move-error', '');
+  $('move-dialog').showModal();
+}
+
+async function doMove() {
+  const id = text(state.detail.character.char_id);
+  const target = moveMode === 'save' ? 'save' : { map: $('move-map').value.trim(), x: Number($('move-x').value), y: Number($('move-y').value) };
+  busy(true);
+  try {
+    const answer = await call('reset-position', { char_id: id, target });
+    $('move-dialog').close();
+    toast(answer.moved ? `Moved to ${answer.map} (${answer.x}, ${answer.y}).` : `Already at ${answer.map} (${answer.x}, ${answer.y}).`);
+    await refresh();
+  } catch (e) {
+    showError('move-error', e.message);
+  } finally {
+    busy(false);
+  }
+}
+
+function openDelete() {
+  const c = state.detail.character;
+  $('delete-title').textContent = `Delete ${text(c.name)}?`;
+  $('delete-about').textContent = `${text(c.name)}, level ${num(c.base_level)} ${jobName(num(c.class))}, and everything it carries is deleted for good${num(c.partner_id) ? ', and its marriage ends' : ''}.`;
+  $('delete-label').textContent = `Type ${text(c.name)} to confirm`;
+  $('delete-name').value = '';
+  $('delete-ok').disabled = true;
+  showError('delete-error', '');
+  $('delete-dialog').showModal();
+  $('delete-name').focus();
+}
+
+async function doDelete() {
+  const c = state.detail.character;
+  busy(true);
+  try {
+    const answer = await call('delete-character', { char_id: text(c.char_id), name: $('delete-name').value });
+    $('delete-dialog').close();
+    state.selected = null;
+    notice(`${text(answer.name)} was deleted. The backup taken first is ${answer.backup}`);
+    await refresh();
+  } catch (e) {
+    showError('delete-error', e.message);
+  } finally {
+    busy(false);
+  }
+}
+
+function openCreate() {
+  for (const id of ['create-name', 'create-pass', 'create-confirm']) $(id).value = '';
+  showError('create-error', '');
+  $('create-dialog').showModal();
+  $('create-name').focus();
+}
+
+async function doCreate() {
+  busy(true);
+  try {
+    await call('create-account', { username: $('create-name').value.trim(), password: $('create-pass').value, confirmation: $('create-confirm').value });
+    const name = $('create-name').value.trim();
+    $('create-dialog').close();
+    toast(`Account ${name} created. Log in with it to make a character.`);
+    await refresh();
+  } catch (e) {
+    showError('create-error', e.message);
+  } finally {
+    $('create-pass').value = '';
+    $('create-confirm').value = '';
+    busy(false);
+  }
+}
+
+// ---- Wiring
+
+$('refresh').addEventListener('click', refresh);
+$('search').addEventListener('input', paintList);
+$('create').addEventListener('click', openCreate);
+$('move-cancel').addEventListener('click', () => $('move-dialog').close());
+$('move-ok').addEventListener('click', doMove);
+$('delete-cancel').addEventListener('click', () => $('delete-dialog').close());
+$('delete-ok').addEventListener('click', doDelete);
+$('delete-name').addEventListener('input', () => {
+  $('delete-ok').disabled = state.busy || $('delete-name').value !== text(state.detail.character.name);
+});
+$('create-cancel').addEventListener('click', () => $('create-dialog').close());
+$('create-ok').addEventListener('click', doCreate);
+for (const d of document.querySelectorAll('dialog')) d.addEventListener('cancel', e => { if (state.busy) e.preventDefault(); });
+
+(async () => {
+  try {
+    state.context = await call('context');
+    $('era').textContent = state.context.era === 'prerenewal' ? 'Pre-renewal' : 'Renewal';
+    $('era').hidden = !state.context.era;
+    // Accounts belong to the host, as in Settings -> Accounts.
+    $('create').hidden = !state.context.host;
+  } catch { /* the list says what is wrong */ }
+  await refresh();
+})();
+</script>
+</body>
+</html>

@@ -31,6 +31,14 @@ saved list. A companion's name, job, level, equipment, duty and skill selection 
 survive a full server and app shutdown. Party membership does not survive - after a restart, open
 the companion window's **Party** tab and press **Summon** to bring it back out.
 
+Companions belong to the character that recruited them, not to the account. Each character of an
+account has its own saved list. When a character logs out or goes back to character select, its
+companions leave the world with it, and they come back when that character logs in again.
+
+Companions saved by a build from before they were per character have no owning character yet.
+The first character of that account to log in afterwards takes all of them. To move one to
+another character, remove it from the first character's list and recruit it with the other.
+
 ## Loot
 
 Monster drops earned by a recruited companion use its active same-map owner as
@@ -117,7 +125,7 @@ window with four tabs.
 | Party | The saved companion list, with each one's job, level and state. Set duty, summon, bench, favorite, or refresh. |
 | Summon | Draft a brand-new companion of any job, grouped 1st / 2nd / Trans / 3rd / 4th. |
 | Battle | Stance (Free / Standard / Hold), Taunt and Recall, and the healer thresholds. |
-| Gear | Take equipment back, per slot (`weapon`, `shield`, `armor`, …) or all of it. |
+| Gear | Take back equipment you gave the companion, per slot (`weapon`, `shield`, `armor`, …) or all of it. What it was generated or drafted with is its own and stays on it. Gear you gave that a new job cannot wear is handed back when it advances. |
 
 The window is a real client component, not an overlay: it is draggable, it
 remembers its position, and clicks aimed at it do not reach the game. Each

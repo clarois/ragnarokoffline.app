@@ -25,7 +25,7 @@ use std::io::{self, Read};
 ///
 /// Typed into the game's delete prompt as `20000101`: the client sends the last
 /// six digits and the char server compares those.
-const DEFAULT_BIRTHDATE: &str = "2000-01-01";
+pub(crate) const DEFAULT_BIRTHDATE: &str = "2000-01-01";
 
 /// The accounts AI agents play on (#187), when the player turns that on.
 ///
@@ -75,13 +75,55 @@ Body:
 /// leaves; the zero date is what a permissive `sql_mode` can turn it into.
 const MISSING_BIRTHDATE: &str = "(birthdate IS NULL OR birthdate='0000-00-00')";
 
-fn field<'a>(request: &'a Value, key: &str) -> Result<&'a str, String> {
+/// The login server stores passwords as salted one-way hashes (the rAthena
+/// fork's src/login/password.hpp) and records, in `pass_flags`, what the plain
+/// text was like before it went: bit 1 weak, bit 2 the shipped default. This
+/// app writes the hash and flags itself (password.rs). A row can still be plain
+/// text -- a world from before 1.4.0 until the login server's one start-up
+/// conversion, or a password set by hand with `sql --write` until that
+/// account's next login -- so every check reads the flags for a hashed row and
+/// the plain text otherwise.
+const HASHED: &str = "user_pass LIKE '$pbkdf2-sha256$%'";
+
+/// Is this row's password the shipped default ("ragnarok")?
+pub(crate) fn default_password_sql() -> String {
+    format!("IF({HASHED}, (pass_flags & 2) <> 0, BINARY user_pass=0x7261676e61726f6b)")
+}
+
+/// Is this row's password weak? The same rule the login server records: not
+/// 8-23 printable characters, blank, or the account's own name.
+pub(crate) fn weak_password_sql() -> String {
+    format!("IF({HASHED}, (pass_flags & 1) <> 0, OCTET_LENGTH(user_pass) NOT BETWEEN 8 AND 23 OR BINARY user_pass REGEXP '[^ -~]' OR TRIM(user_pass)='' OR LOWER(user_pass)=LOWER(userid))")
+}
+
+/// Whether any player account still has a plain-text password -- what the
+/// login server will turn into a hash when it starts. Asked of the rows, not
+/// of the schema: the `pass_flags` column is added below on every start, so
+/// "is the column there" stops meaning "has this world been hashed" the moment
+/// the first start runs, even if that start went no further.
+pub fn plaintext_passwords(dk: &Docker) -> Result<bool, String> {
+    let out = dk
+        .private_sql(&format!("SELECT COUNT(*) FROM login WHERE sex<>'S' AND user_pass<>'' AND NOT ({HASHED});"))
+        .map_err(|e| format!("checking the accounts table: {e}"))?;
+    Ok(out.lines().filter_map(|line| line.trim().parse::<u64>().ok()).last().unwrap_or(0) > 0)
+}
+
+/// Room for a hash, and the flags column, on a database made before hashing.
+/// The login server makes the same change when it starts; doing it here as
+/// well means the checks above work before it ever has. Idempotent.
+pub fn ensure_password_columns(dk: &Docker) -> Result<(), String> {
+    dk.private_sql("ALTER TABLE login MODIFY user_pass varchar(128) NOT NULL DEFAULT ''; ALTER TABLE login ADD COLUMN IF NOT EXISTS pass_flags tinyint(3) unsigned NOT NULL DEFAULT 0 AFTER user_pass;")
+        .map(|_| ())
+        .map_err(|e| format!("preparing the accounts table for hashed passwords: {e}"))
+}
+
+pub(crate) fn field<'a>(request: &'a Value, key: &str) -> Result<&'a str, String> {
     request
         .str(key)
         .ok_or_else(|| format!("Missing account field: {key}"))
 }
 
-fn hex(value: &str) -> String {
+pub(crate) fn hex(value: &str) -> String {
     let mut out = String::from("0x");
     for byte in value.bytes() {
         out.push_str(&format!("{byte:02x}"));
@@ -89,7 +131,7 @@ fn hex(value: &str) -> String {
     out
 }
 
-fn unhex(value: &str) -> Result<String, String> {
+pub(crate) fn unhex(value: &str) -> Result<String, String> {
     let (pairs, remainder) = value.as_bytes().as_chunks::<2>();
     if !remainder.is_empty() {
         return Err("Invalid account response".into());
@@ -130,7 +172,7 @@ fn password(request: &Value) -> Result<&str, String> {
     Ok(value)
 }
 
-fn username(value: &str) -> Result<(), String> {
+pub(crate) fn username(value: &str) -> Result<(), String> {
     if !(4..=23).contains(&value.len())
         || !value
             .bytes()
@@ -148,7 +190,7 @@ fn username(value: &str) -> Result<(), String> {
 
 fn verify_password_format(cfg: &Config) -> Result<(), String> {
     // Supported mods cannot change login configuration. Refuse hand-edited
-    // imports/hash modes rather than writing plaintext into an MD5 deployment.
+    // imports/MD5 mode rather than writing a hash such a deployment never reads.
     let config = std::fs::read_to_string(cfg.state.join("conf/login_conf.txt"))
         .map_err(|_| "Start the server to generate its login configuration first")?;
     for line in config.lines() {
@@ -159,7 +201,7 @@ fn verify_password_format(cfg: &Config) -> Result<(), String> {
                 || (key.trim().eq_ignore_ascii_case("use_MD5_passwords")
                     && !["no", "off", "false", "0"].contains(&value.as_str()))
             {
-                return Err("Account password settings support the app's default plaintext game-password format. Custom login imports or MD5 mode require an explicit account migration.".into());
+                return Err("Account password settings support the app's default hashed game-password format. Custom login imports or MD5 mode require an explicit account migration.".into());
             }
         }
     }
@@ -208,7 +250,7 @@ pub(crate) fn verify_era(cfg: &Config, dk: &Docker, era: &str) -> Result<(), Str
 }
 
 fn list(dk: &Docker, era: &str) -> Result<String, String> {
-    let output = dk.private_sql(&format!("SELECT account_id,HEX(userid),group_id,state,(BINARY user_pass=0x7261676e61726f6b),{MISSING_BIRTHDATE} FROM login WHERE sex<>'S' ORDER BY account_id LIMIT 251;"))?;
+    let output = dk.private_sql(&format!("SELECT account_id,HEX(userid),group_id,state,{},{MISSING_BIRTHDATE} FROM login WHERE sex<>'S' ORDER BY account_id LIMIT 251;", default_password_sql()))?;
     let mut rows = Vec::new();
     for line in output.lines().filter(|l| !l.is_empty()) {
         let values: Vec<_> = line.split('\t').collect();
@@ -368,8 +410,8 @@ fn statement(action: &str, request: &Value) -> Result<String, String> {
         "create" | "invite-create" => {
             let name = field(request, "username")?;
             username(name)?;
-            let pass = password(request)?;
-            format!("LOCK TABLES login WRITE, login AS existing READ; INSERT INTO login (userid,user_pass,sex,email,group_id,birthdate) SELECT {},{},'M','a@a.com',0,'{DEFAULT_BIRTHDATE}' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM login AS existing WHERE userid={}); SELECT ROW_COUNT(); UNLOCK TABLES;", hex(name), hex(pass), hex(name))
+            let (pass, flags) = crate::password::columns(password(request)?, name)?;
+            format!("LOCK TABLES login WRITE, login AS existing READ; INSERT INTO login (userid,user_pass,pass_flags,sex,email,group_id,birthdate) SELECT {},{pass},{flags},'M','a@a.com',0,'{DEFAULT_BIRTHDATE}' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM login AS existing WHERE userid={}); SELECT ROW_COUNT(); UNLOCK TABLES;", hex(name), hex(name))
         }
         // Every account at once, not the selected one. A birthday is not a
         // per-account preference here -- it is a fixed value the game needs
@@ -386,11 +428,19 @@ fn statement(action: &str, request: &Value) -> Result<String, String> {
                 return Err("Service accounts cannot be edited here".into());
             }
             let assignment = match action {
-                "password" => format!("user_pass={}", hex(password(request)?)),
+                "password" => {
+                    let (pass, flags) = crate::password::columns(password(request)?, name)?;
+                    format!("user_pass={pass},pass_flags={flags}")
+                }
                 "disable" => "state=5".into(),
                 _ => "state=0".into(),
             };
-            format!("UPDATE login SET {assignment} WHERE account_id={id} AND BINARY userid={} AND sex<>'S'; SELECT ROW_COUNT();", hex(name))
+            // A new password or a disabled account also ends every
+            // remembered login it has (remember.rs): whoever was kept signed
+            // in has to sign in again. Before the UPDATE, so ROW_COUNT() is
+            // still the UPDATE's.
+            let revoke = if action == "enable" { String::new() } else { crate::remember::revoke_account_sql(id) };
+            format!("{revoke}UPDATE login SET {assignment} WHERE account_id={id} AND BINARY userid={} AND sex<>'S'; SELECT ROW_COUNT();", hex(name))
         }
         // Made if missing, re-keyed if it is already the agent's. The count at
         // the end is 1 only when an agent-group account of that name exists
@@ -398,9 +448,10 @@ fn statement(action: &str, request: &Value) -> Result<String, String> {
         // touched: the UPDATE matches the agent group only, and the INSERT
         // only runs when the name is free.
         "agent" => {
-            let pass = hex(field(request, "password")?);
-            let name = hex(&agent_account(agent_slot(request)?));
-            format!("LOCK TABLES login WRITE, login AS existing READ; UPDATE login SET user_pass={pass},state=0 WHERE BINARY userid={name} AND group_id={AGENT_GROUP} AND sex<>'S'; INSERT INTO login (userid,user_pass,sex,email,group_id,birthdate) SELECT {name},{pass},'M','a@a.com',{AGENT_GROUP},'{DEFAULT_BIRTHDATE}' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM login AS existing WHERE userid={name}); SELECT COUNT(*) FROM login AS existing WHERE BINARY userid={name} AND group_id={AGENT_GROUP} AND sex<>'S'; UNLOCK TABLES;")
+            let account = agent_account(agent_slot(request)?);
+            let (pass, flags) = crate::password::columns(field(request, "password")?, &account)?;
+            let name = hex(&account);
+            format!("LOCK TABLES login WRITE, login AS existing READ; UPDATE login SET user_pass={pass},pass_flags={flags},state=0 WHERE BINARY userid={name} AND group_id={AGENT_GROUP} AND sex<>'S'; INSERT INTO login (userid,user_pass,pass_flags,sex,email,group_id,birthdate) SELECT {name},{pass},{flags},'M','a@a.com',{AGENT_GROUP},'{DEFAULT_BIRTHDATE}' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM login AS existing WHERE userid={name}); SELECT COUNT(*) FROM login AS existing WHERE BINARY userid={name} AND group_id={AGENT_GROUP} AND sex<>'S'; UNLOCK TABLES;")
         }
         // Turning the feature off: the account stays, with its characters, but
         // cannot log in until it is turned on again.
@@ -429,6 +480,18 @@ pub fn run(cfg: &Config, dk: &Docker) -> Result<(), String> {
     dk.require_private_sql()?;
     if action == "list" {
         println!("{}", list(dk, era)?);
+        return Ok(());
+    }
+    // Sign in with Google or Apple: identities and one-time login tokens for
+    // the friend gateway (sign_in.rs). Never a stop/restart of the game.
+    if crate::sign_in::ACTIONS.contains(&action) {
+        println!("{}", crate::sign_in::run(cfg, dk, action, &request)?);
+        return Ok(());
+    }
+    // Remembered logins for the autologin mod (remember.rs), in any mode.
+    // Also never a stop/restart.
+    if crate::remember::ACTIONS.contains(&action) {
+        println!("{}", crate::remember::run(dk, action, &request)?);
         return Ok(());
     }
     if action == "password" || action == "create" || action == "invite-create" || action == "agent" {
@@ -553,6 +616,24 @@ mod tests {
         }
     }
     #[test]
+    fn a_new_password_or_a_disabled_account_ends_its_remembered_logins() {
+        let body = |action: &str| {
+            json::parse(&format!(
+                "{{\"id\":\"2000001\",\"username\":\"player_1\",\"password\":{p},\"confirmation\":{p},\"action\":{}}}",
+                json::quote(action),
+                p = json::quote("a-test-only-secret")
+            ))
+            .unwrap()
+        };
+        for action in ["password", "disable"] {
+            let sql = statement(action, &body(action)).unwrap();
+            assert!(sql.starts_with("DELETE FROM app_remembered_logins WHERE account_id=2000001;"), "{action}");
+            // The count the caller reads is still the UPDATE's.
+            assert!(sql.find("UPDATE login").unwrap() < sql.find("SELECT ROW_COUNT()").unwrap());
+        }
+        assert!(!statement("enable", &body("enable")).unwrap().contains("app_remembered_logins"));
+    }
+    #[test]
     fn the_birthdate_migration_only_fills_in_what_is_missing() {
         let sql = statement("birthdates", &json::parse("{}").unwrap()).unwrap();
         // Rows that already have a birthday keep it: the player may have set
@@ -573,8 +654,8 @@ mod tests {
     fn the_agent_account_is_never_a_players_account() {
         let request = json::parse(r#"{"password":"hunter2-secret"}"#).unwrap();
         let sql = statement("agent", &request).unwrap();
-        assert!(!sql.contains("hunter2-secret"), "{sql}");
-        assert!(sql.contains(&hex("hunter2-secret")));
+        assert!(!sql.contains("hunter2-secret") && !sql.contains(&hex("hunter2-secret")[2..]), "{sql}");
+        assert!(sql.contains(&hex("$pbkdf2-sha256$200000$")[2..]), "{sql}");
         assert!(sql.contains(&format!("WHERE BINARY userid={} AND group_id={AGENT_GROUP}", hex(AGENT_ACCOUNT))), "{sql}");
         assert!(sql.contains("WHERE NOT EXISTS (SELECT 1 FROM login AS existing WHERE userid="), "{sql}");
         assert!(sql.contains(&format!("'M','a@a.com',{AGENT_GROUP},'{DEFAULT_BIRTHDATE}'")));
@@ -588,6 +669,39 @@ mod tests {
         let two = statement("agent", &json::parse(r#"{"password":"x","agent":"2"}"#).unwrap()).unwrap();
         assert!(two.contains(&hex("aiagent2")) && !two.contains(&format!("{},", hex("aiagent"))), "{two}");
         assert!(statement("agent", &json::parse(r#"{"password":"x","agent":"5"}"#).unwrap()).is_err());
+    }
+
+    /// Every statement that writes `user_pass` writes the login server's hash
+    /// and its `pass_flags`, never the password -- not even hex-encoded.
+    #[test]
+    fn every_password_this_app_writes_is_already_hashed() {
+        let secret = "a-test-only-secret";
+        let hashed = &hex("$pbkdf2-sha256$200000$")[2..];
+        let cases = [
+            ("create", format!(r#"{{"username":"friend-1","password":"{secret}","confirmation":"{secret}"}}"#), 0),
+            ("invite-create", format!(r#"{{"username":"friend-1","password":"{secret}","confirmation":"{secret}"}}"#), 0),
+            ("password", format!(r#"{{"id":"2000001","username":"player_1","password":"{secret}","confirmation":"{secret}"}}"#), 0),
+            ("password", r#"{"id":"2000001","username":"player_1","password":"ragnarok","confirmation":"ragnarok"}"#.to_string(), crate::password::DEFAULT),
+            ("agent", format!(r#"{{"password":"{secret}"}}"#), 0),
+            ("agent", r#"{"password":"x"}"#.to_string(), crate::password::WEAK),
+        ];
+        for (action, body, flags) in cases {
+            let request = json::parse(&body).unwrap();
+            let sql = statement(action, &request).unwrap();
+            let plain = request.str("password").unwrap();
+            // ("x" is too short to look for: every hex literal starts 0x.)
+            assert!(plain.len() < 8 || (!sql.contains(plain) && !sql.contains(&hex(plain)[2..])), "{action}: {sql}");
+            assert!(sql.contains(hashed), "{action}: {sql}");
+            assert!(sql.contains(&format!(",{flags},'M'")) || sql.contains(&format!("pass_flags={flags} ")), "{action} {flags}: {sql}");
+        }
+        let sign_in = crate::sign_in::statement(
+            "identity-create",
+            &json::parse(r#"{"provider":"google","subject":"1","email":"a@b.c","username":"friend_1"}"#).unwrap(),
+            secret,
+        )
+        .unwrap();
+        assert!(!sign_in.contains(secret) && !sign_in.contains(&hex(secret)[2..]) && sign_in.contains(hashed), "{sign_in}");
+        assert!(sign_in.contains("(userid,user_pass,pass_flags,"), "{sign_in}");
     }
 
     /// The group the account is put in must be the one groups.yml defines,

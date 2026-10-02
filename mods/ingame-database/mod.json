@@ -1,0 +1,11 @@
+{
+  "name": "ingame-database",
+  "version": "1.0.0",
+  "author": "Ragnarok Offline",
+  "description": "An in-game database window: look up any item or monster without leaving the game -- descriptions, stats and drops, mods' included. Also the worked example of a mod with a window of its own and a server script it asks for data.",
+  "default": "off",
+  "requires": { "app": ">=1.4.0", "era": "any" },
+  "settings": [
+    { "key": "show_button", "type": "boolean", "default": true, "label": "Show the DB button in game", "description": "The window still opens with Alt+D." }
+  ]
+}

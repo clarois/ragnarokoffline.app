@@ -300,7 +300,7 @@ pub fn link(cfg: &Config, args: &[String]) -> Result<(), String> {
         &cfg.root.join("client-assets/data"),
         &server_root.join("data"),
     )?;
-    let (plugins, item_tables, quest_tables) = overlay_mods(cfg, &server_root, &merged)?;
+    let (plugins, item_tables, quest_tables, view_tables) = overlay_mods(cfg, &server_root, &merged)?;
     let mut fingerprint = 0xcbf2_9ce4_8422_2325;
     fnv(&mut fingerprint, b"owned-assets-v2");
     fnv(&mut fingerprint, text.as_str().as_bytes());
@@ -339,7 +339,7 @@ pub fn link(cfg: &Config, args: &[String]) -> Result<(), String> {
         format!("{fingerprint:016x}"),
     )
     .map_err(|e| e.to_string())?;
-    write_client_config(cfg, &server_root, &plugins, &item_tables, &quest_tables, text, packetver)?;
+    write_client_config(cfg, &server_root, &plugins, &item_tables, &quest_tables, &view_tables, text, packetver)?;
     copy_file(
         &cfg.root.join("config/index.html"),
         &server_root.join("index.html"),
@@ -365,37 +365,43 @@ fn overlay_mods(
     cfg: &Config,
     server_root: &Path,
     merged: &Path,
-) -> Result<(Vec<(String, String)>, Vec<String>, Vec<String>), String> {
+) -> Result<(Vec<(String, String)>, Vec<String>, Vec<String>, ViewTables), String> {
     let mut plugins = Vec::new();
     let mut item_tables = Vec::new();
     let mut quest_tables = Vec::new();
+    let mut view_tables = ViewTables::default();
     // The player's answers to whatever each mod declared in its mod.json.
     let saved = crate::mods::read_settings(&cfg.state)?;
     for m in crate::mods::enabled(cfg) {
-        // Served ahead of the GRFs: sprites, .act/.spr, map geometry, Lua.
-        // Aliased, so a mod can be written in ASCII rather than in CP949 bytes.
-        copy_data_aliased(&m.dir.join("data"), &server_root.join("data"))?;
-        // Music. The client asks for `BGM/<file>`, a root outside data/, so
-        // this is its own layer rather than part of the one above.
-        copy_over(&m.dir.join("BGM"), &server_root.join("BGM"))?;
-        // Client tables. itemInfo is merged rather than replaced; see
-        // copy_system_layer.
-        let (items, quests) = copy_system_layer(&m.dir.join("System"), merged, &m.name)?;
-        item_tables.extend(items);
-        quest_tables.extend(quests);
-        for misplaced in item_tables_under(&m.dir.join("data"), "data") {
-            eprintln!(
-                "mods: {} has {misplaced}, but the client reads item tables only from System/ -- \
-                 move it to System/",
-                m.name
-            );
+        // The mod's own folder, then the running era's folder over it.
+        for root in &m.roots {
+            // Served ahead of the GRFs: sprites, .act/.spr, map geometry, Lua.
+            // Aliased, so a mod can be written in ASCII rather than in CP949 bytes.
+            copy_data_aliased(&root.join("data"), &server_root.join("data"))?;
+            // Music. The client asks for `BGM/<file>`, a root outside data/, so
+            // this is its own layer rather than part of the one above.
+            copy_over(&root.join("BGM"), &server_root.join("BGM"))?;
+            // Client tables. itemInfo is merged rather than replaced; see
+            // copy_system_layer.
+            let (items, quests, views) = copy_system_layer(&root.join("System"), merged, &m.name)?;
+            item_tables.extend(items);
+            quest_tables.extend(quests);
+            view_tables.extend(views);
+            for misplaced in item_tables_under(&root.join("data"), "data") {
+                eprintln!(
+                    "mods: {} has {misplaced}, but the client reads item tables only from System/ -- \
+                     move it to System/",
+                    m.name
+                );
+            }
         }
         // A roBrowser plugin: styling, UI, anything the client can be told to
         // load. Served from the root, so the path in the config is
         // server-relative -- which is the one thing that will confuse people.
-        let client = m.dir.join("client");
-        if client.join("index.js").is_file() {
-            copy_over(&client, &server_root.join("plugins").join(&m.name))?;
+        if m.roots.iter().any(|r| r.join("client").join("index.js").is_file()) {
+            for root in &m.roots {
+                copy_over(&root.join("client"), &server_root.join("plugins").join(&m.name))?;
+            }
             // Declared defaults with the player's answers over them. The loader
             // hands this to the mod's init(parameters, api), so a mod can stay
             // enabled and still be told to hide part of itself.
@@ -408,7 +414,7 @@ fn overlay_mods(
             plugins.push((m.name.clone(), pars));
         }
     }
-    Ok((plugins, item_tables, quest_tables))
+    Ok((plugins, item_tables, quest_tables, view_tables))
 }
 
 /// FNV-1a, the same one `guest_fingerprint` uses, fed a piece at a time.
@@ -474,19 +480,28 @@ fn overlay_fingerprint(cfg: &Config) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     fnv(&mut hash, era_tag(cfg).as_bytes());
     for m in crate::mods::enabled(cfg) {
-        let roots = client_roots(&m.dir);
+        // Each root's layers, named relative to the mod folder, so a mod with
+        // no era folder hashes exactly as it did before there were any.
+        let layers: Vec<(PathBuf, PathBuf)> = m
+            .roots
+            .iter()
+            .flat_map(|root| {
+                let rel = root.strip_prefix(&m.dir).unwrap_or(Path::new("")).to_path_buf();
+                client_roots(root).into_iter().map(move |sub| (root.join(sub), rel.join(sub)))
+            })
+            .collect();
         // A mod that reaches only the server has nothing the client could be
         // holding a stale copy of. Skipping its name as well as its files is
         // the difference between toggling a drop-rate mod and re-downloading
         // the client's whole working set to find nothing had changed.
-        if roots.is_empty() {
+        if layers.is_empty() {
             continue;
         }
         // The name, and in order: two mods overlaying the same path resolve by
         // load order, so the same set in a different order is a different tree.
         fnv(&mut hash, m.name.as_bytes());
-        for sub in roots {
-            hash_tree(&mut hash, &m.dir.join(sub), Path::new(sub));
+        for (dir, rel) in layers {
+            hash_tree(&mut hash, &dir, &rel);
         }
     }
     format!("{hash:016x}")
@@ -631,11 +646,12 @@ fn copy_system_layer(
     src: &Path,
     merged: &Path,
     mod_name: &str,
-) -> Result<(Vec<String>, Vec<String>), String> {
+) -> Result<(Vec<String>, Vec<String>, ViewTables), String> {
     let mut added = Vec::new();
     let mut quests = Vec::new();
+    let mut views = ViewFiles::default();
     if !src.exists() {
-        return Ok((added, quests));
+        return Ok((added, quests, ViewTables::default()));
     }
     // Named for the mod so two mods can each ship one, and so the file cannot
     // collide with the translation's own copy.
@@ -669,6 +685,18 @@ fn copy_system_layer(
             };
             copy_file(&from, &merged.join(&dst_name))?;
             added.push(dst_name);
+        } else if let (true, Some((kind, role))) = (from.is_file(), view_table(&name)) {
+            // The sprite tables behind a new monster's or item's look. Copied
+            // aside like item tables, and paired below.
+            let ext = if name.to_lowercase().ends_with(".lua") { "lua" } else { "lub" };
+            let stem = name[..name.rfind('.').unwrap_or(name.len())].to_string();
+            let dst_name = format!("{stem}-{safe}.{ext}");
+            if views.has(kind, role) {
+                eprintln!("mods: {mod_name} has more than one {kind} {role} table in System/; only the first is used");
+                continue;
+            }
+            copy_file(&from, &merged.join(&dst_name))?;
+            views.set(kind, role, dst_name);
         } else if from.is_file() && is_quest_table(&name) {
             let dst_name = match quests.len() {
                 0 => format!("OngoingQuestInfoList-{safe}.lub"),
@@ -690,7 +718,148 @@ fn copy_system_layer(
             copy_file(&from, &to)?;
         }
     }
-    Ok((added, quests))
+    let views = views.pair(merged, mod_name)?;
+    Ok((added, quests, views))
+}
+
+/// The client's sprite tables that a mod adds rows to (`customLuaTables` in
+/// the roBrowser fork's DBManager.js). Each is an id file and a name file in
+/// the official format, except weapons, which are one file:
+///
+///   accessory  accessoryid + accname          what a headgear looks like on you
+///   robe       spriterobeid + spriterobename  what a garment looks like
+///   monster    npcidentity + jobname          which sprite a monster/NPC id uses
+///   weapon     weapontable                    what a weapon looks like
+///
+/// Loaded after the base, in mod order, and merged over it by id: the last
+/// mod to define an id wins, as in db/.
+#[derive(Debug, Default, PartialEq)]
+pub struct ViewTables {
+    pub accessory: Vec<(String, String)>,
+    pub robe: Vec<(String, String)>,
+    pub monster: Vec<(String, String)>,
+    pub weapon: Vec<String>,
+}
+
+impl ViewTables {
+    fn extend(&mut self, other: ViewTables) {
+        self.accessory.extend(other.accessory);
+        self.robe.extend(other.robe);
+        self.monster.extend(other.monster);
+        self.weapon.extend(other.weapon);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.accessory.is_empty() && self.robe.is_empty() && self.monster.is_empty() && self.weapon.is_empty()
+    }
+
+    /// The `customLuaTables` entry for Config.local.js.
+    fn config_entry(&self) -> String {
+        let pairs = |list: &[(String, String)]| {
+            list.iter()
+                .map(|(id, name)| format!("['System/{id}', 'System/{name}']"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let mut parts = Vec::new();
+        for (key, list) in [("accessory", &self.accessory), ("robe", &self.robe), ("monster", &self.monster)] {
+            if !list.is_empty() {
+                parts.push(format!("{key}: [{}]", pairs(list)));
+            }
+        }
+        if !self.weapon.is_empty() {
+            let files = self.weapon.iter().map(|f| format!("'System/{f}'")).collect::<Vec<_>>().join(", ");
+            parts.push(format!("weapon: [{files}]"));
+        }
+        format!("\tcustomLuaTables: {{ {} }},\n", parts.join(", "))
+    }
+}
+
+/// One mod's view-table files, before they are paired up.
+#[derive(Default)]
+struct ViewFiles {
+    files: std::collections::BTreeMap<(&'static str, &'static str), String>,
+}
+
+impl ViewFiles {
+    fn has(&self, kind: &'static str, role: &'static str) -> bool {
+        self.files.contains_key(&(kind, role))
+    }
+
+    fn set(&mut self, kind: &'static str, role: &'static str, file: String) {
+        self.files.insert((kind, role), file);
+    }
+
+    /// Pair each id file with its name file. A name table whose keys are plain
+    /// numbers needs no id file, but the client always loads one first, so it
+    /// gets an empty stand-in. An id file with no names is only a warning.
+    fn pair(self, merged: &Path, mod_name: &str) -> Result<ViewTables, String> {
+        let mut out = ViewTables::default();
+        for kind in ["accessory", "robe", "monster"] {
+            let id = self.files.get(&(kind, "id")).cloned();
+            let Some(name) = self.files.get(&(kind, "name")).cloned() else {
+                if id.is_some() {
+                    eprintln!("mods: {mod_name} has a {kind} id table in System/ but no name table beside it, so it does nothing");
+                }
+                continue;
+            };
+            let id = match id {
+                Some(id) => id,
+                None => {
+                    // One stand-in per mod and table, never shared: the client
+                    // mounts each id file under its own name while it loads, and
+                    // two loads of one name at once unmount it from under each
+                    // other, which leaves its Lua state unusable (every table
+                    // after that fails with "memory access out of bounds").
+                    let stub = format!("ids-none-{kind}-{}.lua", safe_name(mod_name));
+                    fs::write(merged.join(&stub), "-- An id table for a name table that needs none.\n")
+                        .map_err(|e| format!("writing {stub}: {e}"))?;
+                    stub
+                }
+            };
+            let entry = (id, name);
+            match kind {
+                "accessory" => out.accessory.push(entry),
+                "robe" => out.robe.push(entry),
+                _ => out.monster.push(entry),
+            }
+        }
+        if let Some(weapon) = self.files.get(&("weapon", "table")) {
+            out.weapon.push(weapon.clone());
+        }
+        Ok(out)
+    }
+}
+
+/// A mod name as part of a file name, as the item tables do it.
+fn safe_name(mod_name: &str) -> String {
+    mod_name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect()
+}
+
+/// Which view table a file in `System/` is, by the client's own file names:
+/// `accname.lub`, `jobname.lua`, `accessoryid_custom.lub`, ...
+fn view_table(name: &str) -> Option<(&'static str, &'static str)> {
+    let lower = name.to_lowercase();
+    if !(lower.ends_with(".lua") || lower.ends_with(".lub")) {
+        return None;
+    }
+    // Longer prefixes first: spriterobeid and spriterobename share a start.
+    const TABLES: [(&str, &str, &str); 7] = [
+        ("accessoryid", "accessory", "id"),
+        ("accname", "accessory", "name"),
+        ("spriterobeid", "robe", "id"),
+        ("spriterobename", "robe", "name"),
+        ("npcidentity", "monster", "id"),
+        ("jobname", "monster", "name"),
+        ("weapontable", "weapon", "table"),
+    ];
+    TABLES
+        .iter()
+        .find(|(prefix, _, _)| lower.starts_with(prefix))
+        .map(|(_, kind, role)| (*kind, *role))
 }
 
 /// `OngoingQuestInfoList.lub`, `OngoingQuestInfoList_True.lub` -- the quest
@@ -806,6 +975,18 @@ fn insert_before_close(body: String, block: &str) -> String {
     format!("{head}{sep}\n{block}{}", &body[i + 1..])
 }
 
+/// Replace the number in the template's server entry, `port: <digits>,`.
+/// Anchored on the tab-indented line start so it cannot match a key that
+/// merely ends in "port" -- `socketProxy` and the like.
+fn set_login_port(body: &str, port: u16) -> String {
+    const KEY: &str = "\tport: ";
+    let Some(start) = body.find(KEY).map(|i| i + KEY.len()) else {
+        return body.to_string();
+    };
+    let end = start + body[start..].bytes().take_while(u8::is_ascii_digit).count();
+    format!("{}{port}{}", &body[..start], &body[end..])
+}
+
 /// Replace the number in the template's `packetver: <digits>,` line.
 fn set_packetver(body: &str, packetver: &str) -> String {
     const KEY: &str = "packetver: ";
@@ -822,6 +1003,7 @@ fn write_client_config(
     plugins: &[(String, String)],
     item_tables: &[String],
     quest_tables: &[String],
+    view_tables: &ViewTables,
     text: GameText,
     packetver: &str,
 ) -> Result<(), String> {
@@ -840,6 +1022,11 @@ fn write_client_config(
     // Replaced by pattern rather than by the template's literal, so the
     // template's own number can move without this following it.
     let body = set_packetver(&body, packetver);
+    // The login server's port: the one TCP destination the client dials by
+    // number. Char and map it is told by the servers themselves, and the asset
+    // server it reaches through `location.host`, so this is the only port the
+    // client config carries (ports.rs).
+    let body = set_login_port(&body, cfg.ports.login);
     // The codepage every client table is read with. The template is Korean,
     // which is right whenever the English overlay is in front of it; see
     // GameText for why the two cannot be chosen separately.
@@ -882,6 +1069,9 @@ fn write_client_config(
             .join(", ");
         insert_before_close(body, &format!("\tcustomQuestInfo: [{list}],\n"))
     };
+    // The sprite tables behind new monsters and item looks: after the base,
+    // in mod order, the last to define an id wins.
+    let body = if view_tables.is_empty() { body } else { insert_before_close(body, &view_tables.config_entry()) };
     let out = if plugins.is_empty() {
         body
     } else {
@@ -918,6 +1108,7 @@ mod tests {
             image: String::new(),
             db_image: String::new(),
             app_version: None,
+            ports: crate::ports::Ports::DEFAULT,
         }
     }
 
@@ -1363,7 +1554,7 @@ mod tests {
         write(&src.join("itemInfo.lua"), "MOD ADDITIONS");
         write(&src.join("OngoingQuests.lub"), "other table");
 
-        let (added, _) = copy_system_layer(&src, &merged, "my-mod").unwrap();
+        let (added, _, _) = copy_system_layer(&src, &merged, "my-mod").unwrap();
 
         assert_eq!(added, vec!["itemInfo-my-mod.lua".to_string()]);
         // The base is untouched...
@@ -1395,7 +1586,7 @@ mod tests {
         write(&merged.join("OngoingQuestInfoList.lub"), "BASE");
         write(&src.join("OngoingQuestInfoList.lub"), "MOD QUESTS");
         write(&src.join("OngoingQuestInfoList_True.lub"), "MORE QUESTS");
-        let (items, quests) = copy_system_layer(&src, &merged, "story").unwrap();
+        let (items, quests, _) = copy_system_layer(&src, &merged, "story").unwrap();
         assert!(items.is_empty());
         assert_eq!(
             quests,
@@ -1404,6 +1595,71 @@ mod tests {
         assert_eq!(fs::read_to_string(merged.join("OngoingQuestInfoList.lub")).unwrap(), "BASE");
         assert_eq!(fs::read_to_string(merged.join("OngoingQuestInfoList-story.lub")).unwrap(), "MOD QUESTS");
         assert_eq!(fs::read_to_string(merged.join("OngoingQuestInfoList-story.2.lub")).unwrap(), "MORE QUESTS");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    /// Two pairs that need a stand-in id table each get their own: the client
+    /// mounts id files by name, and a shared one broke every table after it.
+    #[test]
+    fn stand_in_id_tables_are_never_shared() {
+        let tmp = std::env::temp_dir().join(format!("ro-sysvs-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let merged = tmp.join("merged");
+        fs::create_dir_all(&merged).unwrap();
+        let a = tmp.join("a/System");
+        write(&a.join("accname.lub"), "AccNameTable = { [5001] = \"_x\" }");
+        write(&a.join("jobname.lub"), "JobNameTable = { [25001] = \"PORING\" }");
+        let (_, _, views) = copy_system_layer(&a, &merged, "a").unwrap();
+        let mut stubs = vec![views.accessory[0].0.clone(), views.monster[0].0.clone()];
+        stubs.sort();
+        stubs.dedup();
+        assert_eq!(stubs.len(), 2, "{stubs:?}");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    /// A new monster's sprite and a new headgear's look are rows added to the
+    /// client's tables, not replacements of them: each file is kept aside under
+    /// the mod's name and paired, and the base is untouched.
+    #[test]
+    fn view_tables_are_kept_aside_paired_and_listed_in_mod_order() {
+        let tmp = std::env::temp_dir().join(format!("ro-sysv-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let merged = tmp.join("merged");
+        fs::create_dir_all(&merged).unwrap();
+        write(&merged.join("accname.lub"), "BASE");
+        let a = tmp.join("a/System");
+        write(&a.join("npcidentity.lub"), "jobtbl.JT_MY_MOB = 31001");
+        write(&a.join("jobname.lub"), "JobNameTable = { [jobtbl.JT_MY_MOB] = \"MY_MOB\" }");
+        write(&a.join("accname.lua"), "AccNameTable = { [2001] = \"_my_hat\" }");
+        write(&a.join("weapontable.lub"), "WeaponNameTable = {}");
+        write(&a.join("spriterobeid.lub"), "an id table with no names");
+        let b = tmp.join("b/System");
+        write(&b.join("accessoryid.lub"), "ACCESSORY_IDs = { ACCESSORY_B = 2002 }");
+        write(&b.join("accname.lub"), "AccNameTable = { [ACCESSORY_IDs.ACCESSORY_B] = \"_b_hat\" }");
+
+        let (items, quests, first) = copy_system_layer(&a, &merged, "a").unwrap();
+        assert!(items.is_empty() && quests.is_empty());
+        let (_, _, second) = copy_system_layer(&b, &merged, "b").unwrap();
+        assert_eq!(first.monster, vec![("npcidentity-a.lub".to_string(), "jobname-a.lub".to_string())]);
+        // A name table keyed by plain numbers gets an empty id table to load.
+        assert_eq!(first.accessory, vec![("ids-none-accessory-a.lua".to_string(), "accname-a.lua".to_string())]);
+        assert!(merged.join("ids-none-accessory-a.lua").is_file());
+        assert_eq!(first.weapon, vec!["weapontable-a.lub".to_string()]);
+        // An id table with nothing to name is dropped, not half-loaded.
+        assert!(first.robe.is_empty());
+        assert_eq!(fs::read_to_string(merged.join("accname.lub")).unwrap(), "BASE");
+
+        let mut all = ViewTables::default();
+        all.extend(first);
+        all.extend(second);
+        assert_eq!(
+            all.config_entry(),
+            "\tcustomLuaTables: { accessory: [['System/ids-none-accessory-a.lua', 'System/accname-a.lua'], \
+             ['System/accessoryid-b.lub', 'System/accname-b.lub']], \
+             monster: [['System/npcidentity-a.lub', 'System/jobname-a.lub']], \
+             weapon: ['System/weapontable-a.lub'] },\n"
+        );
+        assert!(ViewTables::default().is_empty());
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -1433,7 +1689,7 @@ mod tests {
         write(&src.join("itemInfo.lua"), "FIRST");
         write(&src.join("itemInfo_C.lua"), "SECOND");
         write(&src.join("LuaFiles514/itemInfo.lua"), "NESTED");
-        let (added, _) = copy_system_layer(&src, &merged, "m").unwrap();
+        let (added, _, _) = copy_system_layer(&src, &merged, "m").unwrap();
         assert_eq!(added, vec!["itemInfo-m.lua".to_string(), "itemInfo-m.2.lua".to_string()]);
         assert_eq!(fs::read_to_string(merged.join("itemInfo-m.lua")).unwrap(), "FIRST");
         assert_eq!(fs::read_to_string(merged.join("itemInfo-m.2.lua")).unwrap(), "SECOND");
@@ -1461,7 +1717,7 @@ mod tests {
         fs::write(cfg.root.join("config/Config.local.js"), "window.ROConfigLocal = {\n\tskipIntro: true\n};\n").unwrap();
         let tables = vec!["itemInfo-a.lua".to_string(), "itemInfo-b.lua".to_string()];
         let quests = vec!["OngoingQuestInfoList-a.lub".to_string(), "OngoingQuestInfoList-b.lub".to_string()];
-        write_client_config(&cfg, &web, &[], &tables, &quests, GameText::English, crate::packetver::default()).unwrap();
+        write_client_config(&cfg, &web, &[], &tables, &quests, &ViewTables::default(), GameText::English, crate::packetver::default()).unwrap();
         let body = fs::read_to_string(web.join("Config.local.js")).unwrap();
         assert!(
             body.contains("customItemInfo: ['System/itemInfo-b.lua', 'System/itemInfo-a.lua', 'System/itemInfo.lua', 'System/itemInfo_true.lub'],"),
@@ -1515,7 +1771,7 @@ mod tests {
             // shape the loader sees never depends on whether options exist.
             ("plain".to_string(), String::new()),
         ];
-        write_client_config(&cfg, &web, &plugins, &[], &[], GameText::English, crate::packetver::default()).unwrap();
+        write_client_config(&cfg, &web, &plugins, &[], &[], &ViewTables::default(), GameText::English, crate::packetver::default()).unwrap();
         let body = fs::read_to_string(web.join("Config.local.js")).unwrap();
         assert!(
             body.contains("'wasd-movement': { path: 'plugins/wasd-movement/index', pars: { \"show_controls_button\": false } }"),
@@ -1523,6 +1779,35 @@ mod tests {
         );
         assert!(body.contains("'plain': { path: 'plugins/plain/index', pars: {  } }"), "{body}");
         assert!(body.trim_end().ends_with("};"), "{body}");
+        fs::remove_dir_all(cfg.state.parent().unwrap()).unwrap();
+    }
+
+    /// The shipped template, with a test world's ports: the client dials the
+    /// moved login server, and nothing else in the file changes. With no
+    /// override, the file is exactly what it always was.
+    #[test]
+    fn the_client_dials_the_configured_login_port() {
+        let template = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../config/Config.local.js")).unwrap();
+        assert!(template.contains("\t\t\tport: 6900,"), "the template moved its port line");
+
+        let mut cfg = fixture_config("login-port");
+        cfg.ports = crate::ports::Ports { asset: 13338, login: 16900, char: 16121, map: 15121, agent: 17490 };
+        fs::create_dir_all(cfg.root.join("config")).unwrap();
+        fs::write(cfg.root.join("config/Config.local.js"), &template).unwrap();
+        let web = cfg.state.join("web");
+        fs::create_dir_all(&web).unwrap();
+        write_client_config(&cfg, &web, &[], &[], &[], &ViewTables::default(), GameText::English, crate::packetver::default()).unwrap();
+        let moved = fs::read_to_string(web.join("Config.local.js")).unwrap();
+        assert!(moved.contains("\t\t\tport: 16900,"), "{moved}");
+        assert!(!moved.contains("port: 6900,"), "{moved}");
+        // The socket proxy still follows the page's own origin, which is how
+        // the moved asset port reaches the client.
+        assert!(moved.contains("location.host + '/ws/'"), "{moved}");
+
+        cfg.ports = crate::ports::Ports::DEFAULT;
+        write_client_config(&cfg, &web, &[], &[], &[], &ViewTables::default(), GameText::English, crate::packetver::default()).unwrap();
+        let default = fs::read_to_string(web.join("Config.local.js")).unwrap();
+        assert_eq!(default, set_packetver(&template, crate::packetver::default()));
         fs::remove_dir_all(cfg.state.parent().unwrap()).unwrap();
     }
 
@@ -1576,5 +1861,58 @@ mod tests {
         assert_eq!(read("only-over.txt"), "added");
 
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    /// The client caches by filename, and every skin replaces the same
+    /// filenames -- so two skins with identically sized pictures, written in
+    /// the same second, must still read as different overlays, or switching
+    /// between them would show the old one from the cache. The mod's name is
+    /// in the fingerprint for exactly that.
+    #[test]
+    fn switching_skins_moves_the_overlay_fingerprint() {
+        let cfg = fixture_config("skin-switch");
+        let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        for (name, colour) in [("skin-blue", "blue"), ("skin-pink", "pink")] {
+            let dir = cfg.state.join("mods").join(name);
+            write(&dir.join("mod.json"), r#"{"kind": "skin"}"#);
+            let art = dir.join("data/texture/ui/basic_interface/titlebar_mid.bmp");
+            write(&art, colour);
+            fs::File::options().write(true).open(&art).unwrap().set_modified(stamp).unwrap();
+        }
+
+        crate::mods::enable(&cfg, "skin-blue").unwrap();
+        let blue = overlay_fingerprint(&cfg);
+        crate::mods::enable(&cfg, "skin-pink").unwrap();
+        let pink = overlay_fingerprint(&cfg);
+        assert_ne!(blue, pink, "a skin switch would be served from the client's cache");
+
+        crate::mods::enable(&cfg, "skin-blue").unwrap();
+        assert_eq!(overlay_fingerprint(&cfg), blue, "switching back must not cost a second clear");
+
+        crate::mods::set_enabled(&cfg.state, "skin-blue", false).unwrap();
+        assert_ne!(overlay_fingerprint(&cfg), blue, "switching the skin off must clear it too");
+
+        let _ = fs::remove_dir_all(cfg.state.parent().unwrap());
+    }
+
+    /// A mod's era folder reaches the client too, and only for its own era:
+    /// an edit there must clear the cache, and an edit in the other era's
+    /// folder, which the client never sees, must not.
+    #[test]
+    fn the_running_eras_client_files_count_and_the_other_eras_do_not() {
+        let cfg = fixture_config("era-fingerprint");
+        let dir = cfg.state.join("mods").join("era-art");
+        write(&dir.join("mod.json"), r#"{"renewalFolder": "re", "prerenewalFolder": "pre-re"}"#);
+        write(&dir.join("data/texture/shared.bmp"), "shared");
+        write(&dir.join("re/data/texture/login.bmp"), "renewal");
+        write(&dir.join("pre-re/data/texture/login.bmp"), "classic");
+
+        let renewal = overlay_fingerprint(&cfg);
+        write(&dir.join("pre-re/data/texture/login.bmp"), "classic, redrawn");
+        assert_eq!(overlay_fingerprint(&cfg), renewal, "the other era's folder is not served");
+        write(&dir.join("re/data/texture/login.bmp"), "renewal, redrawn");
+        assert_ne!(overlay_fingerprint(&cfg), renewal, "an edit in the era folder went unnoticed");
+
+        let _ = fs::remove_dir_all(cfg.state.parent().unwrap());
     }
 }

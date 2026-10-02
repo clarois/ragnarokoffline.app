@@ -21,6 +21,8 @@ const ROOT = path.join(__dirname, '..');
 const CMDS = path.join(ROOT, 'stack', 'src', 'cmds.rs');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const cmds = fs.readFileSync(CMDS, 'utf8').replace(/\r\n/g, '\n');
+// The CREATE lives in the one schema file cmds.rs includes; the upgrade list stays in cmds.rs.
+const schema = fs.readFileSync(path.join(ROOT, 'third-party', 'population-engine', 'files', 'sql-files', 'population_engine', 'cp_companion_persistence.sql'), 'utf8').replace(/\r\n/g, '\n');
 const engine = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 
 const COLUMNS = {
@@ -52,7 +54,7 @@ function gearSnapshotBody() {
 test('the v8 columns exist in the CREATE TABLE literal and in the ALTER list', () => {
 	for (const [name, definition] of Object.entries(COLUMNS)) {
 		// fresh installs
-		assert.match(cmds, new RegExp('`' + name + '`\\s+' + definition.replace(/ /g, '\\s+')),
+		assert.match(schema, new RegExp('`' + name + '`\\s+' + definition.replace(/ /g, '\\s+')),
 			`${name} must appear in the CREATE TABLE a fresh install runs`);
 		// upgrades
 		assert.ok(cmds.includes(`("${name}", "${definition}")`),
@@ -63,9 +65,9 @@ test('the v8 columns exist in the CREATE TABLE literal and in the ALTER list', (
 test('hom_enabled is nullable, and the comments say why', () => {
 	// NULL has to mean "never chosen": that is what keeps an upgrade from re-enabling a pet the
 	// player switched off, and what lets the alchemist default stay on.
-	assert.match(cmds, /`hom_enabled`\s+TINYINT\s+NULL DEFAULT NULL/,
+	assert.match(schema, /`hom_enabled`\s+TINYINT\s+NULL DEFAULT NULL/,
 		'hom_enabled must be NULLable');
-	assert.match(cmds, /\(v8\)[\s\S]{0,700}?never chosen/,
+	assert.match(schema, /\(v8\)[\s\S]{0,700}?never chosen/,
 		'the schema must record what NULL means, or the next reader will "simplify" it away');
 });
 
@@ -73,7 +75,7 @@ test('the engine reads the stored state with the house SQL idiom', () => {
 	assert.match(engine, /static void population_engine_load_shell_homunculus\(map_session_data \*sd, int \*enabled,/,
 		'the loader must exist');
 	assert.match(engine,
-		/SELECT hom_enabled, hom_class, hom_level, hom_exp FROM `cp_companion_persistence`"\s*\n?\s*" WHERE owner_account_id=%u AND shell_index=%u/,
+		/SELECT hom_enabled, hom_class, hom_level, hom_exp FROM `cp_companion_persistence`"\s*\n?\s*" WHERE owner_account_id=%u AND owner_char_id=%u AND shell_index=%u/,
 		'the row is keyed exactly like every other per-companion read');
 	assert.match(engine, /if \(SQL_SUCCESS == Sql_NextRow\(mmysql_handle\)\)/,
 		'use the same read pattern as the rest of the engine');
@@ -118,9 +120,9 @@ test('the recurring snapshot writes the pet state only when a pet exists', () =>
 		'the fragment must carry the pet\'s live state');
 	assert.match(body, /\(int\)sd->hd->homunculus\.level/,
 		'the level written must come from the live pet');
-	assert.match(body, /" mode=%d, duty=%d, heal_at=%d, emergency_at=%d%s"/,
+	assert.match(body, /" mode=%d, duty=%d, heal_at=%d, emergency_at=%d(, given_mask=%u)?%s"/,
 		'the fragment must actually be interpolated into the statement');
-	assert.match(body, /hom_frag,\s*\n\s*owner, index_\);/,
+	assert.match(body, /hom_frag,\s*\n\s*owner, sd->pop\.companion_owner_char, index_\);/,
 		'and bound to the right placeholder');
 });
 
@@ -130,4 +132,19 @@ test('persistence never reaches the char server and never invents a hom_id', () 
 		'hom_id must stay 0 - it is what makes every char-server path a no-op');
 	assert.ok(!/intif_homunculus_[a-z_]+\s*\(/.test(body.replace(/`intif_homunculus_create`/g, '')),
 		'no char-server call may be introduced');
+});
+
+test('creating a row that already exists keeps the player\'s choices', () => {
+	// REPLACE deletes and re-inserts, so re-inviting an expelled companion reset every column the
+	// statement does not list: the skill selection, the pet switch and its level, favorite, stance,
+	// duty and heal thresholds. The row write must be an upsert that leaves them alone.
+	const body = functionBody(engine, 'static void population_engine_persist_companion_sql(');
+	assert.ok(!/REPLACE INTO/.test(codeOnly(body)), 'the companion row must not be written with REPLACE');
+	assert.match(body, /ON DUPLICATE KEY UPDATE/, 'the companion row must be an upsert');
+	const update = body.slice(body.indexOf('ON DUPLICATE KEY UPDATE'));
+	for (const kept of ['skill_preset', 'hom_enabled', 'hom_level', 'hom_exp', 'favorite', 'mode', 'duty', 'heal_at', 'emergency_at'])
+		assert.match(update, new RegExp(` ${kept}=IF\\(owner_account_id=VALUES\\(owner_account_id\\) AND owner_char_id IN \\(0, VALUES\\(owner_char_id\\)\\), ${kept},`),
+			`${kept} must survive a re-invite by the same owner`);
+	assert.ok(update.indexOf('emergency_at=IF(') < update.indexOf(' owner_account_id=VALUES(owner_account_id)'),
+		'the owner comparisons must run before owner_account_id is overwritten');
 });

@@ -1,4 +1,4 @@
--- What the *client* calls item 30001, and what it draws for it.
+-- What the *client* calls item 50001, and what it draws for it.
 --
 -- This is an addition, not a replacement. The app puts it in the client's
 -- `customItemInfo` list ahead of the base table, and the client takes each item
@@ -11,7 +11,7 @@
 -- written in Korean as the client names it: 빨간포션 is the Red Potion's icon
 -- and sprite, so this item needs no art of its own.
 tbl = {
-	[30001] = {
+	[50001] = {
 		unidentifiedDisplayName = "Bottle",
 		unidentifiedResourceName = "빨간포션",
 		unidentifiedDescriptionName = { "A cloudy bottle of something." },

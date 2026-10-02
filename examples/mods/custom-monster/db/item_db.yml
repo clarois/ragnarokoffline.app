@@ -1,0 +1,43 @@
+# Two new items, in the block of ids this app keeps for custom ones:
+# 50000-99999. Item ids are 32-bit; stock items sit below 32409 and from
+# 100000 up, so nothing stock is in this block or will land in it.
+#
+#   Moon_Ribbon        a headgear with a *view* id of its own (5001), which
+#                      System/accname.lub turns into a look on your head, and
+#                      a heal-when-hurt in Lua (lua/moon_ribbon.lua).
+#   Lunar_Poring_Card  a card that casts a spell when you attack. rAthena item
+#                      scripts do this natively -- no Lua needed.
+Header:
+  Type: ITEM_DB
+  Version: 3
+
+Body:
+  - Id: 50102
+    AegisName: Moon_Ribbon
+    Name: Moon Ribbon
+    Type: Armor
+    Buy: 2000
+    Weight: 100
+    Defense: 2
+    Locations:
+      Head_Top: true
+    ArmorLevel: 1
+    Refineable: true
+    View: 5001
+    Script: |
+      bonus bMdef,5;
+      // Its heal is in lua/moon_ribbon.lua: only below 30% HP, which an
+      // item script can't express.
+  - Id: 50103
+    AegisName: Lunar_Poring_Card
+    Name: Lunar Poring Card
+    Type: Card
+    Buy: 20
+    Weight: 10
+    Locations:
+      Armor: true
+    Flags:
+      DropEffect: CLIENT
+    Script: |
+      // 5% chance to cast Fire Bolt Lv 3 at your target when you attack.
+      bonus3 bAutoSpell,"MG_FIREBOLT",3,50;

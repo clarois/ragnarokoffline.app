@@ -1,0 +1,19 @@
+{
+  "name": "steal-cards",
+  "version": "2.0.0",
+  "author": "BlaXun",
+  "description": "The Thief's Steal skill can take a monster's card, with the card rolled independently so it is not gated by earlier drops in the mob's drop table. Every non-MVP monster that drops a card (1,260 of them) is covered; drop rates and everything else about the monster are unchanged. MVP cards stay unstealable. Renewal only.",
+  "requires": { "app": ">=1.4.2", "era": "renewal" },
+  "tags": [
+    "thief",
+    "steal",
+    "cards",
+    "drops",
+    "lua"
+  ],
+  "icon": "images/icon.png",
+  "screenshots": [
+    "images/steal-cards.png"
+  ],
+  "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/steal-cards"
+}

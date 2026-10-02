@@ -19,8 +19,9 @@
 # Population Engine Database — Main (towns / fields / dungeons)
 ###########################################################################
 #
-# Job entries for novice, first-class, and second-class jobs only.
-# Transcendent and expanded jobs live in db/population_pvp.yml.
+# Job entries for the town / field / dungeon population: novice, first,
+# second, and transcendent classes. Arena (PvP) jobs live in
+# db/population_pvp.yml, a separate job table.
 # Vendor merchants live in db/population_vendor_pop.yml.
 #
 # Gear sets, profiles, and the arena job pool are defined in
@@ -45,7 +46,11 @@
 # BaseLevel:     [min, max] base-level range assigned at spawn.
 # JobLevel:      [min, max] job-level range assigned at spawn.
 # Str/Agi/Vit/Int/Dex/Luk:  [min, max] raw stat ranges at spawn.
-#                            All stats are clamped to [1, 99].
+#                            Keep them within the job's max_*_parameter
+#                            (conf/battle/player.conf): 99, or 130 for 3rd
+#                            and 4th classes.
+# Pow/Sta/Wis/Spl/Con/Crt:  [min, max] trait stat ranges (4th classes only;
+#                            omitted means 0).
 #
 # Behaviour / movement
 # ---------------------
@@ -95,18 +100,40 @@ Body:
 # These mirror the structure of pvp profiles but are scoped to this file
 # only so PvE tuning never leaks into PvP behaviour.
 ###########################################################################
+# Six tiers over three map bands (db/population_spawn.yml says which maps):
+#
+#   band  base lv  tier  classes
+#   low   10-26    T1    Novice (newbie maps), 1st classes
+#                  T4    transcendent 1st classes
+#   mid   40-70    T2    2nd classes, first branch (Knight, Wizard, Hunter,
+#                        Priest, Assassin, Blacksmith) + Merchant, Taekwon
+#                  T5    transcendent 2nd classes, second branch (Paladin,
+#                        Professor, Clown/Gypsy, Champion, Stalker, Creator)
+#   high  70-99    T3    2nd classes, second branch (Crusader, Sage,
+#                        Bard/Dancer, Monk, Rogue, Alchemist) + SG / SL
+#                  T6    transcendent 2nd classes, first branch (Lord Knight,
+#                        High Wizard, Sniper, High Priest, Assassin Cross,
+#                        Whitesmith)
+#   Gunslinger and Ninja have no 2nd class and span mid and high (40-99).
+#
+# The engine keys jobs by job id, so a job can belong to ONE profile only --
+# a second claim silently takes it away from the first, and a profile left
+# with no jobs spawns nothing (third-party/population-engine/validate.py
+# checks this). That is why the 2nd classes are split by branch rather than
+# repeated: each band still has every class line, once non-transcendent and
+# once transcendent.
+#
+# Profile names keep the map band they had before the tiers were split
+# (pve_X is mid, pve_X_high is high), because a mod adds its maps to a
+# profile by name and expects the levels that name has always meant.
+# So pve_paladin now holds Paladins and pve_paladin_high Crusaders.
+###########################################################################
 
   - Profile: novice_default
     Jobs:
       Novice: novice_set
     BaseLevel: [1, 12]
     JobLevel: [1, 10]
-    Str: [10, 40]
-    Agi: [10, 40]
-    Vit: [10, 40]
-    Int: [10, 40]
-    Dex: [10, 40]
-    Luk: [10, 40]
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
@@ -117,17 +144,11 @@ Body:
     TownBehavior: wander
     FieldBehavior: combat
 
-  - Profile: combat_pve           # mid and late maps: 2nd classes the pve_* profiles do not claim
+  - Profile: combat_pve           # T2  mid maps: Priest
     Jobs:
       Priest   : para_mage
     BaseLevel: [35, 58]
-    Str: [1, 20]
-    Agi: [1, 30]
-    Vit: [60, 90]
-    Int: [80, 99]
-    Dex: [50, 80]
-    Luk: [1, 20]
-    JobLevel: [25, 50]
+    JobLevel: [26, 40]
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
@@ -139,117 +160,47 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_first_acolyte           # newbie fields: Acolyte (per-job spread so growth has a target)
+  - Profile: combat_pve_low       # T1  low maps: 1st classes, level 10-26, level 1-4 gear
     Jobs:
-      Acolyte  : low_blunt
-    BaseLevel: [10, 26]
-    JobLevel: [8, 30]
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    Str: [20, 50]
-    Agi: [10, 40]
-    Vit: [40, 70]
-    Int: [70, 99]
-    Dex: [40, 70]
-    Luk: [1, 20]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_first_swordsman           # newbie fields: Swordsman (per-job spread so growth has a target)
-    Jobs:
-      Swordsman : low_melee
-    BaseLevel: [10, 26]
-    JobLevel: [8, 30]
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    Str: [70, 99]
-    Agi: [30, 60]
-    Vit: [50, 80]
-    Int: [1, 20]
-    Dex: [30, 60]
-    Luk: [1, 20]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_first_mage           # newbie fields: Mage (per-job spread so growth has a target)
-    Jobs:
+      Swordsman: low_melee
       Mage     : low_rod
-    BaseLevel: [10, 26]
-    JobLevel: [8, 30]
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    Str: [1, 20]
-    Agi: [10, 40]
-    Vit: [30, 60]
-    Int: [80, 99]
-    Dex: [50, 70]
-    Luk: [1, 20]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_first_archer           # newbie fields: Archer (per-job spread so growth has a target)
-    Jobs:
       Archer   : low_bow
-    BaseLevel: [10, 26]
-    JobLevel: [8, 30]
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    Str: [1, 20]
-    Agi: [50, 80]
-    Vit: [30, 60]
-    Int: [20, 50]
-    Dex: [70, 99]
-    Luk: [1, 20]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_first_thief           # newbie fields: Thief (per-job spread so growth has a target)
-    Jobs:
+      Acolyte  : low_blunt
       Thief    : low_melee
     BaseLevel: [10, 26]
-    JobLevel: [8, 30]
+    JobLevel: [1, 25]
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    Str: [60, 99]
-    Agi: [60, 99]
-    Vit: [30, 60]
-    Int: [1, 20]
-    Dex: [30, 60]
-    Luk: [1, 20]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_knight           # Knight PvE template
+  - Profile: combat_pve_low_transcended # T4  low maps: transcendent 1st classes, same band and gear as T1
+    Jobs:
+      HighSwordsman: low_melee
+      HighMage     : low_rod
+      HighArcher   : low_bow
+      HighAcolyte  : low_blunt
+      HighThief    : low_melee
+    BaseLevel: [10, 26]
+    JobLevel: [1, 25]
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_knight           # T2  Knight
     Jobs:
       Knight: para_knight_base
     NameProfile: default
@@ -258,7 +209,7 @@ Body:
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
     Str: [50, 80]
     Agi: [40, 70]
     Vit: [50, 80]
@@ -273,16 +224,16 @@ Body:
     Script: |
       setriding;
 
-  - Profile: pve_paladin          # Crusader PvE template
+  - Profile: pve_paladin          # T5  Paladin (Crusader is pve_paladin_high)
     Jobs:
-      Crusader: para_crusader
+      Paladin: para_crusader
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
     Str: [40, 70]
     Agi: [10, 40]
     Vit: [40, 70]
@@ -297,17 +248,16 @@ Body:
     Script: |
       setriding;
 
-  - Profile: pve_caster           # Wizard / Sage PvE template
+  - Profile: pve_caster           # T2  Wizard
     Jobs:
       Wizard: para_mage
-      Sage  : para_mage
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
     Str: [1, 10]
     Agi: [10, 30]
     Vit: [20, 40]
@@ -320,18 +270,38 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_archer           # Archer / Hunter / Bard / Dancer PvE template
+  - Profile: pve_professor        # T5  Professor
     Jobs:
-      Hunter: para_bow
-      Bard  : para_bow
-      Dancer: para_bow
+      Professor: para_mage
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
+    Str: [1, 10]
+    Agi: [10, 30]
+    Vit: [20, 40]
+    Int: [60, 90]
+    Dex: [60, 90]
+    Luk: [1, 10]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_archer           # T2  Hunter
+    Jobs:
+      Hunter: para_bow
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [40, 70]
+    JobLevel: [26, 40]
     Str: [1, 10]
     Agi: [60, 90]
     Vit: [10, 30]
@@ -343,16 +313,40 @@ Body:
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
-  - Profile: pve_monk             # Monk PvE template
+
+  - Profile: pve_clown            # T5  Clown / Gypsy
     Jobs:
-      Monk: para_monk
+      Clown: para_bow
+      Gypsy: para_bow
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
+    Str: [1, 10]
+    Agi: [60, 90]
+    Vit: [10, 30]
+    Int: [10, 30]
+    Dex: [60, 90]
+    Luk: [40, 70]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_monk             # T5  Champion (Monk is pve_monk_high)
+    Jobs:
+      Champion: para_monk
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [40, 70]
+    JobLevel: [26, 40]
     Str: [60, 90]
     Agi: [10, 30]
     Vit: [60, 90]
@@ -365,17 +359,16 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_assassin         # Assassin / Assassin Cross — katar-focused PvE
+  - Profile: pve_assassin         # T2  Assassin, katar (Assassin Cross is pve_assassin_high)
     Jobs:
-      Assassin     : para_assassin_katar
-      AssassinCross: para_assassin_katar
+      Assassin: para_assassin_katar
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
     Str: [50, 80]
     Agi: [60, 90]
     Vit: [30, 60]
@@ -388,16 +381,16 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_rogue            # Rogue PvE template
+  - Profile: pve_rogue            # T5  Stalker (Rogue is pve_rogue_high)
     Jobs:
-      Rogue: para_thief
+      Stalker: para_thief
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
     Str: [40, 70]
     Agi: [60, 90]
     Vit: [20, 50]
@@ -410,18 +403,17 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_merchant_cart    # Merchant / Blacksmith / Alchemist — cart-bearing PvE
+  - Profile: pve_merchant_cart    # T2  Merchant / Blacksmith, cart-bearing
     Jobs:
       Merchant  : para_merchant
       Blacksmith: para_merchant
-      Alchemist : para_merchant
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [30, 60]
-    JobLevel: [20, 40]
+    BaseLevel: [40, 70]
+    JobLevel: [26, 40]
     Str: [50, 80]
     Agi: [20, 50]
     Vit: [40, 70]
@@ -436,18 +428,40 @@ Body:
     Script: |
       setcart;
 
-  - Profile: pve_taekwon          # Taekwon / Star Gladiator / Soul Linker PvE
+  - Profile: pve_creator          # T5  Creator, cart-bearing
     Jobs:
-      Taekwon           : para_taekwon
-      StarGladiator     : para_taekwon
-      SoulLinker        : para_mage
+      Creator: para_merchant
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
     BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    JobLevel: [26, 40]
+    Str: [50, 80]
+    Agi: [20, 50]
+    Vit: [40, 70]
+    Int: [20, 50]
+    Dex: [30, 60]
+    Luk: [10, 30]
+    Flags:
+      - mortal
+    TownBehavior: vendor
+    FieldBehavior: combat
+    DungeonBehavior: combat
+    Script: |
+      setcart;
+
+  - Profile: pve_taekwon          # T2  Taekwon (Star Gladiator / Soul Linker are pve_taekwon_high)
+    Jobs:
+      Taekwon: para_taekwon
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [40, 70]
+    JobLevel: [26, 40]
     Str: [60, 90]
     Agi: [60, 90]
     Vit: [40, 70]
@@ -460,7 +474,7 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_gunslinger       # Gunslinger PvE template
+  - Profile: pve_gunslinger       # T2+T3  Gunslinger, no 2nd class: spans mid and high maps
     Jobs:
       Gunslinger: para_gun
     NameProfile: default
@@ -468,8 +482,8 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    BaseLevel: [40, 99]
+    JobLevel: [20, 70]
     Str: [20, 50]
     Agi: [50, 80]
     Vit: [20, 50]
@@ -482,7 +496,7 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_ninja            # Ninja PvE template
+  - Profile: pve_ninja            # T2+T3  Ninja, no 2nd class: spans mid and high maps
     Jobs:
       Ninja: para_ninja
     NameProfile: default
@@ -490,8 +504,8 @@ Body:
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [40, 70]
-    JobLevel: [20, 50]
+    BaseLevel: [40, 99]
+    JobLevel: [20, 70]
     Str: [30, 60]
     Agi: [50, 80]
     Vit: [30, 60]
@@ -504,25 +518,44 @@ Body:
     FieldBehavior: combat
     DungeonBehavior: combat
 
+###########################################################################
+# High-level PvE profiles (BaseLevel 70-99, enhanced stats): tiers T3 and T6.
+# Use for late-game maps where normal-tier bots would be under-leveled.
+# Non-transcendent classes (T3) cap at job 50, transcendent (T6) at 70.
+###########################################################################
 
-
-
-  - Profile: pve_lordknight           # Lord Knight (trans melee)
+  - Profile: combat_pve_high      # T6  High Priest
     Jobs:
-      LordKnight      : eden_trans_knight
+      HighPriest: para_mage
+    BaseLevel: [70, 99]
+    JobLevel: [41, 70]
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [99, 99]
-    Agi: [55, 65]
-    Vit: [99, 99]
-    Int: [1, 1]
-    Dex: [65, 70]
-    Luk: [1, 1]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_knight_high      # T6  Lord Knight
+    Jobs:
+      LordKnight: para_knight_base
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 70]
+    Str: [70, 99]
+    Agi: [50, 80]
+    Vit: [70, 99]
+    Int: [1, 20]
+    Dex: [50, 80]
+    Luk: [20, 50]
     Flags:
       - mortal
     TownBehavior: wander
@@ -531,1104 +564,737 @@ Body:
     Script: |
       setriding;
 
-  - Profile: pve_paladin2           # Paladin (trans tank)
+  - Profile: pve_paladin_high     # T3  Crusader
     Jobs:
-      Paladin         : eden_trans_crusader
+      Crusader: para_crusader
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [85, 90]
-    Agi: [1, 1]
-    Vit: [99, 99]
-    Int: [55, 60]
-    Dex: [55, 60]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setriding;
-
-  - Profile: pve_highpriest           # High Priest (trans support)
-    Jobs:
-      HighPriest      : eden_trans_priest
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [1, 1]
-    Agi: [1, 1]
-    Vit: [75, 80]
-    Int: [99, 99]
-    Dex: [95, 99]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_highwizard           # High Wizard (trans caster)
-    Jobs:
-      HighWizard      : eden_trans_wizard
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [1, 1]
-    Agi: [1, 1]
-    Vit: [45, 50]
-    Int: [99, 99]
-    Dex: [99, 99]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_professor           # Professor (trans caster)
-    Jobs:
-      Professor       : eden_trans_sage
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [1, 1]
-    Agi: [35, 40]
-    Vit: [35, 40]
-    Int: [99, 99]
-    Dex: [99, 99]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_sniper           # Sniper (trans ranged)
-    Jobs:
-      Sniper          : eden_trans_hunter
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [1, 1]
-    Agi: [99, 99]
-    Vit: [25, 30]
-    Int: [10, 12]
-    Dex: [99, 99]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_stalker           # Stalker (trans dps)
-    Jobs:
-      Stalker         : eden_trans_rogue
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [99, 99]
-    Agi: [99, 99]
-    Vit: [45, 50]
-    Int: [15, 20]
-    Dex: [55, 60]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_whitesmith           # Whitesmith (trans melee)
-    Jobs:
-      Whitesmith      : eden_trans_smith
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [99, 99]
-    Agi: [95, 99]
-    Vit: [75, 80]
-    Int: [1, 1]
-    Dex: [45, 50]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_creator           # Creator (trans caster)
-    Jobs:
-      Creator         : eden_trans_alch
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [55, 60]
-    Agi: [1, 1]
-    Vit: [95, 99]
-    Int: [99, 99]
-    Dex: [99, 99]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_champion           # Champion (trans melee)
-    Jobs:
-      Champion        : eden_trans_monk
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [99, 99]
-    Agi: [1, 1]
-    Vit: [45, 50]
-    Int: [95, 99]
-    Dex: [75, 80]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_clown           # Clown (trans support)
-    Jobs:
-      Clown           : eden_trans_bard
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [1, 1]
-    Agi: [1, 1]
-    Vit: [55, 60]
-    Int: [99, 99]
-    Dex: [99, 99]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_gypsy           # Gypsy (trans support)
-    Jobs:
-      Gypsy           : eden_trans_dancer
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [70, 95]
-    JobLevel: [40, 60]
-    Str: [1, 1]
-    Agi: [1, 1]
-    Vit: [65, 70]
-    Int: [99, 99]
-    Dex: [95, 99]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_runeknight           # Rune Knight (dragon breath tank-caster)
-    Jobs:
-      RuneKnight      : eden3_runeknight
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [25, 30]
-    Agi: [70, 80]
-    Vit: [115, 120]
-    Int: [115, 120]
-    Dex: [95, 100]
-    Luk: [1, 1]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setriding;
-
-  - Profile: pve_royalguard           # Royal Guard (cannon spear)
-    Jobs:
-      RoyalGuard      : eden3_royalguard
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [115, 120]
-    Agi: [80, 100]
-    Vit: [95, 100]
-    Int: [1, 1]
-    Dex: [100, 120]
-    Luk: [20, 30]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setriding;
-
-  - Profile: pve_mechanic           # Mechanic (axe tornado)
-    Jobs:
-      Mechanic        : eden3_mechanic
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [115, 120]
-    Agi: [80, 100]
-    Vit: [100, 120]
-    Int: [1, 1]
-    Dex: [100, 120]
-    Luk: [20, 30]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setcart;
-
-  - Profile: pve_warlock           # Warlock (caster)
-    Jobs:
-      Warlock         : eden3_warlock
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [1, 1]
-    Agi: [70, 100]
-    Vit: [90, 100]
-    Int: [120, 125]
-    Dex: [115, 120]
-    Luk: [45, 60]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_sorcerer           # Sorcerer (caster)
-    Jobs:
-      Sorcerer        : eden3_sorcerer
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [1, 1]
-    Agi: [75, 90]
-    Vit: [95, 100]
-    Int: [115, 120]
-    Dex: [115, 120]
-    Luk: [20, 30]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_archbishop           # Arch Bishop (adoramus)
-    Jobs:
-      ArchBishop      : eden3_archbishop
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [1, 1]
-    Agi: [75, 90]
-    Vit: [95, 100]
-    Int: [115, 120]
-    Dex: [115, 120]
-    Luk: [70, 77]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_ranger           # Ranger (arrow storm)
-    Jobs:
-      Ranger          : eden3_ranger
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [75, 90]
-    Agi: [100, 120]
-    Vit: [55, 70]
-    Int: [100, 120]
-    Dex: [115, 120]
-    Luk: [60, 90]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_guillotinecross           # Guillotine Cross (rolling cutter)
-    Jobs:
-      GuillotineCross : eden3_guillotine
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [115, 120]
-    Agi: [100, 120]
-    Vit: [90, 100]
-    Int: [1, 1]
-    Dex: [85, 90]
-    Luk: [100, 120]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_shadowchaser           # Shadow Chaser (triangle shot)
-    Jobs:
-      ShadowChaser    : eden3_shadowchaser
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [20, 30]
-    Agi: [110, 120]
-    Vit: [90, 100]
-    Int: [90, 100]
-    Dex: [115, 120]
-    Luk: [20, 30]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_sura           # Sura (tiger cannon)
-    Jobs:
-      Sura            : eden3_sura
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [100, 120]
-    Agi: [75, 100]
-    Vit: [100, 120]
-    Int: [85, 100]
-    Dex: [90, 100]
-    Luk: [70, 90]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_genetic           # Genetic (cart cannon)
-    Jobs:
-      Genetic         : eden3_genetic
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [100, 120]
-    Agi: [80, 100]
-    Vit: [90, 100]
-    Int: [100, 120]
-    Dex: [100, 120]
-    Luk: [20, 30]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setcart;
-
-  - Profile: pve_minstrel           # Minstrel (severe rainstorm)
-    Jobs:
-      Minstrel        : eden3_minstrel
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [10, 20]
-    Agi: [100, 120]
-    Vit: [70, 80]
-    Int: [100, 120]
-    Dex: [115, 120]
-    Luk: [50, 77]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_wanderer           # Wanderer (severe rainstorm)
-    Jobs:
-      Wanderer        : eden3_wanderer
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [99, 145]
-    JobLevel: [40, 70]
-    Str: [1, 10]
-    Agi: [90, 100]
-    Vit: [80, 100]
-    Int: [100, 120]
-    Dex: [115, 120]
-    Luk: [70, 80]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_dragonknight           # Dragon Knight (crit melee)
-    Jobs:
-      DragonKnight    : eden4_dragonknight
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [115, 120]
-    Agi: [85, 90]
-    Vit: [95, 100]
-    Int: [1, 1]
-    Dex: [1, 1]
-    Luk: [115, 120]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [30, 35]
-    Crt: [100, 110]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setriding;
-
-  - Profile: pve_imperialguard           # Imperial Guard (devotion tank)
-    Jobs:
-      ImperialGuard   : eden4_imperialguard
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [35, 40]
-    Agi: [75, 90]
-    Vit: [125, 130]
-    Int: [85, 90]
-    Dex: [85, 90]
-    Luk: [85, 90]
-    Pow: [0, 0]
-    Sta: [100, 110]
-    Wis: [100, 110]
-    Spl: [0, 0]
-    Con: [0, 0]
-    Crt: [0, 0]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setriding;
-
-  - Profile: pve_meister           # Meister (arm cannon)
-    Jobs:
-      Meister         : eden4_meister
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [85, 90]
-    Agi: [1, 1]
-    Vit: [85, 90]
-    Int: [110, 120]
-    Dex: [125, 130]
-    Luk: [1, 1]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [90, 97]
-    Crt: [0, 0]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-    Script: |
-      setcart;
-
-  - Profile: pve_inquisitor           # Inquisitor (explosion blaster)
-    Jobs:
-      Inquisitor      : eden4_inquisitor
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [115, 120]
-    Agi: [80, 90]
-    Vit: [85, 90]
-    Int: [70, 90]
-    Dex: [115, 120]
-    Luk: [60, 89]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [70, 110]
-    Crt: [75, 110]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_shadowcross           # Shadow Cross (katar crit)
-    Jobs:
-      ShadowCross     : eden4_shadowcross
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [120, 124]
-    Agi: [85, 90]
-    Vit: [85, 90]
-    Int: [1, 1]
-    Dex: [60, 90]
-    Luk: [120, 125]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [0, 0]
-    Crt: [90, 97]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_abysschaser           # Abyss Chaser (deft stab)
-    Jobs:
-      AbyssChaser     : eden4_abysschaser
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [115, 120]
-    Agi: [115, 120]
-    Vit: [95, 100]
-    Int: [45, 50]
-    Dex: [75, 80]
-    Luk: [85, 90]
-    Pow: [100, 110]
-    Sta: [35, 40]
-    Wis: [30, 32]
-    Spl: [0, 0]
-    Con: [100, 110]
-    Crt: [0, 0]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_nightwatch           # Night Watch (spiral shooting)
-    Jobs:
-      NightWatch      : eden4_nightwatch
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 50]
     Str: [60, 90]
-    Agi: [85, 90]
-    Vit: [95, 100]
-    Int: [20, 30]
-    Dex: [120, 130]
-    Luk: [70, 89]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [100, 110]
-    Crt: [0, 0]
+    Agi: [30, 60]
+    Vit: [60, 90]
+    Int: [50, 80]
+    Dex: [50, 80]
+    Luk: [20, 50]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+    Script: |
+      setriding;
+
+  - Profile: pve_caster_high      # T6  High Wizard
+    Jobs:
+      HighWizard: para_mage
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 70]
+    Str: [1, 10]
+    Agi: [20, 50]
+    Vit: [30, 60]
+    Int: [80, 99]
+    Dex: [70, 99]
+    Luk: [10, 40]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_archmage           # Arch Mage (soul vulcan)
+  - Profile: pve_sage_high        # T3  Sage
     Jobs:
-      ArchMage        : eden4_archmage
+      Sage: para_mage
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [1, 1]
-    Agi: [110, 120]
-    Vit: [100, 110]
-    Int: [115, 120]
-    Dex: [100, 120]
-    Luk: [90, 100]
-    Pow: [0, 0]
-    Sta: [0, 0]
-    Wis: [20, 36]
-    Spl: [100, 110]
-    Con: [100, 110]
-    Crt: [0, 0]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 50]
+    Str: [1, 10]
+    Agi: [20, 50]
+    Vit: [30, 60]
+    Int: [80, 99]
+    Dex: [70, 99]
+    Luk: [10, 40]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_elementalmaster           # Elemental Master (diamond storm)
+  - Profile: pve_archer_high      # T6  Sniper
     Jobs:
-      ElementalMaster : eden4_elementalmaster
+      Sniper: para_bow
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [1, 1]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 70]
+    Str: [1, 10]
+    Agi: [80, 99]
+    Vit: [30, 60]
+    Int: [30, 60]
+    Dex: [80, 99]
+    Luk: [50, 80]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_bard_high        # T3  Bard / Dancer
+    Jobs:
+      Bard  : para_bow
+      Dancer: para_bow
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 50]
+    Str: [1, 10]
+    Agi: [80, 99]
+    Vit: [30, 60]
+    Int: [30, 60]
+    Dex: [80, 99]
+    Luk: [50, 80]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_monk_high        # T3  Monk
+    Jobs:
+      Monk: para_monk
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 50]
+    Str: [70, 99]
+    Agi: [30, 60]
+    Vit: [70, 99]
+    Int: [20, 50]
+    Dex: [80, 99]
+    Luk: [20, 50]
+    Flags:
+      - mortal
+    TownBehavior: social
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_assassin_high    # T6  Assassin Cross
+    Jobs:
+      AssassinCross: para_assassin_katar
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 70]
+    Str: [50, 80]
+    Agi: [70, 99]
+    Vit: [40, 70]
+    Int: [30, 60]
+    Dex: [60, 90]
+    Luk: [40, 70]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_rogue_high       # T3  Rogue
+    Jobs:
+      Rogue: para_thief
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 50]
+    Str: [50, 80]
+    Agi: [80, 99]
+    Vit: [30, 60]
+    Int: [30, 60]
+    Dex: [80, 99]
+    Luk: [50, 80]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: pve_merchant_cart_high # T6  Whitesmith, cart-bearing
+    Jobs:
+      Whitesmith: para_merchant
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [50, 99]
+    JobLevel: [41, 70]
+    Str: [60, 90]
+    Agi: [30, 60]
+    Vit: [50, 80]
+    Int: [40, 70]
+    Dex: [40, 70]
+    Luk: [20, 50]
+    Flags:
+      - mortal
+    TownBehavior: vendor
+    FieldBehavior: combat
+    DungeonBehavior: combat
+    Script: |
+      setcart;
+
+  - Profile: pve_alchemist_high   # T3  Alchemist, cart-bearing
+    Jobs:
+      Alchemist: para_merchant
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [50, 99]
+    JobLevel: [41, 50]
+    Str: [60, 90]
+    Agi: [30, 60]
+    Vit: [50, 80]
+    Int: [40, 70]
+    Dex: [40, 70]
+    Luk: [20, 50]
+    Flags:
+      - mortal
+    TownBehavior: vendor
+    FieldBehavior: combat
+    DungeonBehavior: combat
+    Script: |
+      setcart;
+
+  - Profile: pve_taekwon_high     # T3  Star Gladiator / Soul Linker
+    Jobs:
+      StarGladiator: para_taekwon
+      SoulLinker   : para_mage
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [70, 99]
+    JobLevel: [41, 50]
+    Str: [70, 99]
+    Agi: [70, 99]
+    Vit: [50, 80]
+    Int: [30, 60]
+    Dex: [60, 90]
+    Luk: [50, 80]
+    Flags:
+      - mortal
+    TownBehavior: sit
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+###########################################################################
+# RAGNAROKMAC — 3rd and 4th class companion profiles
+#
+# Companion-only: nothing in db/population_spawn.yml names these, so they
+# never spawn ambiently. They exist because @companion draft (and the
+# Summon tab) looks the job up here, and a grown companion re-gears and
+# spends its stat and trait points from the profile of the class it has
+# just advanced into. Without them a 3rd or 4th class draft is refused
+# ("job N has no population profile to inherit"), and a companion that
+# grows past transcendent keeps its points unspent and its old gear.
+#
+#   tier  base lv   job lv  why
+#   3rd   99-175    30-60   kPopJobAdvanceTable advances trans -> 3rd at
+#                           base 99, so the band starts there; 3rd classes
+#                           cap at 200 / job 70 (db/re/job_exp.yml)
+#   4th   200-250   1-50    advanced into at base 200; cap 275 / job 60
+#
+# Stats go to 130 (max_third_parameter / max_fourth_parameter) and traits
+# to 110 (max_trait_parameter). A stat a profile declares is also the
+# target a growing companion spends its points toward, biggest first, so
+# the ranges below are the build, not just a spawn roll. Traits are only
+# declared on 4th classes: a profile without them spawns with 0, and only
+# a 4th class can spend trait points.
+#
+# Vehicles (dragon, warg, mado) are set by the engine from the skill tree,
+# so these carry no setriding script. Genetic/Biolo get a cart for Cart
+# Cannon and Cart Tornado. 3rd-class transcendent ids (4060-4079) are not
+# listed: nothing advances into them and the Summon tab cannot draft them.
+###########################################################################
+
+  - Profile: companion_third_swordsman    # 3rd  Rune Knight / Royal Guard
+    Jobs:
+      RuneKnight: third_2hsword
+      RoyalGuard: third_spear_shield
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [90, 120]
+    Agi: [40, 80]
+    Vit: [80, 110]
+    Int: [10, 40]
+    Dex: [60, 100]
+    Luk: [10, 40]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: companion_third_caster       # 3rd  Warlock / Sorcerer
+    Jobs:
+      Warlock : third_wizard_staff
+      Sorcerer: third_sage_staff
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [1, 10]
+    Agi: [20, 50]
+    Vit: [40, 80]
+    Int: [100, 130]
+    Dex: [80, 110]
+    Luk: [10, 40]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: companion_third_priest       # 3rd  Arch Bishop
+    Jobs:
+      ArchBishop: third_priest_staff
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [1, 10]
+    Agi: [20, 50]
+    Vit: [60, 90]
+    Int: [100, 130]
+    Dex: [70, 100]
+    Luk: [20, 50]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: companion_third_monk         # 3rd  Sura
+    Jobs:
+      Sura: third_knuckle
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [90, 120]
+    Agi: [30, 60]
+    Vit: [70, 100]
+    Int: [20, 50]
+    Dex: [70, 100]
+    Luk: [10, 40]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: companion_third_archer       # 3rd  Ranger / Minstrel / Wanderer
+    Jobs:
+      Ranger  : third_bow
+      Minstrel: third_bow
+      Wanderer: third_bow
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [10, 40]
+    Agi: [80, 110]
+    Vit: [30, 60]
+    Int: [30, 60]
+    Dex: [100, 130]
+    Luk: [30, 60]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: companion_third_mechanic     # 3rd  Mechanic
+    Jobs:
+      Mechanic: third_mechanic
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [90, 120]
+    Agi: [20, 50]
+    Vit: [80, 110]
+    Int: [30, 60]
+    Dex: [60, 100]
+    Luk: [10, 40]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: companion_third_genetic      # 3rd  Genetic, cart-bearing
+    Jobs:
+      Genetic: third_genetic
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [90, 120]
+    Agi: [20, 50]
+    Vit: [70, 100]
+    Int: [50, 80]
+    Dex: [60, 90]
+    Luk: [10, 40]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+    Script: |
+      setcart;
+
+  - Profile: companion_third_thief        # 3rd  Guillotine Cross / Shadow Chaser
+    Jobs:
+      GuillotineCross: third_katar
+      ShadowChaser   : third_dagger
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [99, 175]
+    JobLevel: [30, 60]
+    Str: [80, 110]
+    Agi: [90, 120]
+    Vit: [40, 70]
+    Int: [10, 40]
+    Dex: [70, 100]
+    Luk: [30, 60]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+
+  - Profile: companion_fourth_swordsman   # 4th  Dragon Knight / Imperial Guard
+    Jobs:
+      DragonKnight : fourth_2hsword
+      ImperialGuard: fourth_spear_shield
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [110, 130]
     Agi: [60, 90]
-    Vit: [90, 100]
-    Int: [120, 125]
-    Dex: [100, 120]
-    Luk: [20, 30]
-    Pow: [0, 0]
-    Sta: [0, 0]
-    Wis: [70, 72]
-    Spl: [100, 110]
-    Con: [100, 110]
-    Crt: [0, 0]
+    Vit: [100, 130]
+    Int: [30, 60]
+    Dex: [80, 110]
+    Luk: [20, 50]
+    Pow: [40, 80]
+    Sta: [30, 60]
+    Con: [20, 50]
+    Crt: [1, 20]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_cardinal           # Cardinal (full support)
+  - Profile: companion_fourth_caster      # 4th  Arch Mage / Elemental Master / Soul Ascetic
     Jobs:
-      Cardinal        : eden4_cardinal
+      ArchMage       : fourth_wizard_staff
+      ElementalMaster: fourth_magic_staff
+      SoulAscetic    : fourth_magic_staff
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [1, 1]
-    Agi: [1, 1]
-    Vit: [125, 130]
-    Int: [115, 120]
-    Dex: [1, 1]
-    Luk: [85, 90]
-    Pow: [0, 0]
-    Sta: [100, 110]
-    Wis: [100, 110]
-    Spl: [0, 0]
-    Con: [0, 0]
-    Crt: [30, 35]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [1, 20]
+    Agi: [40, 70]
+    Vit: [70, 100]
+    Int: [110, 130]
+    Dex: [100, 130]
+    Luk: [20, 50]
+    Sta: [20, 40]
+    Wis: [20, 50]
+    Spl: [40, 80]
+    Con: [20, 50]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_soulascetic           # Soul Ascetic (talisman)
+  - Profile: companion_fourth_priest      # 4th  Cardinal
     Jobs:
-      SoulAscetic     : eden4_soulascetic
+      Cardinal: fourth_priest_staff
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [1, 1]
-    Agi: [70, 100]
-    Vit: [70, 80]
-    Int: [120, 130]
-    Dex: [120, 130]
-    Luk: [65, 70]
-    Pow: [0, 0]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [100, 110]
-    Con: [100, 110]
-    Crt: [0, 0]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [1, 20]
+    Agi: [40, 70]
+    Vit: [80, 110]
+    Int: [110, 130]
+    Dex: [90, 120]
+    Luk: [30, 60]
+    Sta: [30, 60]
+    Wis: [30, 60]
+    Spl: [40, 80]
+    Crt: [1, 20]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_biolo           # Biolo (mayhemic thorns crit)
+  - Profile: companion_fourth_brawler     # 4th  Inquisitor / Sky Emperor
     Jobs:
-      Biolo           : eden4_biolo
+      Inquisitor: fourth_knuckle
+      SkyEmperor: fourth_book
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [125, 130]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [110, 130]
     Agi: [60, 90]
-    Vit: [70, 80]
-    Int: [30, 40]
-    Dex: [100, 110]
-    Luk: [125, 130]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [30, 35]
-    Crt: [100, 110]
+    Vit: [90, 120]
+    Int: [30, 60]
+    Dex: [90, 120]
+    Luk: [20, 50]
+    Pow: [40, 80]
+    Sta: [30, 60]
+    Con: [20, 50]
+    Crt: [1, 20]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_troubadour           # Troubadour (rose blossom)
+  - Profile: companion_fourth_archer      # 4th  Windhawk / Troubadour / Trouvere / Night Watch
     Jobs:
-      Troubadour      : eden4_troubadour
+      Windhawk  : fourth_bow
+      Troubadour: fourth_bow
+      Trouvere  : fourth_bow
+      NightWatch: fourth_gun
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [20, 30]
-    Agi: [95, 100]
-    Vit: [105, 110]
-    Int: [95, 100]
-    Dex: [125, 130]
-    Luk: [75, 80]
-    Pow: [100, 110]
-    Sta: [20, 21]
-    Wis: [50, 51]
-    Spl: [0, 0]
-    Con: [100, 110]
-    Crt: [0, 0]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [30, 60]
+    Agi: [100, 130]
+    Vit: [60, 90]
+    Int: [40, 70]
+    Dex: [110, 130]
+    Luk: [40, 70]
+    Pow: [30, 60]
+    Sta: [10, 30]
+    Con: [40, 80]
+    Crt: [20, 50]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_trouvere           # Trouvere (rose blossom)
+  - Profile: companion_fourth_mechanic    # 4th  Meister
     Jobs:
-      Trouvere        : eden4_trouvere
+      Meister: fourth_mechanic
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [20, 30]
-    Agi: [95, 100]
-    Vit: [105, 110]
-    Int: [95, 100]
-    Dex: [125, 130]
-    Luk: [75, 80]
-    Pow: [100, 110]
-    Sta: [20, 21]
-    Wis: [50, 51]
-    Spl: [0, 0]
-    Con: [100, 110]
-    Crt: [0, 0]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [110, 130]
+    Agi: [40, 70]
+    Vit: [100, 130]
+    Int: [40, 70]
+    Dex: [80, 110]
+    Luk: [20, 50]
+    Pow: [40, 80]
+    Sta: [30, 60]
+    Con: [20, 50]
+    Crt: [1, 20]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_windhawk           # Windhawk (gale storm)
+  - Profile: companion_fourth_genetic     # 4th  Biolo, cart-bearing
     Jobs:
-      Windhawk        : eden4_windhawk
+      Biolo: fourth_genetic
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [1, 1]
-    Agi: [100, 120]
-    Vit: [85, 90]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [110, 130]
+    Agi: [40, 70]
+    Vit: [90, 120]
     Int: [60, 90]
-    Dex: [120, 130]
-    Luk: [120, 126]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [100, 110]
-    Crt: [50, 110]
+    Dex: [80, 110]
+    Luk: [20, 50]
+    Pow: [40, 80]
+    Sta: [20, 50]
+    Con: [20, 50]
+    Crt: [20, 50]
+    Flags:
+      - mortal
+    TownBehavior: wander
+    FieldBehavior: combat
+    DungeonBehavior: combat
+    Script: |
+      setcart;
+
+  - Profile: companion_fourth_thief       # 4th  Shadow Cross / Abyss Chaser / Shinkiro / Shiranui
+    Jobs:
+      ShadowCross: fourth_katar
+      AbyssChaser: fourth_dagger
+      Shinkiro   : fourth_huuma
+      Shiranui   : fourth_huuma
+    NameProfile: default
+    ChatProfile: default
+    Hair: [0, 42]
+    HairColor: [0, 131]
+    ClothesColor: [0, 699]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [100, 130]
+    Agi: [100, 130]
+    Vit: [60, 90]
+    Int: [30, 60]
+    Dex: [90, 120]
+    Luk: [40, 70]
+    Pow: [40, 80]
+    Sta: [10, 30]
+    Con: [30, 60]
+    Crt: [20, 50]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_skyemperor           # Sky Emperor (crit sun)
+  - Profile: companion_fourth_hyper_novice # 4th  Hyper Novice
     Jobs:
-      SkyEmperor      : eden4_skyemperor
+      HyperNovice: fourth_hyper_novice
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [100, 110]
-    Agi: [80, 90]
-    Vit: [80, 90]
-    Int: [80, 90]
-    Dex: [1, 1]
-    Luk: [100, 110]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [20, 35]
-    Crt: [100, 110]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [90, 120]
+    Agi: [60, 90]
+    Vit: [80, 110]
+    Int: [90, 120]
+    Dex: [90, 120]
+    Luk: [30, 60]
+    Pow: [30, 60]
+    Sta: [20, 40]
+    Wis: [10, 30]
+    Spl: [30, 60]
+    Con: [20, 40]
+    Crt: [1, 20]
     Flags:
       - mortal
     TownBehavior: wander
     FieldBehavior: combat
     DungeonBehavior: combat
 
-  - Profile: pve_shinkiro           # Shinkiro (kunai)
+  - Profile: companion_fourth_summoner    # 4th  Spirit Handler
     Jobs:
-      Shinkiro        : eden4_shinkiro
+      SpiritHandler: fourth_foxtail
     NameProfile: default
     ChatProfile: default
     Hair: [0, 42]
     HairColor: [0, 131]
     ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [120, 130]
-    Agi: [85, 90]
-    Vit: [90, 100]
-    Int: [85, 90]
-    Dex: [105, 110]
-    Luk: [55, 60]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [0, 0]
-    Spl: [0, 0]
-    Con: [100, 110]
-    Crt: [0, 0]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_shiranui           # Shiranui (cannon magic)
-    Jobs:
-      Shiranui        : eden4_shiranui
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [40, 60]
-    Agi: [110, 120]
-    Vit: [90, 101]
-    Int: [110, 120]
-    Dex: [100, 110]
-    Luk: [93, 100]
-    Pow: [0, 0]
-    Sta: [0, 0]
-    Wis: [70, 72]
-    Spl: [100, 110]
-    Con: [100, 110]
-    Crt: [0, 0]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_hypernovice           # Hyper Novice (self-study sorcery)
-    Jobs:
-      HyperNovice     : eden4_hypernovice
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [1, 1]
-    Agi: [80, 100]
-    Vit: [100, 110]
-    Int: [120, 130]
-    Dex: [120, 130]
-    Luk: [1, 1]
-    Pow: [0, 0]
-    Sta: [20, 36]
-    Wis: [36, 72]
-    Spl: [100, 110]
-    Con: [100, 110]
-    Crt: [0, 0]
-    Flags:
-      - mortal
-    TownBehavior: wander
-    FieldBehavior: combat
-    DungeonBehavior: combat
-
-  - Profile: pve_spirithandler           # Spirit Handler (chulho physical)
-    Jobs:
-      SpiritHandler   : eden4_spirithandler
-    NameProfile: default
-    ChatProfile: default
-    Hair: [0, 42]
-    HairColor: [0, 131]
-    ClothesColor: [0, 699]
-    BaseLevel: [150, 200]
-    JobLevel: [60, 70]
-    Str: [120, 130]
-    Agi: [30, 40]
-    Vit: [90, 100]
-    Int: [50, 60]
-    Dex: [90, 100]
-    Luk: [100, 110]
-    Pow: [100, 110]
-    Sta: [0, 0]
-    Wis: [20, 30]
-    Spl: [0, 0]
-    Con: [30, 40]
-    Crt: [100, 110]
+    BaseLevel: [200, 250]
+    JobLevel: [1, 50]
+    Str: [1, 20]
+    Agi: [40, 70]
+    Vit: [70, 100]
+    Int: [110, 130]
+    Dex: [100, 130]
+    Luk: [20, 50]
+    Sta: [20, 40]
+    Wis: [20, 50]
+    Spl: [40, 80]
+    Con: [20, 50]
     Flags:
       - mortal
     TownBehavior: wander

@@ -18,7 +18,7 @@ const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const CONFIG = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'config', 'population_config.cpp');
 const TYPES = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'config', 'population_yaml_types.hpp');
-const PATCH6 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0006-companion-gear-return.patch');
+const PATCH6 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0007-companion-gear-return.patch');
 const CMDS = path.join(ROOT, 'stack', 'src', 'cmds.rs');
 
 const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
@@ -26,6 +26,8 @@ const types = fs.readFileSync(TYPES, 'utf8').replace(/\r\n/g, '\n');
 const config = fs.readFileSync(CONFIG, 'utf8').replace(/\r\n/g, '\n');
 const patch6 = fs.readFileSync(PATCH6, 'utf8').replace(/\r\n/g, '\n');
 const cmds = fs.readFileSync(CMDS, 'utf8').replace(/\r\n/g, '\n');
+// The CREATE lives in the one schema file cmds.rs includes; the upgrade list stays in cmds.rs.
+const schema = fs.readFileSync(path.join(ROOT, 'third-party', 'population-engine', 'files', 'sql-files', 'population_engine', 'cp_companion_persistence.sql'), 'utf8').replace(/\r\n/g, '\n');
 
 test('the recall SELECT buffer can hold the full column list', () => {
 	// Pull the actual snprintf format string out of the recall function and
@@ -125,8 +127,8 @@ test('the boot DDL carries the v5 trait columns for fresh installs', () => {
 	// column missing here - the live DBs only got them because they were ALTERed
 	// by hand, so the boot path must be complete on its own.
 	for (const col of ['pow_', 'sta_', 'wis_', 'spl_', 'con_', 'crt_']) {
-		assert.ok(cmds.includes('`' + col + '`'),
-			`cmds.rs boot DDL must declare ${col}; IF NOT EXISTS means a fresh install never gets it otherwise`);
+		assert.ok(schema.includes('`' + col + '`'),
+			`the boot DDL must declare ${col}; IF NOT EXISTS means a fresh install never gets it otherwise`);
 	}
 	assert.ok(/ADD COLUMN IF NOT EXISTS/.test(cmds),
 		'existing installs are migrated by the ALTER loop, which must stay idempotent');

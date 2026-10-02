@@ -1,0 +1,7 @@
+{
+  "name": "custom-monster",
+  "version": "1.0.0",
+  "author": "Ragnarok Offline",
+  "description": "A new monster, a new headgear with its own look, and a card that casts a spell -- all with new ids, none replacing anything.",
+  "requires": { "app": ">=1.4.0", "era": "renewal" }
+}

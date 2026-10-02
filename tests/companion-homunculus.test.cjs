@@ -15,7 +15,7 @@
 // relationships that make the behaviour correct.
 //
 // Every assertion here fails against the commit before the homunculus landed (the helper, the
-// gate, the dump line and the hooks do not exist there).
+// gate and the hooks do not exist there).
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -141,13 +141,15 @@ test('it is applied at spawn, after a job change, and after the final placement'
 		'one hook must come after the recall placement, so the pet survives bench+resummon');
 });
 
-test('@companion dump reports the pet, so it is read rather than judged', () => {
-	// The vehicle lesson: a sprite is a visual claim, and the fact behind it is server state.
-	assert.match(src, /@SHELLHOM\|%u\|1\|%d\|%d\|%d\|%d\|%d\|%d/,
-		'the dump must emit the homunculus class, level, hp, max hp, hom_id and vaporize');
-	assert.match(src, /@SHELLHOM\|%u\|0\|0\|0\|0\|0\|0/, 
-		'and a absent-pet line, so "no pet" is also a readable fact');
-	const dl = src.indexOf('population_engine_shell_dump');
-	assert.ok(dl > 0, 'the dump function must exist');
-	assert.ok(src.indexOf('@SHELLHOM') > dl, 'the pet line must live inside the dump function');
+test('a shell\'s pet is never saved through the char server', () => {
+	// hom_id 0 does not make hom_save a no-op: the char server's mapif_homunculus_save() treats
+	// hom_id 0 as a new homunculus and INSERTs a row on every save (vaporize, call, unit_free).
+	// The request has to be dropped on the map side, keyed on the shell's account range.
+	const patches = path.join(ROOT, 'third-party', 'population-engine', 'patches');
+	const all = fs.readdirSync(patches).filter(f => f.endsWith('.patch')).sort()
+		.map(f => fs.readFileSync(path.join(patches, f), 'utf8').replace(/\r\n/g, '\n')).join('\n');
+	const hunk = all.match(/int32 intif_homunculus_requestsave\( uint32 account_id, const s_homunculus\* sh \)\n \{\n([\s\S]*?)\n \s*if \(CheckForCharServer\(\)\)/);
+	assert.ok(hunk, 'a patch must guard intif_homunculus_requestsave before it reaches the char server');
+	assert.match(hunk[1], /^\+\s*if \(IS_POPULATION_ENGINE_ACCOUNT_ID\(account_id\)\)\n\+\s*return 0;/m,
+		'the guard must drop the request for population accounts');
 });

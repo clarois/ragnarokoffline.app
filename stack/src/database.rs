@@ -165,7 +165,7 @@ fn ident(name: &str) -> Result<String, String> {
     Ok(format!("`{name}`"))
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02X}")).collect()
 }
 
@@ -177,19 +177,19 @@ fn unhex(text: &str) -> Result<Vec<u8>, String> {
 }
 
 /// A `HEX(...)` field of mariadb's batch output: `NULL`, or the value's bytes.
-fn field(text: &str) -> Result<Option<Vec<u8>>, String> {
+pub(crate) fn field(text: &str) -> Result<Option<Vec<u8>>, String> {
     if text == "NULL" {
         return Ok(None);
     }
     unhex(text).map(Some).map_err(|_| "The database answered in a form this tool does not read".to_string())
 }
 
-fn field_text(text: &str) -> Result<Option<String>, String> {
+pub(crate) fn field_text(text: &str) -> Result<Option<String>, String> {
     Ok(field(text)?.map(|b| String::from_utf8_lossy(&b).into_owned()))
 }
 
 /// A cell, as the page gets it: text when it is UTF-8, hex when it is not.
-fn cell_json(value: Option<&[u8]>) -> String {
+pub(crate) fn cell_json(value: Option<&[u8]>) -> String {
     match value {
         None => "null".into(),
         Some(bytes) => match std::str::from_utf8(bytes) {
@@ -200,7 +200,7 @@ fn cell_json(value: Option<&[u8]>) -> String {
 }
 
 /// Rows of mariadb `--batch --skip-column-names` output.
-fn lines(output: &str) -> impl Iterator<Item = Vec<&str>> {
+pub(crate) fn lines(output: &str) -> impl Iterator<Item = Vec<&str>> {
     output.lines().filter(|l| !l.is_empty()).map(|l| l.split('\t').collect())
 }
 
@@ -212,7 +212,7 @@ fn tables(dk: &Docker) -> Result<String, String> {
     let output = dk.tool_sql(sql)?;
     let mut order = Vec::new();
     let mut info: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    for row in lines(&output) {
+    for (n, row) in lines(&output).enumerate() {
         match row.as_slice() {
             ["t", name, count, engine] => {
                 let name = field_text(name)?.unwrap_or_default();
@@ -224,7 +224,7 @@ fn tables(dk: &Docker) -> Result<String, String> {
                     entry.2.push(field_text(column)?.unwrap_or_default());
                 }
             }
-            _ => return Err("The database answered in a form this tool does not read".into()),
+            _ => return Err(unreadable(n, "a line of the table list is neither a table nor a key")),
         }
     }
     let items: Vec<String> = order
@@ -259,7 +259,7 @@ pub fn describe(dk: &Docker, name: &str) -> Result<Table, String> {
 
 fn parse_describe(name: &str, output: &str) -> Result<Table, String> {
     let mut table = Table { name: name.to_string(), columns: Vec::new(), primary_key: Vec::new() };
-    for row in lines(output) {
+    for (n, row) in lines(output).enumerate() {
         match row.as_slice() {
             ["c", column, column_type, data_type, nullable, default, extra] => {
                 let column = field_text(column)?.unwrap_or_default();
@@ -276,7 +276,7 @@ fn parse_describe(name: &str, output: &str) -> Result<Table, String> {
                 });
             }
             ["k", column] => table.primary_key.push(field_text(column)?.unwrap_or_default()),
-            _ => return Err("The database answered in a form this tool does not read".into()),
+            _ => return Err(unreadable(n, "a line of the column list is neither a column nor a key")),
         }
     }
     if table.columns.is_empty() {
@@ -564,20 +564,36 @@ fn rows(dk: &Docker, request: &Value) -> Result<String, String> {
     let table = describe(dk, request.str("table").ok_or("Which table?")?)?;
     let query = rows_query(&table, request)?;
     let output = dk.tool_sql(&query.sql).map_err(|e| format!("The database refused that: {}", db_error(&e)))?;
-    let mut total = 0u64;
+    parse_rows(&table, &output)
+}
+
+/// A page of rows, from the `c` (count) and `r` (row) lines of the read
+/// script, as the JSON the page gets.
+pub fn parse_rows(table: &Table, output: &str) -> Result<String, String> {
+    let mut total = None;
     let mut out_rows = Vec::new();
-    for row in lines(&output) {
+    for (n, row) in lines(output).enumerate() {
         match row.first() {
-            Some(&"c") => total = row.get(1).and_then(|v| v.parse().ok()).unwrap_or(0),
+            Some(&"c") if row.len() == 2 => total = Some(row[1].parse::<u64>().map_err(|_| unreadable(n, "its row count is not a number"))?),
             Some(&"r") if row.len() == table.columns.len() + 1 => {
                 let cells: Result<Vec<String>, String> =
                     row[1..].iter().map(|v| field(v).map(|b| cell_json(b.as_deref()))).collect();
-                out_rows.push(format!("[{}]", cells?.join(",")));
+                out_rows.push(format!("[{}]", cells.map_err(|_| unreadable(n, "a value is not in the encoding asked for"))?.join(",")));
             }
-            _ => return Err("The database answered in a form this tool does not read".into()),
+            Some(&"r") => {
+                return Err(unreadable(n, &format!("a row has {} values, and `{}` has {} columns", row.len() - 1, table.name, table.columns.len())))
+            }
+            _ => return Err(unreadable(n, "a line is neither the count nor a row")),
         }
     }
+    let total = total.ok_or_else(|| unreadable(0, "it has no row count"))?;
     Ok(format!("{{\"table\":{},\"total\":{total},\"rows\":[{}]}}", json::quote(&table.name), out_rows.join(",")))
+}
+
+/// The one error for an answer this tool cannot read, saying where and why,
+/// so a report of it can be acted on.
+pub(crate) fn unreadable(line: usize, why: &str) -> String {
+    format!("The database answered in a form this tool does not read (line {}: {why})", line + 1)
 }
 
 // ---- Saving
@@ -743,8 +759,8 @@ fn preflight(dk: &Docker, planned: &[Planned]) -> Result<(), String> {
     }
     let output = dk.tool_sql(&script).map_err(|e| format!("Nothing was saved: checking the rows failed: {}", db_error(&e)))?;
     let mut seen: BTreeMap<usize, Vec<Vec<String>>> = BTreeMap::new();
-    for row in lines(&output) {
-        let i: usize = row[0].parse().map_err(|_| "The database answered in a form this tool does not read".to_string())?;
+    for (n, row) in lines(&output).enumerate() {
+        let i: usize = row[0].parse().map_err(|_| format!("Nothing was saved: {}", unreadable(n, "a check names no change")))?;
         seen.entry(i).or_default().push(row[1..].iter().map(|s| s.to_string()).collect());
     }
     for (i, p) in planned.iter().enumerate() {
@@ -755,7 +771,7 @@ fn preflight(dk: &Docker, planned: &[Planned]) -> Result<(), String> {
             }
             if !expected.is_empty() {
                 let now: Result<Vec<Option<Vec<u8>>>, String> = found[0].iter().map(|v| field(v)).collect();
-                if &now? != expected {
+                if &now.map_err(|e| format!("Nothing was saved: {e}"))? != expected {
                     return Err(format!(
                         "Nothing was saved: {} changed since it was loaded (the game may have saved over it). Reload and try again.",
                         p.label
@@ -799,8 +815,10 @@ fn apply(cfg: &Config, dk: &Docker, request: &Value) -> Result<String, String> {
     preflight(dk, &planned)?;
     let era = crate::service_credentials::era(cfg);
     let backup = cfg.state.join("backups").join(format!("before-db-browser-{era}-{}.sql", crate::private_fs::random_hex(8)?));
+    let saved = std::cell::Cell::new(false);
     crate::accounts::with_servers_stopped(cfg, dk, "save", || {
-        crate::cmds::backup_snapshot(cfg, dk, &backup.to_string_lossy(), false)?;
+        crate::cmds::backup_snapshot(cfg, dk, &backup.to_string_lossy(), false)
+            .map_err(|e| format!("Nothing was saved: the backup taken before saving failed: {e}"))?;
         preflight(dk, &planned)?;
         if let Err(raw) = dk.tool_sql(&script) {
             let error = db_error(&raw);
@@ -816,7 +834,18 @@ fn apply(cfg: &Config, dk: &Docker, request: &Value) -> Result<String, String> {
                 ),
             });
         }
+        saved.set(true);
         Ok(())
+    })
+    .map_err(|e| {
+        // Saved, but the game did not come back: say that it was saved, or
+        // the page keeps the changes staged and a retry fails on rows that
+        // are already gone.
+        if saved.get() {
+            format!("Saved: your changes are in the database (backup: {}). {e}", backup.display())
+        } else {
+            e
+        }
     })?;
     Ok(format!("{{\"applied\":{},\"backup\":{}}}", planned.len(), json::quote(&backup.to_string_lossy())))
 }
@@ -1046,5 +1075,181 @@ mod tests {
         assert_eq!(field("NULL").unwrap(), None);
         assert_eq!(field("").unwrap(), Some(vec![]));
         assert!(field("ZZ").is_err());
+    }
+
+    // ---- The `char` table, as rAthena creates it (#200 follow-up)
+
+    /// rAthena's `char` table, read from its CREATE TABLE the way `describe`
+    /// would read it from information_schema.
+    pub(crate) fn rathena_char() -> Table {
+        let sql = include_str!("../../tests/fixtures/rathena-char-table.sql");
+        let mut columns = Vec::new();
+        for line in sql.lines().filter(|l| l.starts_with("  `")) {
+            let (name, rest) = line[3..].split_once('`').unwrap();
+            let rest = rest.trim();
+            let lower = rest.to_ascii_lowercase();
+            let type_word = lower.split_whitespace().next().unwrap();
+            let data_type = type_word.split('(').next().unwrap().to_string();
+            let column_type = if lower.contains(" unsigned") { format!("{type_word} unsigned") } else { type_word.to_string() };
+            let default = lower.find("default ").map(|i| {
+                let d = &rest[i + "default ".len()..];
+                let d = d.trim_end_matches(',');
+                d.trim_matches('\'').to_string()
+            });
+            columns.push(Column {
+                name: name.to_string(),
+                column_type,
+                data_type,
+                nullable: !lower.contains("not null"),
+                default: default.filter(|d| d != "NULL"),
+                auto_increment: lower.contains("auto_increment"),
+            });
+        }
+        Table { name: "char".into(), columns, primary_key: vec!["char_id".into()] }
+    }
+
+    /// 38 characters, the size of the reported table: long names, Korean
+    /// ones, a population-engine companion, the largest 64-bit experience,
+    /// never-logged-in (NULL) and zero dates.
+    pub(crate) fn char_rows(table: &Table) -> Vec<Vec<Option<String>>> {
+        let names = ["Agent", "포링마스터", "ACompanionWithALongName", "[PE] Aria the Archer", "Tab\tIn\\Name", "x"];
+        (0..38)
+            .map(|i| {
+                table
+                    .columns
+                    .iter()
+                    .map(|c| {
+                        Some(match c.name.as_str() {
+                            "char_id" => (150000 + i).to_string(),
+                            "account_id" => (2000000 + i / 3).to_string(),
+                            "name" => format!("{}{i}", names[i % names.len()]),
+                            "base_exp" | "job_exp" if i == 7 => "18446744073709551615".into(),
+                            "zeny" => "4294967295".into(),
+                            "last_map" | "save_map" => "prontera".into(),
+                            "sex" => (if i % 2 == 0 { "M" } else { "F" }).into(),
+                            "last_login" => match i % 3 {
+                                0 => return None,
+                                1 => "0000-00-00 00:00:00".into(),
+                                _ => "2026-09-30 21:14:05".into(),
+                            },
+                            _ => (i * 37 % 1000).to_string(),
+                        })
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The read script's answer, exactly as mariadb --batch --raw writes it:
+    /// every value hex-encoded, then the end marker.
+    pub(crate) fn rows_answer(rows: &[Vec<Option<String>>]) -> String {
+        let mut out = format!("c\t{}\n", rows.len());
+        for row in rows {
+            let cells: Vec<String> = row.iter().map(|v| v.as_deref().map(|s| hex(s.as_bytes())).unwrap_or_else(|| "NULL".into())).collect();
+            out.push_str(&format!("r\t{}\n", cells.join("\t")));
+        }
+        out.push_str(crate::docker::END_MARKER);
+        out.push('\n');
+        out
+    }
+
+    /// What `docker-slim exec` (nebula's slim-client, at the pinned commit)
+    /// prints for a process that wrote `bytes`: the daemon frames each chunk
+    /// it reads from the process as [stream,0,0,0,len BE] + payload, and the
+    /// client reads its socket 8 KiB at a time and demultiplexes each read on
+    /// its own, dropping a frame that does not fit in the read it started in.
+    fn through_docker_slim_exec(bytes: &[u8], chunk: usize) -> Vec<u8> {
+        let mut wire = Vec::new();
+        for payload in bytes.chunks(chunk) {
+            wire.push(1);
+            wire.extend_from_slice(&[0, 0, 0]);
+            wire.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+            wire.extend_from_slice(payload);
+        }
+        let mut out = Vec::new();
+        for read in wire.chunks(8192) {
+            // slim-client/src/http.rs demux_stdcopy, as it is.
+            let mut i = 0;
+            while i + 8 <= read.len() {
+                let stream = read[i];
+                let len = u32::from_be_bytes([read[i + 4], read[i + 5], read[i + 6], read[i + 7]]) as usize;
+                i += 8;
+                if i + len > read.len() {
+                    break;
+                }
+                if stream != 2 {
+                    out.extend_from_slice(&read[i..i + len]);
+                }
+                i += len;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_page_of_char_is_read_whole() {
+        let table = rathena_char();
+        assert_eq!(table.columns.len(), 80);
+        assert_eq!(table.columns.iter().find(|c| c.name == "base_exp").unwrap().column_type, "bigint(20) unsigned");
+        let rows = char_rows(&table);
+        let answer = rows_answer(&rows);
+        let body = crate::docker::strip_end_marker(&answer).unwrap();
+        let page = parse_rows(&table, body).unwrap();
+        let parsed = json::parse(&page).unwrap();
+        assert_eq!(parsed.get("total").and_then(|t| if let Value::Number(n) = t { Some(*n) } else { None }), Some(38.0));
+        let Some(Value::Array(got)) = parsed.get("rows") else { panic!("{page}") };
+        assert_eq!(got.len(), 38);
+        // A 64-bit value stays exact, a tab in a name stays a tab, and NULL
+        // stays NULL rather than becoming the text "NULL".
+        assert!(page.contains("\"18446744073709551615\""));
+        assert!(page.contains("\"Tab\\u0009In\\\\Name4\""), "{page}");
+        let Value::Array(first) = &got[0] else { panic!() };
+        let login = table.columns.iter().position(|c| c.name == "last_login").unwrap();
+        assert_eq!(first[login], Value::Null);
+        assert_eq!(first.len(), 80);
+    }
+
+    /// The reported bug. A page of `char` is ~23 KiB hex-encoded; through
+    /// docker-slim's exec stream it arrived cut off after the first frame,
+    /// mid-row, and the reader said "answered in a form this tool does not
+    /// read" over an empty grid. The rows are fine; the transport lost them.
+    #[test]
+    fn a_page_of_char_does_not_survive_docker_slim_exec_stdout() {
+        let table = rathena_char();
+        let answer = rows_answer(&char_rows(&table));
+        assert!(answer.len() > 8192, "{} bytes", answer.len());
+        // mariadb writes a pipe 4 KiB at a time.
+        let cut = String::from_utf8_lossy(&through_docker_slim_exec(answer.as_bytes(), 4096)).into_owned();
+        assert!(cut.len() < answer.len() && answer.starts_with(&cut), "{} of {}", cut.len(), answer.len());
+        // What the old reader did with it: the message in the report.
+        let err = parse_rows(&table, &cut).unwrap_err();
+        assert!(err.contains("does not read"), "{err}");
+        // What happens now: the marker is missing, so it is called incomplete,
+        // never parsed as a shorter table.
+        assert!(crate::docker::strip_end_marker(&cut).unwrap_err().contains("incomplete"));
+        // A small table's answer fits in one frame and one read, which is why
+        // every other table loaded.
+        let small = "c\t1\nr\t3135\nragnarok-db-answer-complete\n";
+        assert_eq!(through_docker_slim_exec(small.as_bytes(), 4096), small.as_bytes());
+    }
+
+    #[test]
+    fn rows_that_do_not_match_the_table_say_why() {
+        let table = rathena_char();
+        let err = parse_rows(&table, "c\t1\nr\t30\t31\n").unwrap_err();
+        assert!(err.contains("2 values") && err.contains("80 columns") && err.contains("line 2"), "{err}");
+        assert!(parse_rows(&table, "").unwrap_err().contains("no row count"));
+        assert!(parse_rows(&table, "c\t0\n").unwrap().contains("\"rows\":[]"));
+    }
+
+    #[test]
+    fn deleting_a_character_is_one_keyed_delete_of_one_row() {
+        let mut tables = BTreeMap::new();
+        tables.insert("char".to_string(), rathena_char());
+        let planned = plan(&tables, &changes(r#"[{"table":"char","key":{"char_id":"150012"},"delete":true}]"#)).unwrap();
+        assert_eq!(planned.len(), 1);
+        assert_eq!(planned[0].statement, "DELETE FROM `char` WHERE `char_id` = 150012 LIMIT 1;");
+        assert_eq!(planned[0].check.as_ref().unwrap().0, "SELECT 1 FROM `char` WHERE `char_id` = 150012");
+        assert_eq!(planned[0].label, "delete char (char_id=150012)");
     }
 }

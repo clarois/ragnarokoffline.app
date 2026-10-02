@@ -1,0 +1,23 @@
+# The Bounty Marker -- a usable item in the 30000+ custom range that no client
+# update will collide with. Using it is what the client plugin watches for
+# (client/index.js): it raises the target cursor and, when you click a monster,
+# calls @bounty with that monster's id. The server side is npc/bounty.txt.
+#
+# Type Usable (not Delayconsume) matters: the client only emits the use-item
+# packet -- the one the plugin hooks -- for Healing, Usable and Cash items.
+#
+# Version 3 is the ITEM_DB version this build reads; take it from the header of
+# vendor/rathena/db/import-tmpl/item_db.yml if you retarget.
+Header:
+  Type: ITEM_DB
+  Version: 3
+
+Body:
+  - Id: 50071
+    AegisName: Bounty_Marker
+    Name: Bounty Marker
+    Type: Usable
+    Buy: 2000
+    Weight: 10
+    Script: |
+      dispbottom "Bounty Marker: click a monster to place a bounty on it.";

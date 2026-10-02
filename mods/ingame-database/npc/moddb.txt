@@ -1,0 +1,45 @@
+//===== Ragnarok Offline: ingame-database =================================
+//= Answers the in-game database window (client/index.js):
+//=   @moddb <id> mob <name or id>
+//= with one @@reply line:
+//=   <mob id>|<name>|<level>|<hp>|<base exp>|<job exp>|<atk min>-<atk max>|
+//=   <def>|<mdef>|<race>|<element>|<element level>|<size>|<item>:<rate>,...
+//= dispbottom lines arrive with no "Name :" in front, which is how the client
+//= knows they came from a server script and keeps them out of chat.
+//===========================================================================
+-	script	ModDB	-1,{
+	end;
+OnInit:
+	// Everyone may ask (level 0); it only reads the monster table.
+	bindatcmd "moddb", strnpcinfo(3) + "::OnQuery", 0, 99;
+	end;
+OnQuery:
+	.@request$ = .@atcmd_parameters$[0];
+	.@kind$ = .@atcmd_parameters$[1];
+	.@query$ = "";
+	for (.@i = 2; .@i < .@atcmd_numparameters; .@i++)
+		.@query$ += (.@i > 2 ? " " : "") + .@atcmd_parameters$[.@i];
+	if (.@kind$ != "mob" || .@query$ == "") {
+		dispbottom "@@reply " + .@request$ + " 1/1 ";
+		end;
+	}
+	.@mob = atoi(.@query$);
+	if (.@mob <= 0)
+		.@mob = getmonsterinfo(.@query$, MOB_ID);
+	if (.@mob <= 0 || getmonsterinfo(.@mob, MOB_LV) < 0) {
+		dispbottom "@@reply " + .@request$ + " 1/1 ";
+		end;
+	}
+	.@line$ = .@mob + "|" + getmonsterinfo(.@mob, MOB_NAME) + "|" + getmonsterinfo(.@mob, MOB_LV) + "|" + getmonsterinfo(.@mob, MOB_MAXHP)
+		+ "|" + getmonsterinfo(.@mob, MOB_BASEEXP) + "|" + getmonsterinfo(.@mob, MOB_JOBEXP)
+		+ "|" + getmonsterinfo(.@mob, MOB_ATKMIN) + "-" + getmonsterinfo(.@mob, MOB_ATKMAX)
+		+ "|" + getmonsterinfo(.@mob, MOB_DEF) + "|" + getmonsterinfo(.@mob, MOB_MDEF)
+		+ "|" + getmonsterinfo(.@mob, MOB_RACE) + "|" + getmonsterinfo(.@mob, MOB_ELEMENT) + "|" + getmonsterinfo(.@mob, MOB_ELEMENTLV)
+		+ "|" + getmonsterinfo(.@mob, MOB_SIZE) + "|";
+	if (getmobdrops(.@mob)) {
+		for (.@i = 0; .@i < $@MobDrop_count; .@i++)
+			.@line$ += (.@i ? "," : "") + $@MobDrop_item[.@i] + ":" + $@MobDrop_rate[.@i];
+	}
+	dispbottom "@@reply " + .@request$ + " 1/1 " + .@line$;
+	end;
+}

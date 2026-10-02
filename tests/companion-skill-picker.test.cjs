@@ -29,7 +29,7 @@ const JS = path.join(ROOT, 'patches', 'CompanionPanel.js');
 const HTML = path.join(ROOT, 'patches', 'CompanionPanel.html');
 const CSS = path.join(ROOT, 'patches', 'CompanionPanel.css');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
-const PATCH = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0008-companion-skill-selector.patch');
+const PATCH = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0009-companion-skill-selector.patch');
 
 const js = fs.readFileSync(JS, 'utf8').replace(/\r\n/g, '\n');
 const html = fs.readFileSync(HTML, 'utf8').replace(/\r\n/g, '\n');

@@ -7,6 +7,12 @@ use std::path::Path;
 const ERROR: &str = "Cannot protect private service files. Use an owner-controlled local filesystem with permissions support.";
 
 pub fn random_hex(bytes: usize) -> Result<String, String> {
+    Ok(random_bytes(bytes)?.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// `bytes` bytes from the operating system's generator (/dev/urandom,
+/// BCryptGenRandom), never a PRNG seeded here.
+pub fn random_bytes(bytes: usize) -> Result<Vec<u8>, String> {
     let mut value = vec![0u8; bytes];
     #[cfg(unix)]
     File::open("/dev/urandom")
@@ -30,7 +36,7 @@ pub fn random_hex(bytes: usize) -> Result<String, String> {
     }
     #[cfg(not(any(unix, windows)))]
     return Err("System random generation is not supported on this platform".into());
-    Ok(value.iter().map(|byte| format!("{byte:02x}")).collect())
+    Ok(value)
 }
 
 pub fn random_token(length: usize) -> Result<String, String> {
@@ -66,16 +72,31 @@ fn new_file(path: &Path) -> Result<File, String> {
 /// may be on different drives. Never inherit public destination ACLs, truncate
 /// an old backup in place, or change permissions on the user's chosen folder.
 pub fn export_file(source: &Path, destination: &Path) -> Result<(), String> {
+    let mut input = File::open(source).map_err(|_| "Cannot read the staged backup")?;
+    export_with(destination, |output| {
+        std::io::copy(&mut input, output)
+            .map(|_| ())
+            .map_err(|_| "Cannot write the private backup export".to_string())
+    })
+}
+
+/// `export_file`, for a backup that is produced as it is written rather than
+/// staged first: `write` fills the private temporary file, which only then
+/// replaces the destination. A failure leaves whatever was there before.
+pub fn export_with(
+    destination: &Path,
+    write: impl FnOnce(&mut File) -> Result<(), String>,
+) -> Result<(), String> {
     let parent = destination
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     let temporary = parent.join(format!(".ragnarok-backup-{}.tmp", random_hex(12)?));
     let result = (|| {
-        let mut input = File::open(source).map_err(|_| "Cannot read the staged backup")?;
         let mut output = new_file(&temporary)?;
-        std::io::copy(&mut input, &mut output)
-            .and_then(|_| output.sync_all())
+        write(&mut output)?;
+        output
+            .sync_all()
             .map_err(|_| "Cannot write the private backup export")?;
         drop(output);
         #[cfg(unix)]

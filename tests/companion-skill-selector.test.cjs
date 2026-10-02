@@ -37,7 +37,7 @@ const STATE = path.join(MAP, 'population_engine', 'core', 'population_shell_stat
 const HPP = path.join(MAP, 'population_engine.hpp');
 const CMDS = path.join(ROOT, 'stack', 'src', 'cmds.rs');
 const SQL = path.join(PE, 'files', 'sql-files', 'population_engine', 'cp_companion_persistence.sql');
-const PATCH = path.join(PE, 'patches', '0008-companion-skill-selector.patch');
+const PATCH = path.join(PE, 'patches', '0009-companion-skill-selector.patch');
 
 const read = p => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
 
@@ -81,13 +81,13 @@ test('the selection is threaded through ALL FOUR recall touchpoints', () => {
 	const e = read(ENGINE);
 
 	// 1. the SELECT column list
-	assert.match(e, /shadow_acc_r_nameid, skill_preset"/,
+	assert.match(e, /shadow_acc_r_nameid, skill_preset[,"]/,
 		'the recall SELECT must fetch skill_preset');
 
 	// 2. the row reader must tolerate NULL, which is the "auto" state
 	const reader = e.slice(e.indexOf('uint32_t sh_acc_r = atoi(data);'));
 	assert.match(reader.slice(0, 900),
-		/Sql_GetData\(mmysql_handle, col\+\+, &data, nullptr\);\s*\n\s*if \(data != nullptr\)/,
+		/data = next\(\);\s*\n\s*if \(data != nullptr\)/,
 		'the reader must test the column for NULL rather than copying it blindly');
 
 	// 3. the call site passes it
@@ -128,8 +128,10 @@ test('the seeders filter on the selection AND the filter is defined in that tran
 
 test('the v7 column reaches BOTH a fresh install and an existing one', () => {
 	const r = read(CMDS);
-	// Fresh install: the CREATE TABLE.
-	assert.match(r, /`skill_preset`\s+TEXT\s+NULL DEFAULT NULL/,
+	// Fresh install: the CREATE TABLE, in the schema file cmds.rs includes.
+	assert.match(r, /include_str!\(".*cp_companion_persistence\.sql"\)/,
+		'the supervisor must run the schema file, not a copy of it');
+	assert.match(read(SQL), /`skill_preset`\s+TEXT\s+NULL DEFAULT NULL/,
 		'the CREATE must carry the column for a fresh install');
 	// Existing install: the idempotent migration loop. Without this a player who
 	// installed before v7 keeps the old schema and every selection write fails.
@@ -168,4 +170,15 @@ test('the SQL statement buffers have room for the grown statements', () => {
 	// 60 skills at 5 chars ("12345,") is 300 bytes; 512 is the documented floor.
 	assert.ok(Number(lastQ[1]) >= 512,
 		`the selection UPDATE buffer must hold a long skill list (found ${lastQ && lastQ[1]})`);
+});
+
+test('a selection too long to store is refused, never stored cut short', () => {
+	const e = read(ENGINE);
+	const i = e.indexOf('static bool pop_companion_format_skill_preset(');
+	assert.ok(i > 0, 'one formatter for the stored list');
+	const body = e.slice(i, e.indexOf('\n}\n', i));
+	assert.match(body, /return false;/, 'overflow must be reported to the caller');
+	assert.ok(!/\bbreak;/.test(body), 'and not end the list early');
+	assert.equal((e.match(/if \(!(?:want_auto && !)?pop_companion_format_skill_preset\(picked, preset, sizeof\(preset\)\)\) \{/g) || []).length, 2,
+		'both the set and the toggle paths must refuse when it does not fit');
 });

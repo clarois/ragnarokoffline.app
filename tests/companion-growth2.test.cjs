@@ -15,7 +15,7 @@ const { test } = require('node:test');
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const STATE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine', 'core', 'population_shell_state.hpp');
-const PATCH7 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0007-companion-growth.patch');
+const PATCH7 = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0008-companion-growth.patch');
 
 const src = fs.readFileSync(ENGINE, 'utf8').replace(/\r\n/g, '\n');
 const state = fs.readFileSync(STATE, 'utf8').replace(/\r\n/g, '\n');

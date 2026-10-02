@@ -242,6 +242,12 @@ cp -R "$ROOT/vendor/roBrowserLegacy/dist/Web" "$PAYLOAD/vendor/roBrowserLegacy/d
 # served as a file, so the source copy travels beside it.
 mkdir -p "$PAYLOAD/client-tables"
 cp "$ROOT/vendor/roBrowserLegacy/src/DB/Monsters/MonsterTable.js" "$PAYLOAD/client-tables/MonsterTable.js"
+# And the tables the Control panel draws a character with: job -> body
+# sprite and palette names, hair order, headgear and garment sprite names.
+for table in Jobs/JobConst.js Jobs/JobNameTable.js Jobs/PalNameTable.js Jobs/HairIndexTable.js \
+             Items/HatTable.js Items/RobeTable.js; do
+    cp "$ROOT/vendor/roBrowserLegacy/src/DB/$table" "$PAYLOAD/client-tables/$(basename "$table")"
+done
 # `npm run build:all` emits seven ~12 MB bundles and the game loads exactly one.
 # bootstrap.sh prunes the rest, but anyone who rebuilds the client directly
 # skips that and silently adds 24 MB per unpruned viewer to the download. Prune

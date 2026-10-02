@@ -55,6 +55,10 @@ server is never ported; we bring the platform it is tested on.
   `config/VENDOR_PINS` to it. Do **not** add it to `patch-client.sh` or
   `apply-server-mods.sh`; those carry only what is ours (the population engine,
   the stylist, extension hooks, app wording).
+- **Open fork PRs against `ragnarokoffline`, not `master`.** Both forks'
+  default branch is `master`, a mirror of upstream, so GitHub suggests the wrong
+  base. A PR against it picks up every upstream commit the fork hasn't merged
+  (rathena#17 arrived with 67). Each fork's own `CLAUDE.md` says the same.
 - `ragnarokoffline` refuses force-pushes. Releases pin commits on it, so it only
   moves forward, and newer upstream is **merged** in, never rebased.
 - Newer upstream comes in weekly, as pull requests that stop short of merging:
@@ -64,6 +68,24 @@ server is never ported; we bring the platform it is tested on.
   place, and anything done there is lost.
 - roBrowserLegacy checks files out with CRLF. A whole-file diff means something
   rewrote the line endings.
+
+### Server extensions: optional server behaviour, switched on from a mod
+
+When a change to how the server behaves should be optional, it goes behind a
+**server extension** in the rAthena fork, not into an unconditional core edit and
+not into `apply-server-mods.sh`. An extension is an entry in the fork's
+`db/extension_db.yml`, off by default, with optional typed values. The code
+checks `extension_enabled("<id>")` / `extension_int(...)` in C++, or
+`getextension("<id>")` / `getextensionvalue(...)` in scripts.
+
+A mod turns one on by shipping `db/extension_db.yml` (`Id`, `Enabled: true`,
+`Values`). The app merges it into the server's `db/import/` like any other
+table. `@extensions` and `@extensioninfo <id>` show what's on in game.
+
+The full guide, for both adding one in the fork and using one from a mod, is
+[doc/extensions.md](https://github.com/Flux159/rathena/blob/ragnarokoffline/doc/extensions.md)
+in the fork. A mod that depends on an extension needs an app version whose
+pinned fork has it.
 
 ### The seam where bugs actually live
 
@@ -164,12 +186,20 @@ is in the table and the char server neither reads nor writes it.
     of `stack down`, and a launch arriving during it is read as "bring the app
     back" — it queues a relaunch, so the **packaged** build reappears and your
     dev run is gone. Wait for it to leave the Dock.
-- One copy at a time, and not only because of the lock: the ports are fixed
-  (3338 for assets, 6900/6121/5121 for rAthena), so giving a second copy its
-  own state with `RAGNAROK_OFFLINE_HOME` still collides — and two supervisors
-  over one data disk is how the MariaDB volume loses its redo log.
-  `--user-data-dir` gets past the lock but not the ports, so it is only worth
-  anything for shell work that never presses play.
+- One copy per set of ports and per data disk. The ports default to 3338
+  (assets), 6900/6121/5121 (rAthena) and 7490 (agent API), so a second copy
+  given only its own state with `RAGNAROK_OFFLINE_HOME` still collides. To run
+  one beside the app (the agent test world is the usual case), also give it
+  its own `NEBULA_HOME` and move **every** port with
+  `RAGNAROK_OFFLINE_{ASSET,LOGIN,CHAR,MAP,AGENT}_PORT`. Moving only some of
+  them is worse than moving none: nebula forwards a published port that is
+  already taken to the engine that took it first, and reports no error.
+  [docs/AGENT_TESTING.md](docs/AGENT_TESTING.md#running-beside-the-app) has
+  the recipe. `stack/src/ports.rs` is the only parser (`ragnarok-stack ports`
+  prints its answer), and the shell and test scripts ask it. Never point two
+  supervisors at one data disk: that is how the MariaDB volume loses its redo
+  log. `--user-data-dir` gets past the single-instance lock, and with moved
+  ports and its own state the second copy can press play too.
 - Killing things: `pgrep -x` and kill by PID. `pkill -f <pattern>` has matched
   the agent's own shell in this repo and killed the session.
 
