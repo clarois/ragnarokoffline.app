@@ -76,7 +76,7 @@ test('only gear the owner gave comes back, and the record of it survives a resta
 });
 
 test('a job advance never strands player gear in the unpersisted inventory', () => {
-	const adv = functionBody('static void pop_companion_try_job_advance(map_session_data *sd)\n{');
+	const adv = functionBody('static bool pop_companion_apply_job_change(map_session_data *sd, uint16_t forced_target)\n{');
 	assert.ok(adv.indexOf('given_before') < adv.indexOf('pc_jobchange('),
 		'the given pieces must be noted before pc_jobchange unequips what the new class cannot wear');
 	assert.match(adv, /pop_companion_hand_back\(owner, sd, i,/, 'what the new class cannot wear goes back to the owner');
