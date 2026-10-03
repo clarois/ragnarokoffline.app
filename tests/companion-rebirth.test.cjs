@@ -121,6 +121,23 @@ test('the roster carries rebirth readiness, computed like the homunculus field',
 		'the line gains the field');
 });
 
+test('each confirmation names its own action - a rebirth must not offer to Delete', () => {
+	// confirmInWindow served one caller (the delete button) and baked "Cancel"/"Delete" into its
+	// markup. Reusing it for rebirth made a rebirth dialog offer to Delete, which says the
+	// opposite of what the button does; the helper now takes the label, with Delete as the default
+	// so the delete caller is unchanged.
+	assert.match(panel, /function confirmInWindow\(question, detail, okLabel = 'Delete'/,
+		'the helper must take the confirming label');
+	assert.ok(!/>Delete<\/button>/.test(panel),
+		'the label must not be baked into the markup any more');
+	assert.match(panel, /okButton\.textContent = okLabel;/, 'and must be applied at call time');
+	// the two rebirth paths name themselves, and only the level-resetting one keeps the warning style
+	assert.match(panel, /'Rebirth', true/, 'the High Novice path must say Rebirth (and keep the warning style)');
+	assert.match(panel, /'Advance', false/, 'the straight path must say Advance, without the danger style');
+	// and the delete caller keeps its wording
+	assert.match(panel, /`Delete \$\{m\.name\} permanently\?`/, 'the delete prompt is unchanged');
+});
+
 test('the panel offers the tab only for what the server reports as ready', () => {
 	assert.match(html, /data-tab="rebirth"[^>]*>Rebirth</,
 		'the Rebirth tab must exist');

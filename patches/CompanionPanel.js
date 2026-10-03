@@ -843,7 +843,8 @@ function _drawRebirth() {
 		grid.append(_button('High Novice', 'b', () => {
 			confirmInWindow(
 				`Rebirth ${m.name} as a High Novice?`,
-				`It restarts at level 1 and climbs back up as a high class, then a transcendent one. Gear it can no longer wear is unequipped, and anything you gave it comes back to you.`
+				`It restarts at level 1 and climbs back up as a high class, then a transcendent one. Gear it can no longer wear is unequipped, and anything you gave it comes back to you.`,
+				'Rebirth', true
 			).then(ok => {
 				if (!ok) return;
 				talk(`@companion rebirth ${m.name} novice`, false);
@@ -853,7 +854,8 @@ function _drawRebirth() {
 		grid.append(_button('Transcendent', 'b', () => {
 			confirmInWindow(
 				`Advance ${m.name} straight to its transcendent class?`,
-				`It keeps its level and becomes the transcendent class immediately. Gear it can no longer wear is unequipped, and anything you gave it comes back to you.`
+				`It keeps its level and becomes the transcendent class immediately. Gear it can no longer wear is unequipped, and anything you gave it comes back to you.`,
+				'Advance', false
 			).then(ok => {
 				if (!ok) return;
 				talk(`@companion rebirth ${m.name} trans`, false);
@@ -952,7 +954,10 @@ function installChatHook() {
  * @param {string} detail
  * @return {Promise<boolean>}
  */
-function confirmInWindow(question, detail) {
+/// Ask a yes/no in-window. `okLabel` names the confirming action, because the same dialog is used
+/// for things that are not deletions (a rebirth is not a delete, and a button that says Delete for
+/// it says the opposite of what it does). The default keeps the delete caller's wording unchanged.
+function confirmInWindow(question, detail, okLabel = 'Delete', okDanger = true) {
 	return new Promise(resolve => {
 		const root = CompanionPanel.getRoot();
 		const overlay = document.createElement('div');
@@ -963,11 +968,16 @@ function confirmInWindow(question, detail) {
 				<div class="confirm-detail"></div>
 				<div class="confirm-buttons">
 					<button class="b" data-act="cancel">Cancel</button>
-					<button class="b danger" data-act="ok">Delete</button>
+					<button class="b" data-act="ok"></button>
 				</div>
 			</div>`;
 		overlay.querySelector('.confirm-question').textContent = question;
 		overlay.querySelector('.confirm-detail').textContent = detail || '';
+		const okButton = overlay.querySelector('[data-act="ok"]');
+		okButton.textContent = okLabel;
+		if (okDanger) {
+			okButton.classList.add('danger');
+		}
 
 		const done = answer => {
 			overlay.remove();
