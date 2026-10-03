@@ -2379,6 +2379,13 @@ struct PopJobAdvance {
 	int32_t job_lv;  // job level gate (0 = none)
 };
 
+/// Is this transition a REBIRTH? Entering a transcendent class from a 2nd job is: the new class
+/// usually cannot wear what the companion has on, so it is the player's decision, never automatic.
+static bool pop_job_change_is_rebirth(uint16_t from, uint16_t to)
+{
+	return from >= 7 && from <= 20 && to >= 4008 && to <= 4022;
+}
+
 // 1st -> 2nd at base 40 (job_lv 0: fresh companions usually hit 40 before job 50;
 // the official quests also require job level but companions fight constantly so
 // base level is the friendlier gate), then trans/3rd/4th on the official gates.
@@ -2393,13 +2400,22 @@ static const PopJobAdvance kPopJobAdvanceTable[] = {
 	// 2nd -> trans (official rebirth gate: base 99 / job 70; we advance directly,
 	// no level reset — a companion suddenly going back to 1/1 High Novice would
 	// be a terrible feel in the middle of a hunt)
-	{ 7,  4008, 0, 99, 70 }, { 14, 4015, 0, 99, 70 },
-	{ 9,  4010, 0, 99, 70 }, { 16, 4017, 0, 99, 70 },
-	{ 11, 4012, 0, 99, 70 }, { 19, 4020, 0, 99, 70 }, // Bard->Clown (Dancer->Gypsy via 4021 below)
-	{ 8,  4009, 0, 99, 70 }, { 15, 4016, 0, 99, 70 },
-	{ 10, 4011, 0, 99, 70 }, { 18, 4019, 0, 99, 70 },
-	{ 12, 4013, 0, 99, 70 }, { 17, 4018, 0, 99, 70 },
-	{ 20, 4021, 0, 99, 70 }, // Dancer -> Gypsy
+	{ 7, 4008, 0, 99, 50 }, { 14, 4015, 0, 99, 50 },
+	{ 9, 4010, 0, 99, 50 }, { 16, 4017, 0, 99, 50 },
+	{ 11, 4012, 0, 99, 50 }, { 19, 4020, 0, 99, 50 }, // Bard->Clown (Dancer->Gypsy via 4021 below)
+	{ 8, 4009, 0, 99, 50 }, { 15, 4016, 0, 99, 50 },
+	{ 10, 4011, 0, 99, 50 }, { 18, 4019, 0, 99, 50 },
+	{ 12, 4013, 0, 99, 50 }, { 17, 4018, 0, 99, 50 },
+	{ 20, 4021, 0, 99, 50 }, // Dancer -> Gypsy
+	// Rebirth ladder (player-triggered from the Rebirth tab): High Novice -> a high 1st job at
+	// base 40 (a uniform roll, handled as a special case above like Novice), then a high 1st job ->
+	// its trans class on the same 99/50 gate.
+	{ 4002, 4008, 4015, 99, 50 }, // High Swordman -> Lord Knight | Paladin
+	{ 4003, 4010, 4017, 99, 50 }, // High Mage     -> High Wizard | Scholar
+	{ 4004, 4012, 4020, 99, 50 }, // High Archer   -> Sniper | Minstrel (sex-adjusted)
+	{ 4005, 4009, 4016, 99, 50 }, // High Acolyte  -> High Priest | Champion
+	{ 4006, 4011, 4019, 99, 50 }, // High Merchant -> Mastersmith | Biochemist
+	{ 4007, 4013, 4018, 99, 50 }, // High Thief    -> Assassin Cross | Stalker
 	// trans -> 3rd (official: base 99 / job 70)
 	{ 4008, 4054, 0, 99, 70 }, { 4015, 4066, 0, 99, 70 },
 	{ 4010, 4055, 0, 99, 70 }, { 4017, 4067, 0, 99, 70 },
@@ -2492,17 +2508,27 @@ static void pop_companion_spend_stat_points(map_session_data *sd, std::shared_pt
 	}
 }
 
-static uint16_t pop_companion_next_job(uint16_t job_id, int32_t base_lv, int32_t job_lv)
+/// The next class this companion would change into, or 0 if none applies.
+///
+/// @param allow_rebirth  false on the automatic path: a rebirth is never taken on its own, because
+///                       the new class usually cannot wear the companion's gear. The Rebirth tab
+///                       issues it explicitly.
+static uint16_t pop_companion_next_job(uint16_t job_id, int32_t base_lv, int32_t job_lv,
+	bool allow_rebirth)
 {
 	// Novice: six-way uniform roll at base 10
 	if (job_id == 0 && base_lv >= 10)
 		return static_cast<uint16_t>(1 + rnd() % 6);
+	// High Novice: the same roll over the high first jobs, at base 40
+	if (job_id == JOB_NOVICE_HIGH && base_lv >= 40)
+		return static_cast<uint16_t>(JOB_SWORDMAN_HIGH + rnd() % 6);
 	for (const PopJobAdvance &a : kPopJobAdvanceTable) {
 		if (a.from != job_id) continue;
 		if (base_lv < a.base_lv || job_lv < a.job_lv) continue;
-		if (a.to_b != 0)
-			return (rnd() % 2) ? a.to_a : a.to_b;
-		return a.to_a;
+		const uint16_t target = (a.to_b != 0 && (rnd() % 2)) ? a.to_b : a.to_a;
+		if (!allow_rebirth && pop_job_change_is_rebirth(job_id, target))
+			continue; // a rebirth waits for the player
+		return target;
 	}
 	return 0;
 }
@@ -2511,15 +2537,23 @@ static uint32_t pop_companion_given_worn(const map_session_data *shell);
 static bool pop_companion_hand_back(map_session_data *owner, map_session_data *shell, int16 i,
 	e_log_pick_type log_type);
 
-static void pop_companion_try_job_advance(map_session_data *sd)
+/// Change this companion's class. Shared by the automatic path and the player-triggered rebirth.
+///
+/// @param forced_target  0 on the automatic path (the ladder decides); otherwise the class to change
+///                       into. A rebirth passes its target here so it runs the identical jobchange,
+///                       skill reseed and gear dance rather than a second implementation of them.
+/// @return true when the class actually changed.
+static bool pop_companion_apply_job_change(map_session_data *sd, uint16_t forced_target)
 {
-	const uint16_t next = pop_companion_next_job(sd->status.class_, sd->status.base_level, sd->status.job_level);
-	if (next == 0) return;
+	const uint16_t next = forced_target != 0 ? forced_target
+		: pop_companion_next_job(sd->status.class_, sd->status.base_level, sd->status.job_level,
+			/*allow_rebirth=*/false);
+	if (next == 0) return false;
 	// Player-given gear the new class cannot wear goes back to the player, so the player has to
 	// be here to take it. Otherwise wait: the next level-up check tries again.
 	map_session_data *owner = pop_companion_owner_session(sd);
 	if (pop_companion_given_worn(sd) != 0 && (owner == nullptr || !owner->state.active))
-		return;
+		return false;
 	std::vector<int16> given_before;
 	for (int16_t i = 0; i < MAX_INVENTORY; ++i) {
 		const struct item &w = sd->inventory.u.items_inventory[i];
@@ -2532,7 +2566,13 @@ static void pop_companion_try_job_advance(map_session_data *sd)
 	if (!pc_jobchange(sd, next, upper)) {
 		ShowWarning("Population engine: companion %s job change %hu -> %hu failed.\n",
 			sd->status.name, sd->status.class_, next);
-		return;
+		return false;
+	}
+	// A rebirth proper resets the LEVEL as well: High Novice starts over at 1/1. Advancing straight
+	// to the transcendent class keeps the level, which is the whole point of that option.
+	if (next == JOB_NOVICE_HIGH) {
+		sd->status.base_level = 1;
+		sd->status.base_exp = 0;
 	}
 	sd->status.job_level = 1;
 	sd->status.job_exp = 0;
@@ -2600,9 +2640,81 @@ static void pop_companion_try_job_advance(map_session_data *sd)
 	population_engine_sync_shell_homunculus(sd);
 	// Persist the new job + reset job level right away so a crash can't roll it back.
 	population_engine_persist_companion_gear(sd);
+	return true;
 }
 
-/// RAGNAROKMAC (Phase 2): set the support healer thresholds for every summoned
+/// RAGNAROKMAC (rebirth) ---------------------------------------------------------
+/// Rebirth a companion the PLAYER'S way, from the Rebirth tab.
+///
+/// Automation deliberately never does this: entering a transcendent class usually means the
+/// companion cannot wear much of what it has on, and gear the player handed over goes back to the
+/// player. That is a decision, not a level-up.
+///
+/// @param mode  0 = the proper rebirth (High Novice, level reset to 1/1); 1 = straight to the
+///              transcendent class, keeping the level.
+/// @return 1 on success, 0 when it is not ready yet, -1 when rejected (message in out_msg).
+int population_engine_companion_rebirth(uint32_t owner_account, const char *name_, int mode,
+	char *out_msg, size_t out_msg_len)
+{
+	if (mmysql_handle == nullptr || name_ == nullptr || !name_[0])
+		return -1;
+	uint32_t index_ = 0;
+	bool active = false;
+	if (!population_engine_companion_find(owner_account, name_, &index_, &active)) {
+		if (out_msg != nullptr)
+			safesnprintf(out_msg, out_msg_len, "No saved companion named %s.", name_);
+		return -1;
+	}
+	map_session_data *shell = nullptr;
+	for (map_session_data *cand : g_population_engine_pcs) {
+		if (cand == nullptr || !pop_is_companion(cand))
+			continue;
+		if (cand->pop.companion_owner_account != owner_account)
+			continue;
+		if (cand->status.char_id != POPULATION_ENGINE_CHAR_ID_BASE + index_)
+			continue;
+		shell = cand;
+		break;
+	}
+	if (shell == nullptr) {
+		if (out_msg != nullptr)
+			safesnprintf(out_msg, out_msg_len,
+				"%s is not summoned. Summon it first, then rebirth.", name_);
+		return -1;
+	}
+	// Eligibility is the SAME predicate the automatic path uses with rebirth allowed, so the two can
+	// never disagree about who is ready.
+	const uint16_t target = pop_companion_next_job(shell->status.class_, shell->status.base_level,
+		shell->status.job_level, /*allow_rebirth=*/true);
+	if (target == 0 || !pop_job_change_is_rebirth(shell->status.class_, target)) {
+		const char *cls = job_name(shell->status.class_);
+		if (out_msg != nullptr)
+			safesnprintf(out_msg, out_msg_len,
+				"%s (%s) cannot be reborn. Only a 2nd class that reached base 99 / job 50 can.",
+				name_, cls != nullptr ? cls : "?");
+		return 0;
+	}
+	const uint16_t chosen = (mode == 0) ? JOB_NOVICE_HIGH : target;
+	if (!pop_companion_apply_job_change(shell, chosen)) {
+		if (out_msg != nullptr)
+			safesnprintf(out_msg, out_msg_len, "The rebirth failed (see map-server console).");
+		return -1;
+	}
+	if (out_msg != nullptr) {
+		if (mode == 0)
+			safesnprintf(out_msg, out_msg_len,
+				"%s is reborn as High Novice at level 1. Gear it can no longer wear came back to you.",
+				name_);
+		else
+			safesnprintf(out_msg, out_msg_len, "%s advanced straight to %s.", name_,
+				job_name(chosen) != nullptr ? job_name(chosen) : "its transcendent class");
+	}
+	ShowInfo("Population engine: companion %s reborn as %s (owner %u)\n", name_,
+		mode == 0 ? "High Novice" : job_name(chosen), owner_account);
+	return 1;
+}
+
+// RAGNAROKMAC (Phase 2): set the support healer thresholds for every summoned
 /// companion belonging to `owner_account`, persisting each row. Returns how many
 /// live companions were updated (0 is still a success to the caller: the values
 /// are saved for the next summon).
@@ -3294,7 +3406,7 @@ TIMER_FUNC(population_engine_global_combat_timer)
 					}
 				}
 				pop_companion_spend_stat_points(sd, prof);
-				pop_companion_try_job_advance(sd);
+				(void)pop_companion_apply_job_change(sd, 0);
 				// RAGNAROKMAC: the party window shows levels from the map's own party
 				// data, and the stock level-up broadcast is a char-server round trip
 				// that drops shells. Re-broadcast locally when the level changed.
@@ -5893,7 +6005,7 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 	if (mmysql_handle == nullptr) return;
 	char q[400];
 	snprintf(q, sizeof(q),
-		"SELECT name, job_id, active, favorite, base_level, hom_enabled FROM `cp_companion_persistence`"
+		"SELECT name, job_id, active, favorite, base_level, hom_enabled, job_level FROM `cp_companion_persistence`"
 		" WHERE owner_account_id=%u AND owner_char_id=%u ORDER BY favorite DESC, name ASC",
 		owner_account, pop_online_char(owner_account));
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
@@ -5913,6 +6025,10 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		Sql_GetData(mmysql_handle, 4, &data, nullptr); int base_lv = atoi(data);
 		Sql_GetData(mmysql_handle, 5, &data, nullptr);
 		int hom_enabled = (data != nullptr && data[0] != '\0') ? atoi(data) : -1;
+		// The persisted job level, for the rebirth readiness below (a summoned companion's own
+		// live value wins, and the live loop picks that up separately).
+		Sql_GetData(mmysql_handle, 6, &data, nullptr);
+		int row_job_lv = (data != nullptr && data[0] != '\0') ? atoi(data) : 0;
 		// and a name is player-chosen, so scrub before sending.
 		for (char *c = namebuf; *c != '\0'; ++c) {
 			if (*c == '|' || *c == '\n' || *c == '\r')
@@ -5923,6 +6039,7 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		// base_level is the spawn-time snapshot, which lags a companion that has
 		// been levelling in the party.
 		int live_lv = 0;
+		int live_jl = 0;
 		const char *live_job = nullptr;
 		// The live CLASS, not just its name: the pet switch's applicability is a
 		// property of the class, and a shell that just advanced must be judged on the
@@ -5943,6 +6060,7 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 			// normal case rather than an edge one.
 			live_job = job_name(sd->status.class_);
 			live_class = sd->status.class_;
+			live_jl = sd->status.job_level;
 			break;
 		}
 
@@ -5954,10 +6072,26 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		if (population_engine_class_can_have_homunculus(tree_class))
 			hom = (hom_enabled == 0) ? 0 : 1;
 
+		// Rebirth readiness, same tri-state idea: -1 = this class cannot be reborn at all,
+		// 0 = a 2nd class that has not met the gate yet, 1 = ready now. It uses the SAME
+		// predicate the rebirth command does, so the panel cannot offer a control the
+		// server would refuse.
+		int rebirth = -1;
+		{
+			const int32_t rb_base = live_lv > 0 ? live_lv : base_lv;
+			const int32_t rb_job = live_jl > 0 ? live_jl : row_job_lv;
+			const uint16_t rb_target = pop_companion_next_job(tree_class, rb_base, rb_job,
+				/*allow_rebirth=*/true);
+			if (rb_target != 0 && pop_job_change_is_rebirth(tree_class, rb_target))
+				rebirth = 1;
+			else if (tree_class >= 7 && tree_class <= 20)
+				rebirth = 0;
+		}
+
 		char msg[NAME_LENGTH + 160];
-		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d|%s|%d",
+		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d|%s|%d|%d",
 			namebuf, job_name(job_id), base_lv, active, fav, live_lv,
-			live_job != nullptr ? live_job : "", hom);
+			live_job != nullptr ? live_job : "", hom, rebirth);
 		clif_displaymessage(fd, msg);
 		count++;
 	}

@@ -83,6 +83,12 @@ bool population_engine_class_can_have_homunculus(uint16_t class_);
 /// @return 1 when the state changed, 0 when it already was so, -1 when rejected (message in out_msg).
 int population_engine_companion_set_homunculus(uint32_t owner_account, const char* name_, int want,
 	char* out_msg, size_t out_msg_len);
+/// Rebirth: the player's explicit choice for a maxed 2nd-class companion (never automatic, because
+/// entering a transcendent class unequips gear the companion can no longer wear).
+/// @param mode 0 = High Novice with a level reset to 1/1; 1 = straight to the transcendent class.
+/// @return 1 on success, 0 when it is not ready yet, -1 when rejected (message in out_msg).
+int population_engine_companion_rebirth(uint32_t owner_account, const char* name_, int mode,
+	char* out_msg, size_t out_msg_len);
 /// Goal 2: re-snapshot a summoned companion's current equipment + stats into its
 /// persistence row (debounced by the caller). Called on shell equipment changes.
 void population_engine_persist_companion_gear(map_session_data *sd);

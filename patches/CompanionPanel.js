@@ -286,6 +286,13 @@ function parseRosterLine(text) {
 		hom: (() => {
 			const raw = parts.length > 8 ? parseInt(parts[8], 10) : NaN;
 			return Number.isFinite(raw) ? raw : -1;
+		})(),
+		// Rebirth readiness (phase: rebirth tab): -1 = this class cannot be reborn, 0 = a 2nd
+		// class that has not met the gate yet, 1 = ready. Read positionally with a -1 fallback,
+		// so an older server simply offers no rebirth rather than a wrong one.
+		rebirth: (() => {
+			const raw = parts.length > 9 ? parseInt(parts[9], 10) : NaN;
+			return Number.isFinite(raw) ? raw : -1;
 		})()
 	});
 	return true;
@@ -307,6 +314,7 @@ function _render() {
 		_drawBattle();
 		_drawSkills();
 		_drawGear();
+		_drawRebirth();
 		_mountSkillPicker();
 	});
 }
@@ -798,6 +806,71 @@ function _mountSkillPicker() {
 	wrap.append(_skillPickerOverlay());
 }
 
+/// The Rebirth tab: a companion that has maxed its 2nd job can be reborn, and the player chooses
+/// how. Both options change class, which unequips anything the new class cannot wear - gear the
+/// player handed over goes back to the player, so the choice is made with that on screen rather than
+/// discovered afterwards.
+function _drawRebirth() {
+	const page = _page('rebirth');
+	if (!page) {
+		return;
+	}
+	page.replaceChildren();
+
+	const hint = document.createElement('div');
+	hint.className = 'hint';
+	hint.textContent = 'Reborn companions start again, so this is never automatic. Entering a transcendent class also unequips gear it can no longer wear; what you gave it comes back to you. Only a 2nd class at base 99 / job 50 can be reborn.';
+	page.append(hint);
+
+	const ready = _roster.filter(m => m.rebirth === 1);
+	const waiting = _roster.filter(m => m.rebirth === 0);
+
+	if (!ready.length && !waiting.length) {
+		const e = document.createElement('div');
+		e.className = 'empty';
+		e.textContent = 'No companion here can be reborn. 1st classes advance on their own; only a maxed 2nd class is offered this.';
+		page.append(e);
+		return;
+	}
+
+	ready.forEach(m => {
+		const h = document.createElement('h4');
+		h.textContent = `${m.name} - ready to be reborn`;
+		page.append(h);
+
+		const grid = document.createElement('div');
+		grid.className = 'grid';
+		grid.append(_button('High Novice', 'b', () => {
+			confirmInWindow(
+				`Rebirth ${m.name} as a High Novice?`,
+				`It restarts at level 1 and climbs back up as a high class, then a transcendent one. Gear it can no longer wear is unequipped, and anything you gave it comes back to you.`
+			).then(ok => {
+				if (!ok) return;
+				talk(`@companion rebirth ${m.name} novice`, false);
+				window.setTimeout(refreshRoster, 900);
+			});
+		}, 'The proper rebirth: High Novice at level 1, then the full climb'));
+		grid.append(_button('Transcendent', 'b', () => {
+			confirmInWindow(
+				`Advance ${m.name} straight to its transcendent class?`,
+				`It keeps its level and becomes the transcendent class immediately. Gear it can no longer wear is unequipped, and anything you gave it comes back to you.`
+			).then(ok => {
+				if (!ok) return;
+				talk(`@companion rebirth ${m.name} trans`, false);
+				window.setTimeout(refreshRoster, 900);
+			});
+		}, 'Straight to the transcendent class, keeping its level'));
+		page.append(grid);
+	});
+
+	waiting.forEach(m => {
+		const p = document.createElement('div');
+		p.className = 'hint';
+		p.textContent = `${m.name} - not ready yet: needs base 99 and job 50.`;
+		page.append(p);
+	});
+}
+
 function _drawGear() {
 	const page = _page('gear');
 	if (!page) {
@@ -987,7 +1060,8 @@ CompanionPanel.init = function init() {
 			});
 			// Switching to a tab re-reads the roster, so a stale list cannot sit
 			// there looking broken after companions are summoned or benched.
-			if (btn.dataset.tab === 'party' || btn.dataset.tab === 'gear') {
+			if (btn.dataset.tab === 'party' || btn.dataset.tab === 'gear' ||
+				btn.dataset.tab === 'rebirth') {
 				refreshRoster();
 			}
 			// The Skills tab shows a chooser, so it opens with the list already fresh.
