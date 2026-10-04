@@ -3208,7 +3208,7 @@ Body:
       - { SkillId: NJ_HUUJIN, Level: 10, Rate: 9000 }
       - { SkillId: NJ_HUUMA, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: NJ_HYOUSENSOU, Level: 10, Rate: 9000 }
-      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: NJ_ISSEN, Level: 10, Rate: 9000 }
       - { SkillId: NJ_KAMAITACHI, Level: 5, Rate: 9000 }
       - { SkillId: NJ_KASUMIKIRI, Level: 10, Rate: 9000 }
@@ -3245,7 +3245,7 @@ Body:
       - { SkillId: NJ_HUUJIN, Level: 10, Rate: 9000 }
       - { SkillId: NJ_HUUMA, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: NJ_HYOUSENSOU, Level: 10, Rate: 9000 }
-      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: NJ_ISSEN, Level: 10, Rate: 9000 }
       - { SkillId: NJ_KAMAITACHI, Level: 5, Rate: 9000 }
       - { SkillId: NJ_KASUMIKIRI, Level: 10, Rate: 9000 }
@@ -3412,6 +3412,11 @@ Body:
       - { SkillId: GS_SPREADATTACK, Level: 10, Rate: 9000 }
       - { SkillId: GS_TRACKING, Level: 10, Rate: 9000 }
       - { SkillId: GS_TRIPLEACTION, Level: 1, Rate: 9000 }
+      - { SkillId: GS_CRACKER, Level: 1, Rate: 7000, Condition: not_enemy_status, CondValue: SC_STUN }
+      - { SkillId: GS_DESPERADO, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: GS_GLITTERING, Level: 5, Rate: 2000, Target: self }
+      - { SkillId: NV_FIRSTAID, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: WE_CALLBABY, Level: 1, Rate: 2000, Target: self }
 
   - JobId: 25
     Skills:
@@ -3421,7 +3426,7 @@ Body:
       - { SkillId: NJ_HUUJIN, Level: 10, Rate: 9000 }
       - { SkillId: NJ_HUUMA, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: NJ_HYOUSENSOU, Level: 10, Rate: 9000 }
-      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: NJ_ISSEN, Level: 10, Rate: 9000 }
       - { SkillId: NJ_KAMAITACHI, Level: 5, Rate: 9000 }
       - { SkillId: NJ_KASUMIKIRI, Level: 10, Rate: 9000 }
@@ -3436,6 +3441,9 @@ Body:
       - { SkillId: NJ_TATAMIGAESHI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TATAMIGAESHI }
       - { SkillId: NJ_UTSUSEMI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_UTSUSEMI }
       - { SkillId: NJ_ZENYNAGE, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KAENSIN, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NV_FIRSTAID, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: WE_CALLBABY, Level: 1, Rate: 2000, Target: self }
 
   - JobId: 4046
     Skills:
@@ -3451,6 +3459,11 @@ Body:
       - { SkillId: TK_TURNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYTURN }
       - { SkillId: TK_COUNTER, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYCOUNTER }
       - { SkillId: TK_DOWNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYDOWN }
+      - { SkillId: NV_FIRSTAID, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: TK_HIGHJUMP, Level: 5, Rate: 2000, Target: self }
+      - { SkillId: TK_JUMPKICK, Level: 7, Rate: 7000 }
+      - { SkillId: TK_MISSION, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: WE_CALLBABY, Level: 1, Rate: 2000, Target: self }
 
   - JobId: 4047
     Skills:
@@ -3470,6 +3483,16 @@ Body:
       - { SkillId: TK_READYTURN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYTURN }
       - { SkillId: TK_RUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUN }
       - { SkillId: TK_SEVENWIND, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SEVENWIND }
+      - { SkillId: NV_FIRSTAID, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: SG_FEEL, Level: 3, Rate: 2000, Target: self }
+      - { SkillId: SG_HATE, Level: 3, Rate: 7000 }
+      - { SkillId: TK_COUNTER, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_HIGHJUMP, Level: 5, Rate: 2000, Target: self }
+      - { SkillId: TK_JUMPKICK, Level: 7, Rate: 7000 }
+      - { SkillId: TK_MISSION, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: TK_STORMKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_TURNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYTURN }
+      - { SkillId: WE_CALLBABY, Level: 1, Rate: 2000, Target: self }
 
   - JobId: 4049
     Skills:
@@ -3502,3 +3525,17 @@ Body:
       - { SkillId: TK_READYTURN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYTURN }
       - { SkillId: TK_RUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUN }
       - { SkillId: TK_SEVENWIND, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SEVENWIND }
+      - { SkillId: NV_FIRSTAID, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: SL_KAITE, Level: 7, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KAITE }
+      - { SkillId: SL_KAIZEL, Level: 7, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KAIZEL }
+      - { SkillId: SL_KAUPE, Level: 3, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KAUPE }
+      - { SkillId: SL_SKA, Level: 3, Rate: 7000, Condition: not_enemy_status, CondValue: SC_SKA }
+      - { SkillId: SL_SKE, Level: 3, Rate: 7000, Condition: not_enemy_status, CondValue: SC_SKE }
+      - { SkillId: SL_SWOO, Level: 7, Rate: 7000, Condition: not_enemy_status, CondValue: SC_SWOO }
+      - { SkillId: TK_COUNTER, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_HIGHJUMP, Level: 5, Rate: 2000, Target: self }
+      - { SkillId: TK_JUMPKICK, Level: 7, Rate: 7000 }
+      - { SkillId: TK_MISSION, Level: 1, Rate: 2000, Target: self }
+      - { SkillId: TK_STORMKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_TURNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYTURN }
+      - { SkillId: WE_CALLBABY, Level: 1, Rate: 2000, Target: self }

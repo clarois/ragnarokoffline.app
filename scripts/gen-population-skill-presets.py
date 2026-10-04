@@ -204,6 +204,28 @@ EXPANDED = {
     "Ninja": 25, "Gunslinger": 24,
 }
 
+# Taekwon kicks: Self-targeted with damage and no Status, castable only while
+# the matching ready stance is up. skill_db cannot express that pairing, so it
+# is spelled out -- and it applies in every block that inherits the kicks, not
+# just Taekwon's own.
+# Self-targeted skills whose Status actually lands on the enemies they hit.
+# Verified per skill, not inferred: metadata cannot express which target a
+# Status reaches, and the Signum Crucis bug was exactly this shape.
+SELF_STATUS_ENEMY = {
+    "NJ_HYOUSYOURAKU",   # freeze family: status.cpp:2233 tests the target's SC_FREEZE
+}
+
+KICK_STANCE = {
+    "TK_STORMKICK": "SC_READYSTORM",
+    "TK_TURNKICK":  "SC_READYTURN",
+    "TK_COUNTER":   "SC_READYCOUNTER",
+    "TK_DOWNKICK":  "SC_READYDOWN",
+}
+
+# Skills that must never reach a rotation whatever else is included: Trick Dead
+# makes the companion lie down and stop fighting.
+NEVER = {"NV_TRICKDEAD"}
+
 # Non-combat / AI-hostile families: quest items, party-wide utilities, soul-link
 # skills that need a target PC, homunculus and vending plumbing, copy skills.
 SKIP = re.compile(
@@ -241,16 +263,33 @@ HAND_WRITTEN = {
 def q(skill, extra):
     return f"      - {{ SkillId: {skill}, {extra} }}"
 
-def rows_for(skill, meta, sc_ok, deep):
+def rows_for(skill, meta, sc_ok, deep, full=False):
     """Return (list_of_yaml_lines, category) for one missing skill, or (None, why)."""
     tt, maxlv, nodmg, status, dur, splash, rng = (
         meta["tt"], meta["max"], meta["nodmg"], meta["status"], meta["dur"],
         meta["splash"], meta["range"])
     lv = maxlv if maxlv > 0 else 1
 
+    if full and skill in KICK_STANCE:
+        sc = KICK_STANCE[skill]
+        if sc not in sc_ok:
+            return None, f"status constant {sc} not in status.hpp"
+        return [q(skill, f"Level: {lv}, Rate: 7000, Condition: self_status, CondValue: {sc}")], "kick"
+
     if tt == "Attack":
         if nodmg:
-            return None, "attack-without-damage (a stance/combo, not a rotation skill)"
+            # No damage. For the expanded classes this is still a real cast: with a
+            # Status it is a debuff aimed at the target, otherwise a plain swing
+            # that needs a target anyway. Other classes keep the old behaviour --
+            # their blocks are curated already and are not touched.
+            if not full:
+                return None, "attack-without-damage (a stance/combo, not a rotation skill)"
+            if status:
+                sc = "SC_" + status.upper()
+                if sc not in sc_ok:
+                    return None, f"status constant {sc} not in status.hpp"
+                return [q(skill, f"Level: {lv}, Rate: 7000, Condition: not_enemy_status, CondValue: {sc}")], "enemy-debuff"
+            return [q(skill, f"Level: {lv}, Rate: 7000")], "attack-nodmg"
         extra = f"Level: {lv}, Rate: 9000"
         if splash and rng > 1:
             extra = f"Level: {lv}, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2"
@@ -274,8 +313,16 @@ def rows_for(skill, meta, sc_ok, deep):
         ], "ally-heal"
 
     if tt == "Self":
+        if skill in SELF_STATUS_ENEMY:
+            # Its Status reaches the enemies it hits, so there is nothing on the
+            # caster to gate on: require enemies instead.
+            return [q(skill, f"Level: {lv}, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2")], "self-attack"
         if not status:
-            return None, "self skill with no Status (recast cannot be gated from YAML)"
+            if not full:
+                return None, "self skill with no Status (recast cannot be gated from YAML)"
+            # Nothing in the data can gate this: a heal, a resource builder or a
+            # pure utility. Low rate, no condition.
+            return [q(skill, f"Level: {lv}, Rate: 2000, Target: self")], "self-utility"
         sc = "SC_" + status.upper()
         if sc not in sc_ok:
             return None, f"status constant {sc} not in status.hpp"
@@ -305,13 +352,23 @@ def main():
     reasons = collections.Counter()
     why = collections.defaultdict(list)
 
+    expanded_ids = set(EXPANDED.values())
     for name, jid in list(FOURTH.items()) + list(SECOND_THIRD.items()) + list(EXPANDED.items()):
         deep = (ARGS.all_shapes or jid in FOURTH.values()
                 or jid in EXPANDED.values())
+        # The five expanded classes lose only passives: the global SKIP exists to
+        # keep vending/cart/homunculus plumbing out of the other classes, and none
+        # of it appears in these trees. Bypassing it globally would bring back the
+        # vending companion.
+        skip_family = jid not in expanded_ids
         cl = closure(name, )
         cur = existing.get(jid, set())
         for skill in sorted(k for k in cl if k not in cur):
-            if SKIP.match(skill):
+            if skill in NEVER:
+                skipped["never (would stop the companion)"] += 1
+                why["never"].append(f"{skill} ({name})")
+                continue
+            if skip_family and SKIP.match(skill):
                 skipped["family-skip"] += 1
                 why["family-skip"].append(f"{skill} ({name})")
                 continue
@@ -327,7 +384,7 @@ def main():
                 skipped["needs a hand-written row"] += 1
                 why["hand-written"].append(f"{skill} ({name}) - {HAND_WRITTEN[skill]}")
                 continue
-            lines, cat = rows_for(skill, m, sc_ok, deep)
+            lines, cat = rows_for(skill, m, sc_ok, deep, full=jid in expanded_ids)
             if lines is None:
                 skipped[cat.split(" (")[0]] += 1
                 reasons[cat] += 1
