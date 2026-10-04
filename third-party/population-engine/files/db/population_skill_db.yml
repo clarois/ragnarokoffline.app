@@ -3099,6 +3099,21 @@ Body:
       - { SkillId: SKE_STAR_BURST, Level: 5, Rate: 9000 }
       - { SkillId: SKE_STAR_LIGHT_KICK, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SKE_SUNSET_BLAST, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: SG_FUSION, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FUSION }
+      - { SkillId: SG_MOON_COMFORT, Level: 4, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MOON_COMFORT }
+      - { SkillId: SG_MOON_WARM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WARM }
+      - { SkillId: SG_STAR_COMFORT, Level: 4, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STAR_COMFORT }
+      - { SkillId: SG_STAR_WARM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WARM }
+      - { SkillId: SG_SUN_COMFORT, Level: 4, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SUN_COMFORT }
+      - { SkillId: SG_SUN_WARM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WARM }
+      - { SkillId: TK_DODGE, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DODGE }
+      - { SkillId: TK_DOWNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYCOUNTER, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_READYDOWN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYSTORM, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_READYTURN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYTURN }
+      - { SkillId: TK_RUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUN }
+      - { SkillId: TK_SEVENWIND, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SEVENWIND }
 
   - JobId: 4303
     Skills:
@@ -3141,6 +3156,34 @@ Body:
       - { SkillId: SP_SOULUNITY, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SOULUNITY }
       - { SkillId: SP_SPA, Level: 10, Rate: 9000 }
       - { SkillId: SP_SWHOO, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: SL_ALCHEMIST, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_ASSASIN, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_BARDDANCER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_BLACKSMITH, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_CRUSADER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_HIGH, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_HUNTER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_KAAHI, Level: 7, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KAAHI }
+      - { SkillId: SL_KNIGHT, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_MONK, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_PRIEST, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_ROGUE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_SAGE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_SMA, Level: 10, Rate: 9000 }
+      - { SkillId: SL_SOULLINKER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_STAR, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_STIN, Level: 7, Rate: 9000 }
+      - { SkillId: SL_STUN, Level: 7, Rate: 9000 }
+      - { SkillId: SL_SUPERNOVICE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_WIZARD, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: TK_DODGE, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DODGE }
+      - { SkillId: TK_DOWNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYCOUNTER, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_READYDOWN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYSTORM, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_READYTURN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYTURN }
+      - { SkillId: TK_RUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUN }
+      - { SkillId: TK_SEVENWIND, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SEVENWIND }
 
   - JobId: 4304
     Skills:
@@ -3160,6 +3203,26 @@ Body:
       - { SkillId: SS_SEKIENHOU, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SS_SHIMIRU, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SS_TOKEDASU, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_BAKUENRYU, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_BUNSINJYUTSU, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BUNSINJYUTSU }
+      - { SkillId: NJ_HUUJIN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_HUUMA, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_HYOUSENSOU, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: NJ_ISSEN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KAMAITACHI, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_KASUMIKIRI, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KIRIKAGE, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_KOUENKA, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KUNAI, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_NEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NEN }
+      - { SkillId: NJ_RAIGEKISAI, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SHADOWJUMP, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SUITON, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SYURIKEN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_TATAMIGAESHI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TATAMIGAESHI }
+      - { SkillId: NJ_UTSUSEMI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_UTSUSEMI }
+      - { SkillId: NJ_ZENYNAGE, Level: 10, Rate: 9000 }
 
   - JobId: 4305
     Skills:
@@ -3177,6 +3240,26 @@ Body:
       - { SkillId: SS_SEKIENHOU, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SS_SHIMIRU, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SS_TOKEDASU, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_BAKUENRYU, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_BUNSINJYUTSU, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BUNSINJYUTSU }
+      - { SkillId: NJ_HUUJIN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_HUUMA, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_HYOUSENSOU, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: NJ_ISSEN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KAMAITACHI, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_KASUMIKIRI, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KIRIKAGE, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_KOUENKA, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KUNAI, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_NEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NEN }
+      - { SkillId: NJ_RAIGEKISAI, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SHADOWJUMP, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SUITON, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SYURIKEN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_TATAMIGAESHI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TATAMIGAESHI }
+      - { SkillId: NJ_UTSUSEMI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_UTSUSEMI }
+      - { SkillId: NJ_ZENYNAGE, Level: 10, Rate: 9000 }
 
   - JobId: 4306
     Skills:
@@ -3309,3 +3392,113 @@ Body:
       - { SkillId: SH_MARINE_FESTIVAL_OF_KI_SUL, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MARINE_FESTIVAL }
       - { SkillId: SH_SANDY_FESTIVAL_OF_KI_SUL, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SANDY_FESTIVAL }
       - { SkillId: SH_TEMPORARY_COMMUNION, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TEMPORARY_COMMUNION }
+
+  - JobId: 24
+    Skills:
+
+      - { SkillId: GS_ADJUSTMENT, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ADJUSTMENT }
+      - { SkillId: GS_BULLSEYE, Level: 1, Rate: 9000 }
+      - { SkillId: GS_DISARM, Level: 5, Rate: 9000 }
+      - { SkillId: GS_DUST, Level: 10, Rate: 9000 }
+      - { SkillId: GS_FLING, Level: 1, Rate: 9000 }
+      - { SkillId: GS_FULLBUSTER, Level: 10, Rate: 9000 }
+      - { SkillId: GS_GATLINGFEVER, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_GATLINGFEVER }
+      - { SkillId: GS_GROUNDDRIFT, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: GS_INCREASING, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INCREASING }
+      - { SkillId: GS_MADNESSCANCEL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MADNESSCANCEL }
+      - { SkillId: GS_MAGICALBULLET, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MAGICALBULLET }
+      - { SkillId: GS_PIERCINGSHOT, Level: 5, Rate: 9000 }
+      - { SkillId: GS_RAPIDSHOWER, Level: 10, Rate: 9000 }
+      - { SkillId: GS_SPREADATTACK, Level: 10, Rate: 9000 }
+      - { SkillId: GS_TRACKING, Level: 10, Rate: 9000 }
+      - { SkillId: GS_TRIPLEACTION, Level: 1, Rate: 9000 }
+
+  - JobId: 25
+    Skills:
+
+      - { SkillId: NJ_BAKUENRYU, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_BUNSINJYUTSU, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BUNSINJYUTSU }
+      - { SkillId: NJ_HUUJIN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_HUUMA, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_HYOUSENSOU, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_HYOUSYOURAKU, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: NJ_ISSEN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KAMAITACHI, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_KASUMIKIRI, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KIRIKAGE, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_KOUENKA, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_KUNAI, Level: 5, Rate: 9000 }
+      - { SkillId: NJ_NEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NEN }
+      - { SkillId: NJ_RAIGEKISAI, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SHADOWJUMP, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SUITON, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: NJ_SYURIKEN, Level: 10, Rate: 9000 }
+      - { SkillId: NJ_TATAMIGAESHI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TATAMIGAESHI }
+      - { SkillId: NJ_UTSUSEMI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_UTSUSEMI }
+      - { SkillId: NJ_ZENYNAGE, Level: 10, Rate: 9000 }
+
+  - JobId: 4046
+    Skills:
+
+      - { SkillId: TK_DODGE, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DODGE }
+      - { SkillId: TK_READYCOUNTER, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_READYDOWN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYSTORM, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_READYTURN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYTURN }
+      - { SkillId: TK_RUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUN }
+      - { SkillId: TK_SEVENWIND, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SEVENWIND }
+      - { SkillId: TK_STORMKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_TURNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYTURN }
+      - { SkillId: TK_COUNTER, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_DOWNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYDOWN }
+
+  - JobId: 4047
+    Skills:
+
+      - { SkillId: SG_FUSION, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FUSION }
+      - { SkillId: SG_MOON_COMFORT, Level: 4, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MOON_COMFORT }
+      - { SkillId: SG_MOON_WARM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WARM }
+      - { SkillId: SG_STAR_COMFORT, Level: 4, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STAR_COMFORT }
+      - { SkillId: SG_STAR_WARM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WARM }
+      - { SkillId: SG_SUN_COMFORT, Level: 4, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SUN_COMFORT }
+      - { SkillId: SG_SUN_WARM, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WARM }
+      - { SkillId: TK_DODGE, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DODGE }
+      - { SkillId: TK_DOWNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYCOUNTER, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_READYDOWN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYSTORM, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_READYTURN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYTURN }
+      - { SkillId: TK_RUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUN }
+      - { SkillId: TK_SEVENWIND, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SEVENWIND }
+
+  - JobId: 4049
+    Skills:
+
+      - { SkillId: SL_ALCHEMIST, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_ASSASIN, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_BARDDANCER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_BLACKSMITH, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_CRUSADER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_HIGH, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_HUNTER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_KAAHI, Level: 7, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KAAHI }
+      - { SkillId: SL_KNIGHT, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_MONK, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_PRIEST, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_ROGUE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_SAGE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_SMA, Level: 10, Rate: 9000 }
+      - { SkillId: SL_SOULLINKER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_STAR, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_STIN, Level: 7, Rate: 9000 }
+      - { SkillId: SL_STUN, Level: 7, Rate: 9000 }
+      - { SkillId: SL_SUPERNOVICE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: SL_WIZARD, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SPIRIT }
+      - { SkillId: TK_DODGE, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DODGE }
+      - { SkillId: TK_DOWNKICK, Level: 7, Rate: 7000, Condition: self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYCOUNTER, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYCOUNTER }
+      - { SkillId: TK_READYDOWN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYDOWN }
+      - { SkillId: TK_READYSTORM, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYSTORM }
+      - { SkillId: TK_READYTURN, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_READYTURN }
+      - { SkillId: TK_RUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUN }
+      - { SkillId: TK_SEVENWIND, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SEVENWIND }

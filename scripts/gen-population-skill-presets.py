@@ -195,12 +195,23 @@ SECOND_THIRD = {
     "Genetic": 4071, "Shadow_Chaser": 4072,
 }
 
+# Expanded classes: the pre-4th-job lines that are not part of the classic 1st/2nd/trans
+# ladder. They were missing from the tables above, so they had NO curated rows at all and
+# fell back to an unconditional skill-tree scan. Issue #333. Treated like the 4th jobs
+# (the full row-shape table) because nothing here is hand-curated to protect.
+EXPANDED = {
+    "Taekwon": 4046, "Star_Gladiator": 4047, "Soul_Linker": 4049,
+    "Ninja": 25, "Gunslinger": 24,
+}
+
 # Non-combat / AI-hostile families: quest items, party-wide utilities, soul-link
 # skills that need a target PC, homunculus and vending plumbing, copy skills.
 SKIP = re.compile(
     r"^(NV_|WE_|ALL_"
     r"|MO_CALLSPIRITS|MO_EXPLOSIONSPIRITS|MO_SPIRITSRECOVERY|CH_SOULCOLLECT"
-    r"|SL_|SU_"
+    r"|SL_KAIZEL|SL_KAUPE|SL_KAITE|SL_SKA"   # Soul Linker's party-side support only; the
+    # rest of SL_ needs a target PC or is a link skill, and stays out of a rotation
+    r"|SU_"
     r"|AM_CALLHOMUN|AM_REST|AM_RESURRECTHOMUN|AM_PHARMACY|AM_TWILIGHT|AM_BIOETHICS|AM_LEARNINGPOTION"
     r"|MC_|BS_GREED|BS_HILTBINDING|BS_FINDINGORE|BS_REPAIRWEAPON"
     r"|RG_PLAGIARISM|RG_COMPULSION|SC_|PF_|SA_ABRACADABRA|SA_COMA|SA_ELEMENTWATER|SA_CREATECON"
@@ -210,7 +221,7 @@ SKIP = re.compile(
     r"|AL_WARP"  # opens a destination menu on the caster's own client; a companion has none, so no portal
     r"|HT_MAKINGARROW|AC_MAKINGARROW|HT_TALKIEBOX|HT_REMOVETRAP|HT_SPRINGTRAP|HT_PHANTASMIC"
     r"|TF_STEAL|TF_PICKSTONE|TF_THROWSTONE|TF_SPRINKLESAND"
-    r"|WS_CARTBOOST|BS_ADRENALINE2|NC_|GN_|KO_|OB_|RL_|NJ_|TK_|SG_|SO_EL_|SO_SPELLFISH|SO_ELEMENTAL_SHIELD)"
+    r"|WS_CARTBOOST|BS_ADRENALINE2|NC_|GN_|KO_|OB_|RL_|SO_EL_|SO_SPELLFISH|SO_ELEMENTAL_SHIELD)"
 )
 
 # Skills the Support-without-Status branch cannot shape correctly. Only the CURES need this: their
@@ -294,8 +305,9 @@ def main():
     reasons = collections.Counter()
     why = collections.defaultdict(list)
 
-    for name, jid in list(FOURTH.items()) + list(SECOND_THIRD.items()):
-        deep = ARGS.all_shapes or jid in FOURTH.values()
+    for name, jid in list(FOURTH.items()) + list(SECOND_THIRD.items()) + list(EXPANDED.items()):
+        deep = (ARGS.all_shapes or jid in FOURTH.values()
+                or jid in EXPANDED.values())
         cl = closure(name, )
         cur = existing.get(jid, set())
         for skill in sorted(k for k in cl if k not in cur):

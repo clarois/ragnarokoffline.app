@@ -92,7 +92,8 @@ const JOB_TIERS = [
 	['4th', ['DragonKnight', 'Meister', 'ShadowCross', 'ArchMage', 'Cardinal',
 		'Windhawk', 'ImperialGuard', 'Biolo', 'AbyssChaser', 'ElementalMaster',
 		'Inquisitor', 'Troubadour', 'Trouvere', 'SkyEmperor', 'SoulAscetic',
-		'Shinkiro', 'Shiranui', 'NightWatch', 'HyperNovice', 'SpiritHandler']]
+		'Shinkiro', 'Shiranui', 'NightWatch', 'HyperNovice', 'SpiritHandler']],
+	['Expanded', ['Taekwon', 'StarGladiator', 'SoulLinker', 'Ninja', 'Gunslinger']]
 ];
 
 /**
