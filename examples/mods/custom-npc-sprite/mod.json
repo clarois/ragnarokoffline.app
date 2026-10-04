@@ -1,0 +1,7 @@
+{
+  "name": "custom-npc-sprite",
+  "version": "1.0.0",
+  "author": "Ragnarok Offline",
+  "description": "Example: an NPC drawn with a sprite of its own, made from a PNG with scripts/mksprite.py. Stands in Prontera, north of the fountain.",
+  "requires": { "app": ">=1.4.0", "era": "any" }
+}

@@ -28,8 +28,7 @@ const cookieValue = (req, name) => {
   const values = String(req.headers.cookie || '').split(';').map(s => s.trim()).filter(s => s.startsWith(name + '='));
   return values.length === 1 ? values[0].slice(name.length + 1) : null;
 };
-// One request per connection: the asset server asks that anyway, and a
-// refusal sent before the body was read must not leave it on a reused socket.
+// One request per connection: the asset server asks that anyway.
 const headers = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff', connection: 'close' };
 
 class LanRemember {
@@ -44,6 +43,17 @@ class LanRemember {
     res.end(text);
   }
   async handle(req, res) {
+    // The body is read before anything is answered, refusals included.
+    // Closing a connection with request bytes still unread makes the kernel
+    // reset it, and the reset can overtake the reply: the asset server then
+    // saw a broken upstream and told the page 502 instead of this 403 or 404.
+    // Bounded, so an oversized body costs at most this much.
+    let raw = null;
+    try {
+      const chunks = []; let size = 0;
+      for await (const chunk of req) { size += chunk.length; if (size > 1024) throw Error(); chunks.push(chunk); }
+      raw = Buffer.concat(chunks).toString('utf8');
+    } catch { /* too large or cut off: refused below, after the 404/403 checks */ }
     if (!this.enabled() || !this.remember) return this.reply(res, 404, { error: 'Not found' });
     const route = String(req.url || '').startsWith(PREFIX) ? req.url.slice(PREFIX.length) : '';
     if (req.method !== 'POST' || !RememberRoutes.ROUTES.includes(route)) return this.reply(res, 404, { error: 'Not found' });
@@ -62,9 +72,8 @@ class LanRemember {
     if (!port || req.headers.origin !== `http://${host}` || req.headers['content-type'] !== 'application/json') return this.reply(res, 403, { error: 'Not allowed' });
     let input;
     try {
-      const chunks = []; let size = 0;
-      for await (const chunk of req) { size += chunk.length; if (size > 1024) throw Error(); chunks.push(chunk); }
-      input = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      if (raw === null) throw Error();
+      input = JSON.parse(raw || '{}');
     } catch { return this.reply(res, 400, { error: 'Invalid request' }); }
     const name = `ro-remember-${port}`;
     const peer = String(req.headers['x-forwarded-for'] || 'unknown');

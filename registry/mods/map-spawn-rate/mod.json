@@ -1,0 +1,101 @@
+{
+  "name": "map-spawn-rate",
+  "version": "1.0.0",
+  "author": "BlaXun",
+  "description": "Change how many monsters spawn on any map you choose. Search maps by name or by the monsters on them in the Settings… window, give each one a rate (200% doubles it, 50% halves it), and apply. Bosses and other single-monster spawns are left alone.",
+  "requires": {
+    "app": ">=1.4.6",
+    "era": "any"
+  },
+  "tags": [
+    "monsters",
+    "spawns",
+    "maps",
+    "rates",
+    "quality-of-life"
+  ],
+  "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/map-spawn-rate",
+  "settingsPage": "settings/index.html",
+  "settings": [
+    {
+      "key": "rates_1",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 1",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_2",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 2",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_3",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 3",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_4",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 4",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_5",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 5",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_6",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 6",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_7",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 7",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_8",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 8",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_9",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 9",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    },
+    {
+      "key": "rates_10",
+      "type": "string",
+      "default": "",
+      "max_length": 200,
+      "label": "Map rates, part 10",
+      "description": "Written by the Settings… window: map=percent pairs separated by ';', e.g. prt_fild08=200;pay_fild04=150. The list is split across these parts because one setting holds 200 characters."
+    }
+  ]
+}

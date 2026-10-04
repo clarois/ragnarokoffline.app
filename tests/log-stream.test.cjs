@@ -242,3 +242,20 @@ test('the SSE response streams events and stops listening when cancelled', async
   await reader.cancel();
   await pump;
 });
+
+test('backups and restores have their own source, with failures as errors', async () => {
+  const dir = scratch();
+  fs.mkdirSync(path.join(dir, 'state', 'logs'));
+  fs.writeFileSync(path.join(dir, 'state', 'logs', 'backup-restore.log'),
+    '2026-10-02T19:07:19Z [restore] loading the backup into the database\n' +
+    '2026-10-02T19:07:19Z [restore] [error] failed: Restore failed: the database said: --------------\n' +
+    "2026-10-02T19:07:19Z [restore] [error] ERROR 1064 (42000) at line 2496: You have an error in your SQL syntax\n");
+  const s = streams(dir);
+  const seen = [];
+  const stop = s.subscribe(['saves'], e => seen.push(e));
+  assert.strictEqual(seen.length, 3);
+  assert.strictEqual(seen[0].time, '2026-10-02T19:07:19Z');
+  assert.strictEqual(seen[0].level, 'info');
+  assert.deepStrictEqual(seen.slice(1).map(e => e.level), ['error', 'error']);
+  stop();
+});

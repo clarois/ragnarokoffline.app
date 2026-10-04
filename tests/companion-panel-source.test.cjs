@@ -69,16 +69,17 @@ test('the roster hook is installed from init(), not at module scope', () => {
 
 test('the roster wire format matches what the server writes', () => {
 	// population_engine_companion_list_raw writes:
-	//   "@CP|%s|%s|%d|%d|%d|%d|%s|%d|%d"
+	//   "@CP|%s|%s|%d|%d|%d|%d|%s|%d|%d|%d"
 	//     name, job, base_level, active, favorite, live_level, live_job, pet switch,
-	//     rebirth readiness (-1 = this class cannot be reborn, 0 = not ready, 1 = ready)
+	//     duty (PopulationRoleType: 0 none, 1 tank, 2 support, 3 attacker), rebirth
+	//     readiness (-1 = this class cannot be reborn, 0 = not ready, 1 = ready)
 	//   "@CPEND|%d"              (count)
 	const engine = fs.readFileSync(
 		path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp'),
 		'utf8'
 	).replace(/\r\n/g, '\n');
-	assert.match(engine, /"@CP\|%s\|%s\|%d\|%d\|%d\|%d\|%s\|%d\|%d"/,
-		'server @CP format changed (expected the 10-field form: the 10th is rebirth readiness)');
+	assert.match(engine, /"@CP\|%s\|%s\|%d\|%d\|%d\|%d\|%s\|%d\|%d\|%d"/,
+		'server @CP format changed (expected the 11-field form: pet switch, duty, rebirth)');
 	assert.match(engine, /"@CPEND\|%d"/, 'server sentinel changed');
 	// The client must consume exactly that prefix and that sentinel.
 	assert.match(src, /'@CP'/, 'client no longer keys on the @CP prefix');
@@ -125,4 +126,22 @@ test('only the server\'s own @CP lines are roster data; anything a person says i
 	assert.equal(rosterBody('Me : hello @CPEND|0'), null);
 	assert.equal(rosterBody(undefined), null);
 	assert.ok(!/indexOf\('@CP/.test(src), 'no @CP match anywhere inside a line');
+});
+
+test('the duty badge shows what the server holds, so it survives a restart', () => {
+	// Kept only in the panel's memory, the badge went blank on every restart, reload and relog
+	// while the server still had the duty - issue #290: "AI role resets to default none".
+	const engine = fs.readFileSync(
+		path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp'),
+		'utf8'
+	).replace(/\r\n/g, '\n');
+	assert.match(engine, /SELECT name, job_id, active, favorite, base_level, hom_enabled, duty(, job_level)? FROM/,
+		'the roster reads the saved duty');
+	assert.match(engine, /duty = sd->pop\.role;/, 'and the live one when summoned');
+	assert.match(src, /const DUTY_NAMES = \{ 1: 'tank', 2: 'support', 3: 'attacker' \};/,
+		'the numbers are PopulationRoleType\'s');
+	assert.match(src, /duty: DUTY_NAMES\[parseInt\(parts\[9\], 10\)\] \|\| null/, 'the 10th field is read');
+	assert.match(src, /const current = _duties\[m\.name\] \|\| m\.duty;/, 'the badge falls back to the server');
+	// "none" sent nothing, so the badge claimed a duty the companion did not have.
+	assert.match(src, /const order = \['attacker', 'tank', 'support'\];/, 'every step of the cycle is an order');
 });

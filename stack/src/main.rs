@@ -20,6 +20,8 @@ mod asset_transaction;
 mod cmds;
 mod crashes;
 mod database;
+mod db_backup;
+mod dump_migrations;
 mod host;
 mod config;
 mod control_panel;
@@ -209,8 +211,9 @@ fn main() {
             Some(p) => world::backup(&cfg, &dk, p),
             None => Err("destination file required".into()),
         },
+        // Both eras' databases, in one .sql (db_backup.rs).
         "backup" => match args.get(1) {
-            Some(p) => cmds::backup(&cfg, &dk, p),
+            Some(p) => db_backup::backup(&cfg, &dk, p),
             None => Err("destination file required".into()),
         },
         "link-assets" => assets::link(&cfg, &args[1..]),
@@ -259,11 +262,26 @@ fn main() {
             None => Err("folder required".into()),
         },
         "restore" if args.get(1).map(String::as_str) == Some("--full") => match args.get(2) {
-            Some(p) => world::restore(&cfg, &dk, p),
+            Some(p) => world::Choice::parse(&args[3..]).and_then(|choice| world::restore(&cfg, &dk, p, &choice)),
             None => Err("source file required".into()),
         },
+        // What a whole-world backup holds, for Restore to offer: nothing changes.
+        "inspect" if args.get(1).map(String::as_str) == Some("--full") => match args.get(2) {
+            Some(p) => world::inspect(&cfg, p),
+            None => Err("backup file required".into()),
+        },
+        "inspect" => match args.get(1) {
+            Some(p) => db_backup::inspect(&cfg, p),
+            None => Err("backup file required".into()),
+        },
+        // `--eras renewal,prerenewal` chooses; every era in the file otherwise.
         "restore" => match args.get(1) {
-            Some(p) => cmds::restore(&cfg, &dk, p),
+            Some(p) => world::Choice::parse(&args[2..]).and_then(|choice| {
+                if !choice.settings {
+                    return Err("--no-settings is for restore --full; a database backup has no settings".into());
+                }
+                db_backup::restore(&cfg, &dk, p, choice.eras.as_deref())
+            }),
             None => Err("source file required".into()),
         },
         _ => {

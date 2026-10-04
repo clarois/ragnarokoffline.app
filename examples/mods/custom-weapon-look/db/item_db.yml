@@ -1,0 +1,28 @@
+# A dagger, in the custom item range (50000-99999, docs/MODDING.md).
+#
+# No View: here. Without one the server sends the item's id, and the client
+# looks up its ClassNum in System/itemInfo.lua -- the look id, 5001. With
+# `View: 5001` the server would send 5001 itself, which the client reads as
+# item 5001 (a stock headgear) and draws whatever that is.
+Header:
+  Type: ITEM_DB
+  Version: 3
+
+Body:
+  - Id: 50101
+    AegisName: Jade_Dagger
+    Name: Jade Dagger
+    Type: Weapon
+    SubType: Dagger
+    Buy: 12000
+    Weight: 60
+    Attack: 70
+    Range: 1
+    Slots: 2
+    Jobs:
+      All: true
+    Locations:
+      Right_Hand: true
+    WeaponLevel: 2
+    EquipLevelMin: 1
+    Refineable: true

@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <common/mmo.hpp> // t_itemid
@@ -108,6 +109,16 @@ struct PopulationEngine {
 	std::string vendor_message;
 	/// Optional key into db/population_vendors.yml (VendorKey:). Empty = built-in default stock.
 	std::string vendor_key;
+	/// RAGNAROKMAC: when true, this vendor Profile is resolved by its VendorKey
+	/// (from the VendorPlacement that names it), NOT registered in the global
+	/// job -> vendor map. So its Jobs: entry is a cosmetic sprite only: several
+	/// vendors — across mods — can use the same sprite without colliding, and it
+	/// never steals a job from the engine's own ambient vendors. A mod's vendors
+	/// stay fully self-contained. Set via `PlacementBound: true`.
+	bool placement_bound = false;
+	/// RAGNAROKMAC: the job id this (synthetic, per-job) entry was built for —
+	/// used as the shell's sprite when the entry is resolved by VendorKey.
+	uint16_t sprite_job = 0;
 
 	/// Phase 2 identity: -1 / unset = use engine defaults (random or job rule).
 	int16_t str_min = -1, str_max = -1;
@@ -173,13 +184,58 @@ struct PopulationVendorStock {
 	t_itemid nameid = 0;
 	int16_t  amount = 1;
 	uint32_t price  = 0; ///< 0 = auto (item_data.value_buy)
+	/// RAGNAROKMAC: `Price: [min, max]` (Pool). price is then the minimum and each
+	/// shell rolls in the range instead of applying PriceJitterPct.
+	uint32_t price_max = 0;
+	/// RAGNAROKMAC: what a player would actually have in a cart. All optional;
+	/// a plain entry is the plain item, as before.
+	uint8_t refine_min = 0;          ///< Refine level, rolled in [min, max] per shell (equipment only).
+	uint8_t refine_max = 0;
+	uint8_t element = 0;             ///< Forged weapon element (ELE_WATER..ELE_WIND); 0 = not forged.
+	uint8_t stars   = 0;             ///< Forged weapon Star Crumbs, 0-3 ("Very Strong").
+	std::vector<t_itemid> cards;     ///< Cards in its slots (not with a forged element).
+};
+
+/// Vendor stock sourcing mode. RAGNAROKMAC: added Pool as a third type (was bool dynamic).
+enum class PopulationVendorType : uint8_t {
+	Static  = 0, ///< Serve exactly the YAML `Stock:` list.
+	Dynamic = 1, ///< Derive stock from mob drop tables of source maps at spawn.
+	Pool    = 2, ///< Pick a random subset of `Pool:` entries per shell; optional rotation.
+};
+
+/// RAGNAROKMAC: one rectangle a mod vendor may stand in (inclusive corners).
+struct PopulationModSpawnArea {
+	int16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+};
+
+/// RAGNAROKMAC: one `Spawns:` block of a mod vendor entry. Mod vendors are
+/// spawned by their own pass and never touch the base VendorPlacement path, so
+/// a mod can place vendors without changing the engine's own vendors or
+/// another mod's. Exactly one of `positions` (fixed seats, one shell each) or
+/// `count` + `areas` (that many shells anywhere in the areas) is set.
+struct PopulationModSpawn {
+	std::string map;
+	std::vector<std::pair<int16_t, int16_t>> positions; ///< Fixed seats; count = seat count.
+	int count = 0;                                    ///< Shells to keep up (areas mode).
+	std::vector<PopulationModSpawnArea> areas;        ///< Where those shells may stand.
+	int min_spacing = 0;                              ///< Cells between shells of THIS block only.
+	bool scale_with_density = false;                  ///< Opt in to the "How busy" slider.
+	std::string spawn_id;                             ///< "<VendorKey>#<map>#<index>", stamped on each shell.
+};
+
+/// RAGNAROKMAC: one theme a market may roll for a spot.
+struct PopulationMarketTheme {
+	std::string key;   ///< VendorKey of the theme (an entry without Spawns).
+	int weight = 1;    ///< Relative chance when a spot rolls.
+	int min = 0;       ///< Spots kept on this theme before any other is rolled.
+	int max = 0;       ///< Most spots on this theme at once; 0 = no limit.
 };
 
 /// A named vendor configuration entry from db/population_vendors.yml.
 struct PopulationVendorEntry {
 	std::string key;
 	std::string title;           ///< Overhead vend title (empty = "Shop")
-	bool        dynamic = false; ///< Derive stock from map mob drop tables at spawn time
+	PopulationVendorType type = PopulationVendorType::Static;
 	int         max_slots = 12;  ///< Cap vend slots (MC_VENDING lv10 = 12)
 	uint32_t    price_multiplier = 100; ///< % of item sell value for dynamic entries
 	std::vector<PopulationVendorStock> stock;
@@ -201,6 +257,56 @@ struct PopulationVendorEntry {
 	// [dyn_amount_min, dyn_amount_max].  Equipment is always capped to 1 (non-stackable).
 	int dyn_amount_min = 0; ///< 0 = use built-in default (30).
 	int dyn_amount_max = 0; ///< 0 = use built-in default (30).
+
+	// RAGNAROKMAC: Pool-type fields. A Pool vendor carries a themed superset
+	// (e.g. 60 ninja-gear items) and every spawned shell draws a random subset
+	// of pick_count items from it. Combined with rotation (shells get released
+	// after rotation_sec and the autosummon pass re-fills with fresh picks),
+	// this gives the "player vendor whose stock changes" feel without any
+	// client-side change.
+	std::vector<PopulationVendorStock> pool;         ///< Superset of items a Pool vendor draws from.
+	int pick_count_min = 0;                          ///< Items per shell (low bound). 0 = max_slots.
+	int pick_count_max = 0;                          ///< Items per shell (high bound). 0 = pick_count_min.
+	int rotation_sec   = 0;                          ///< Shell lifetime before despawn. 0 = never rotate.
+	int rotation_jitter_sec = 0;                     ///< Per-shell random offset: rotation_sec ± rotation_jitter_sec.
+	std::vector<std::string> title_pool;             ///< When non-empty, each shell picks a title from here instead of `title`.
+	/// RAGNAROKMAC: per-item price variation, rolled independently for each item
+	/// of each spawned shell, so vendors undercut/overprice one another like a
+	/// real market instead of all showing identical numbers.
+	int price_jitter_pct = 0;                        ///< Each price rolled in base ± this %. 0 = fixed price.
+	/// RAGNAROKMAC: "fat-finger" mispricing. Humans set prices by hand and rarely
+	/// drop a digit, listing something far too cheap. 1-in-N chance per item of
+	/// dividing its price by 10 — a very low N gives the occasional deal-of-a-
+	/// lifetime find. 0 = never.
+	int price_mistake_one_in = 0;
+	/// RAGNAROKMAC: callout pacing for this vendor's shells. 0 keeps the engine's
+	/// chat cooldown. A street of stalls shouting on the global cooldown is a wall
+	/// of text; these space each stall out and keep stalls on one map from
+	/// talking over one another.
+	int callout_min_sec = 0;                         ///< Each shell waits [min, max] seconds between callouts.
+	int callout_max_sec = 0;
+	int callout_map_gap_sec = 0;                     ///< No two vendor callouts on one map closer than this.
+	/// RAGNAROKMAC: `Undercut: { Chance, StepPct: [min, max] }` (Pool). When a
+	/// stall opens, each plain item has Chance% to be listed StepPct% under the
+	/// cheapest shell stall on the map selling it, never under its own range.
+	int undercut_chance = 0;
+	int undercut_step_min = 0;
+	int undercut_step_max = 0;
+
+	/// RAGNAROKMAC: non-empty only for a mod vendor (an entry with `Spawns:`).
+	/// Its shells come from the mod vendor pass, look like the PlacementBound
+	/// profile whose VendorKey equals this entry's key, and never use
+	/// VendorPlacement. Base entries leave this empty and behave as upstream.
+	std::vector<PopulationModSpawn> spawns;
+
+	/// RAGNAROKMAC: a market (`Market:` instead of `VendorKey:`) sells nothing
+	/// itself: each of its Spawns' spots rolls one of these themes whenever a
+	/// stall is put there, so the stalls change as they rotate.
+	bool is_market = false;
+	/// RAGNAROKMAC: a buying store (`Buying: true`): its Pool says what it wants
+	/// to buy, how many, and what it pays. Up to MAX_BUYINGSTORE_SLOTS (5) items.
+	bool buying = false;
+	std::vector<PopulationMarketTheme> themes;
 };
 
 /// Per-map vendor placement constraint (from db/population_engine.yml VendorPlacement: block).

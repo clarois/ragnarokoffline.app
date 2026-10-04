@@ -1,0 +1,40 @@
+# Population Vendors Database — import stub.
+#
+# Copied into db/import by `make import`, the same way rAthena's own stubs are,
+# so db/population_vendors.yml can import db/import/population_vendors.yml
+# unconditionally. An import that names a file which is not there is an error on
+# every start, which is what this empty stub prevents when no mod ships vendors.
+#
+# A mod's db/population_vendors.yml replaces this file. Its VendorKey entries are
+# added to the shipped table. Prefix keys with the mod's name ("my-mod/potions")
+# so they cannot collide with another mod's or the engine's own.
+#
+# A mod vendor says where it stands with Spawns:, not VendorPlacement. Spawns are
+# the mod's own: they never count against the engine's MaxVendors for that map,
+# and the engine's vendors keep spawning exactly as they would without the mod.
+# Each block is either fixed seats (one shell per position; an occupied seat
+# stays empty until it is free) or Count shells anywhere in Areas, never within
+# min_npc_vendchat_distance (3 cells) of an NPC. Counts are
+# exact unless ScaleWithDensity: true. The shells' look comes from a
+# PlacementBound profile in population_vendor_pop.yml with the same VendorKey.
+# See the shipped db/population_vendors.yml for the stock fields.
+
+Header:
+  Type: POPULATION_VENDORS_DB
+  Version: 1
+
+#Body:
+#  - VendorKey: my-mod/potions
+#    Type: Pool
+#    Pool:
+#      - { Item: Red_Potion, Amount: 100, Price: 50 }
+#    Spawns:
+#      - Map: prontera
+#        Positions:
+#          - [147, 140]
+#          - [147, 150]
+#      - Map: geffen
+#        Count: 2
+#        Areas:
+#          - { X1: 110, Y1: 60, X2: 130, Y2: 70 }
+#        MinSpacing: 3

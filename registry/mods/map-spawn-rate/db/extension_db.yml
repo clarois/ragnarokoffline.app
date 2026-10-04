@@ -1,0 +1,9 @@
+# Turns on the rAthena fork's map_mob_count_rate extension, which is what
+# makes setmapmobcountrate (npc/map_spawn_rate.txt) do anything.
+Header:
+  Type: EXTENSION_DB
+  Version: 1
+
+Body:
+  - Id: map_mob_count_rate
+    Enabled: true

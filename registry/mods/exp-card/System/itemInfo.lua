@@ -5,8 +5,15 @@
 --
 -- The two card families share their shape (weight, resource, description
 -- layout), so this is a small loop over levels 1..10 instead of twenty
--- copy-pasted blocks. EXP_BY_LEVEL must stay in sync with the getexp
--- values in db/item_db.yml -- twenty scripts there, ten entries here.
+-- copy-pasted blocks. The layout follows the stock English tooltips (see
+-- Awakening Potion, 656): flavour line, rule, ^0000CC-labelled fields, rule,
+-- Requirement block.
+--
+-- No exp amount appears here on purpose. Each card's exp is scaled by the
+-- server's Base/Job EXP rate at the moment it is used (db/item_db.yml), and
+-- this file is static on the client, so any number written here would be
+-- wrong at every rate but 1x. The message shown after using a card prints
+-- the exact amount granted.
 --
 -- identifiedResourceName is the ART, written in Korean the way the client
 -- names it. 스페어카드 ("spare card") is item 779's resource -- the
@@ -21,54 +28,33 @@
 -- is logged in state/assets/logs/missing-files.log.
 tbl = {}
 
--- Roughly geometric growth (~2x per level), anchored at Lv 10 = 60,000
--- and rounded to clean numbers. See db/item_db.yml for the rationale.
-local EXP_BY_LEVEL = { 100, 250, 500, 1000, 2000, 4000, 7500, 15000, 30000, 60000 }
 local RESOURCE = "스페어카드"
 
--- Group thousands with commas so "60,000" reads more comfortably than
--- "60000" in the tooltip. Lua's string.format has no %'d, so build it by
--- hand. (Only touches non-negative integers; nothing else uses this.)
-local function commas(n)
-	local s = tostring(n)
-	local out = ""
-	local count = 0
-	for i = #s, 1, -1 do
-		out = s:sub(i, i) .. out
-		count = count + 1
-		if count % 3 == 0 and i > 1 then
-			out = "," .. out
-		end
-	end
-	return out
-end
-
-for level = 1, 10 do
-	local exp = EXP_BY_LEVEL[level]
-	local expText = commas(exp)
+-- desc builds one card's description. kind is "base" or "job"; rate names
+-- the server setting that scales it, as the Settings window labels it.
+local function desc(level, kind, rate)
 	-- Player-level gate for this card, matching EquipLevelMin in
 	-- db/item_db.yml: (level - 1) * 10 + 1.
 	local requiredLevel = (level - 1) * 10 + 1
+	return {
+		"A card holding condensed " .. kind .. " experience. Use it to gain " .. kind .. " experience at once.",
+		"Higher-level cards grant more experience, and every amount grows with the server's " .. rate .. " rate.",
+		"Dropped on a small chance by any monster; tougher monsters drop higher-level cards.",
+		"_______________________",
+		"^0000CCType:^000000 Usable",
+		"^0000CCEffect:^000000 Grants " .. kind .. " experience",
+		"^0000CCWeight:^000000 1",
+		"_______________________",
+		"^0000CCRequirement:^000000",
+		"Base Level " .. requiredLevel
+	}
+end
+
+for level = 1, 10 do
 	local baseName = "Base Exp Card Lv" .. level
 	local jobName  = "Job Exp Card Lv"  .. level
-	local baseDesc = {
-		"^0000FF+" .. expText .. "^000000 base experience.",
-		"^ffffff_^000000",
-		"Requires base level ^0000FF" .. requiredLevel .. "^000000 to use.",
-		"Drops on a small chance from any monster you kill.",
-		"Higher-level monsters drop higher-level cards.",
-		"^ffffff_^000000",
-		"Weight: ^777777 1 ^000000"
-	}
-	local jobDesc = {
-		"^0000FF+" .. expText .. "^000000 job experience.",
-		"^ffffff_^000000",
-		"Requires base level ^0000FF" .. requiredLevel .. "^000000 to use.",
-		"Drops on a small chance from any monster you kill.",
-		"Higher-level monsters drop higher-level cards.",
-		"^ffffff_^000000",
-		"Weight: ^777777 1 ^000000"
-	}
+	local baseDesc = desc(level, "base", "Base EXP")
+	local jobDesc  = desc(level, "job", "Job EXP")
 	tbl[50050 + level] = {
 		unidentifiedDisplayName = baseName,
 		unidentifiedResourceName = RESOURCE,

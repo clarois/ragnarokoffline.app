@@ -11,6 +11,7 @@
 #include <string>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <common/cbasetypes.hpp>
@@ -192,6 +193,27 @@ struct s_population {
 	int    move_fail_count         = 0; ///< Consecutive movement failures chasing current target.
 	int    attack_fail_count       = 0; ///< Consecutive attack command failures on current target.
 
+	// RAGNAROKMAC: Pool-type vendor rotation. When >0, the vendor rotation timer
+	// releases this shell once gettick() >= vendor_rotation_at; the autosummon
+	// pass then re-fills the map with a fresh pick from the pool. Set at spawn
+	// in the vending branch for vendors whose config has rotation_sec > 0.
+	t_tick vendor_rotation_at = 0;
+	// RAGNAROKMAC: the VendorKey this shell vends under (empty for non-vendors).
+	// Lets the autosummon pass count vendors per placement rather than per map,
+	// so several themed vendors can share a map without starving each other's
+	// MaxVendors budget.
+	std::string vendor_key;
+	// RAGNAROKMAC: set only on shells spawned by the mod vendor pass. The pass
+	// counts its own shells by this id (base vendors and other mods' never
+	// match), and a fixed-seat block also records which seat the shell holds.
+	std::string vendor_spawn_id;
+	int16_t     vendor_seat = -1;
+	// RAGNAROKMAC: items this stall lists by "fat-finger" mistake; undercutting
+	// ignores them, so one typo does not drag the whole street's prices down.
+	std::vector<t_itemid> vendor_mistakes;
+	// RAGNAROKMAC: this mod vendor runs a buying store, not a vending stall.
+	bool vendor_buying = false;
+
 	// --- Party invite auto-accept flag ---
 	bool   accept_party_request = false; ///< When true, bot auto-accepts the next party invite it receives.
 	uint32_t party_request_account = 0; ///< Player who requested this one-shot invitation.
@@ -220,6 +242,10 @@ struct s_population {
 	/// @companion gear, and only these are kept or handed back across a job advance. Persisted
 	/// as cp_companion_persistence.given_mask so it survives a restart.
 	uint32_t companion_given_mask = 0;
+	/// RAGNAROKMAC (gear custody): the companion's inventory (nameid, amount per index) just before
+	/// a trade's items move, so population_engine_companion_equip_traded acts only on what the trade
+	/// brought in. Empty outside a trade.
+	std::vector<std::pair<uint32_t, int32_t>> companion_trade_before;
 	t_tick companion_follow_next = 0; ///< Rate limit for owner-follow movement decisions.
 	bool companion_formation_active = false; ///< True while walking to the shell's assigned idle formation cell.
 	int16_t companion_formation_x = 0; ///< Current formation walk destination.

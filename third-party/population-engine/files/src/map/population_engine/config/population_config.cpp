@@ -11,6 +11,7 @@
 #include <string>
 
 #include <common/core.hpp>
+#include <common/utils.hpp>
 #include <common/showmsg.hpp>
 
 #include "../../battle.hpp"
@@ -447,11 +448,38 @@ const std::string PopulationVendorDatabase::getDefaultLocation()
 uint64 PopulationVendorDatabase::parseBodyNode(const ryml::NodeRef& node)
 {
 	std::string key;
-	if (!this->asString(node, "VendorKey", key) || key.empty())
+	// RAGNAROKMAC: a Market entry: spots plus a weighted list of themes.
+	const bool is_market = this->nodeExists(node, "Market");
+	if (is_market) {
+		if (!this->asString(node, "Market", key) || key.empty())
+			return 0;
+	} else if (!this->asString(node, "VendorKey", key) || key.empty()) {
 		return 0;
+	}
 
 	PopulationVendorEntry entry;
 	entry.key = key;
+	entry.is_market = is_market;
+	if (is_market) {
+		if (this->nodeExists(node, "Themes") && node[c4::to_csubstr("Themes")].is_seq()) {
+			for (const ryml::NodeRef& tn : node[c4::to_csubstr("Themes")].children()) {
+				PopulationMarketTheme t;
+				if (!this->asString(tn, "Theme", t.key) || t.key.empty()) {
+					this->invalidWarning(tn, "Market '%s': a Themes entry needs Theme; skipped.\n", key.c_str());
+					continue;
+				}
+				int32_t v = 0;
+				if (this->nodeExists(tn, "Weight") && this->asInt32(tn, "Weight", v)) t.weight = std::max(0, v);
+				if (this->nodeExists(tn, "Min") && this->asInt32(tn, "Min", v)) t.min = std::max(0, v);
+				if (this->nodeExists(tn, "Max") && this->asInt32(tn, "Max", v)) t.max = std::max(0, v);
+				entry.themes.push_back(std::move(t));
+			}
+		}
+		if (entry.themes.empty())
+			this->invalidWarning(node, "Market '%s' has no Themes; it will stay empty.\n", key.c_str());
+		if (!this->nodeExists(node, "Spawns"))
+			this->invalidWarning(node, "Market '%s' has no Spawns; it will stay empty.\n", key.c_str());
+	}
 
 	if (this->nodeExists(node, "Title")) {
 		std::string title;
@@ -464,7 +492,16 @@ uint64 PopulationVendorDatabase::parseBodyNode(const ryml::NodeRef& node)
 		if (this->asString(node, "Type", type_str)) {
 			std::transform(type_str.begin(), type_str.end(), type_str.begin(),
 				[](unsigned char c) { return static_cast<char>(::tolower(c)); });
-			entry.dynamic = (type_str == "dynamic");
+			if (type_str == "dynamic")
+				entry.type = PopulationVendorType::Dynamic;
+			else if (type_str == "pool") // RAGNAROKMAC
+				entry.type = PopulationVendorType::Pool;
+			else if (type_str == "static" || type_str.empty())
+				entry.type = PopulationVendorType::Static;
+			else
+				this->invalidWarning(node[c4::to_csubstr("Type")],
+					"VendorKey '%s': Type must be 'static', 'dynamic', or 'pool' (got '%s'); defaulting to static.\n",
+					key.c_str(), type_str.c_str());
 		}
 	}
 
@@ -555,7 +592,7 @@ uint64 PopulationVendorDatabase::parseBodyNode(const ryml::NodeRef& node)
 	}
 
 	// Parse Stock: sequence (used by static vendors).
-	if (!entry.dynamic && this->nodeExists(node, "Stock")) {
+	if (entry.type == PopulationVendorType::Static && this->nodeExists(node, "Stock")) {
 		const ryml::NodeRef& stock_node = node[c4::to_csubstr("Stock")];
 		if (stock_node.is_seq()) {
 			for (const ryml::NodeRef& sn : stock_node.children()) {
@@ -622,11 +659,384 @@ uint64 PopulationVendorDatabase::parseBodyNode(const ryml::NodeRef& node)
 		}
 	}
 
+	// RAGNAROKMAC: Pool-type parsing. A Pool vendor carries a themed superset
+	// in Pool: (same shape as Stock:), picks PickCount items per shell, and
+	// optionally rotates every RotationHours (±RotationJitterMinutes).
+	// TitleFromPool: lets each shell pick a shop title from a list so the
+	// market reads like a dozen different players rather than one.
+	auto parse_vendor_stock_item = [&](const ryml::NodeRef& sn, PopulationVendorStock& vs) -> bool {
+		std::string item_str;
+		if (this->asString(sn, "Item", item_str) && !item_str.empty()) {
+			bool all_digits = true;
+			for (char c : item_str)
+				if (!std::isdigit(static_cast<unsigned char>(c))) { all_digits = false; break; }
+			if (all_digits) {
+				try {
+					const unsigned long v = std::stoul(item_str);
+					if (v == 0 || v > 65535UL) return false;
+					vs.nameid = static_cast<t_itemid>(v);
+				} catch (...) { return false; }
+			} else {
+				auto idata = item_db.searchname(item_str.c_str());
+				if (!idata) {
+					this->invalidWarning(sn[c4::to_csubstr("Item")],
+						"Unknown item AegisName '%s' in VendorKey '%s' Pool.\n",
+						item_str.c_str(), key.c_str());
+					return false;
+				}
+				vs.nameid = static_cast<t_itemid>(idata->nameid);
+			}
+		} else {
+			uint16_t item_id = 0;
+			if (!this->asUInt16(sn, "Item", item_id) || item_id == 0) return false;
+			vs.nameid = static_cast<t_itemid>(item_id);
+		}
+		if (!item_db.find(vs.nameid)) {
+			this->invalidWarning(sn[c4::to_csubstr("Item")],
+				"Item id %u not found in item_db (VendorKey '%s' Pool).\n",
+				static_cast<unsigned>(vs.nameid), key.c_str());
+			return false;
+		}
+		if (this->nodeExists(sn, "Amount")) {
+			int16_t amount = 1;
+			if (this->asInt16(sn, "Amount", amount))
+				vs.amount = std::max(static_cast<int16_t>(1), amount);
+		}
+		if (this->nodeExists(sn, "Price")) {
+			const ryml::NodeRef& pn = sn[c4::to_csubstr("Price")];
+			if (pn.is_seq()) {
+				// RAGNAROKMAC: Price: [min, max], rolled per shell.
+				int64_t lo = 0, hi = 0;
+				if (pn.num_children() == 2 && ryml::read(pn[0], &lo) && ryml::read(pn[1], &hi) && lo >= 1 && hi >= 1) {
+					if (hi < lo) std::swap(lo, hi);
+					vs.price = static_cast<uint32_t>(std::min<int64_t>(lo, MAX_ZENY));
+					vs.price_max = static_cast<uint32_t>(std::min<int64_t>(hi, MAX_ZENY));
+				} else {
+					this->invalidWarning(pn, "VendorKey '%s': Price range must be [min, max], both 1 or more.\n", key.c_str());
+				}
+			} else {
+				uint32_t price = 0;
+				if (this->asUInt32(sn, "Price", price))
+					vs.price = price;
+			}
+		}
+
+		// RAGNAROKMAC: refine, forged element and cards, so a stall can sell what a
+		// player's cart really holds (+7 Stiletto, Fire Stiletto, a carded Guard).
+		std::shared_ptr<item_data> sid = item_db.find(vs.nameid);
+		const bool is_gear = sid && (sid->type == IT_WEAPON || sid->type == IT_ARMOR);
+		if (this->nodeExists(sn, "Refine")) {
+			const ryml::NodeRef& rn = sn[c4::to_csubstr("Refine")];
+			int32_t lo = 0, hi = 0;
+			if (rn.is_seq() && rn.num_children() == 2) {
+				ryml::read(rn[0], &lo);
+				ryml::read(rn[1], &hi);
+			} else if (this->asInt32(sn, "Refine", lo)) {
+				hi = lo;
+			}
+			if (!is_gear || sid->flag.no_refine) {
+				this->invalidWarning(rn, "VendorKey '%s': %s cannot be refined; Refine ignored.\n",
+					key.c_str(), sid ? sid->name.c_str() : "item");
+			} else {
+				lo = std::max(0, std::min(MAX_REFINE, lo));
+				hi = std::max(0, std::min(MAX_REFINE, hi));
+				if (hi < lo) std::swap(lo, hi);
+				vs.refine_min = static_cast<uint8_t>(lo);
+				vs.refine_max = static_cast<uint8_t>(hi);
+			}
+		}
+		if (this->nodeExists(sn, "Element")) {
+			std::string ele;
+			this->asString(sn, "Element", ele);
+			std::transform(ele.begin(), ele.end(), ele.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+			uint8_t e = 0;
+			if (ele == "water" || ele == "ice") e = ELE_WATER;
+			else if (ele == "earth") e = ELE_EARTH;
+			else if (ele == "fire") e = ELE_FIRE;
+			else if (ele == "wind") e = ELE_WIND;
+			if (e == 0 || !sid || sid->type != IT_WEAPON) {
+				this->invalidWarning(sn[c4::to_csubstr("Element")],
+					"VendorKey '%s': Element must be Water, Earth, Fire or Wind on a weapon; ignored.\n", key.c_str());
+			} else {
+				vs.element = e;
+			}
+		}
+		if (this->nodeExists(sn, "Stars")) {
+			int32_t st = 0;
+			if (this->asInt32(sn, "Stars", st))
+				vs.stars = static_cast<uint8_t>(std::max(0, std::min(3, st)));
+			if (vs.stars > 0 && (!sid || sid->type != IT_WEAPON))
+				vs.stars = 0;
+		}
+		if (this->nodeExists(sn, "Cards")) {
+			const ryml::NodeRef& cn = sn[c4::to_csubstr("Cards")];
+			if (vs.element != 0 || vs.stars != 0) {
+				this->invalidWarning(cn, "VendorKey '%s': a forged weapon has no card slots; Cards ignored.\n", key.c_str());
+			} else if (cn.is_seq()) {
+				for (const ryml::NodeRef& c : cn.children()) {
+					std::string cname;
+					c4::csubstr v = c.val();
+					cname.assign(v.str, v.len);
+					auto cdata = item_db.searchname(cname.c_str());
+					if (!cdata || cdata->type != IT_CARD) {
+						this->invalidWarning(c, "VendorKey '%s': '%s' is not a card; skipped.\n", key.c_str(), cname.c_str());
+						continue;
+					}
+					if (sid && vs.cards.size() >= sid->slots) {
+						this->invalidWarning(c, "VendorKey '%s': %s has only %u slot(s); extra card skipped.\n",
+							key.c_str(), sid->name.c_str(), static_cast<unsigned>(sid->slots));
+						continue;
+					}
+					vs.cards.push_back(static_cast<t_itemid>(cdata->nameid));
+				}
+			}
+		}
+		return true;
+	};
+
+	if (entry.type == PopulationVendorType::Pool && this->nodeExists(node, "Pool")) {
+		const ryml::NodeRef& pool_node = node[c4::to_csubstr("Pool")];
+		if (pool_node.is_seq()) {
+			for (const ryml::NodeRef& sn : pool_node.children()) {
+				PopulationVendorStock vs;
+				if (parse_vendor_stock_item(sn, vs))
+					entry.pool.push_back(vs);
+			}
+		}
+	}
+
+	// PickCount: [min, max] or a single scalar (treated as [n, n]).
+	if (this->nodeExists(node, "PickCount")) {
+		const ryml::NodeRef& pc_node = node[c4::to_csubstr("PickCount")];
+		int32_t lo = 0, hi = 0;
+		if (pc_node.is_seq()) {
+			int idx = 0;
+			for (const ryml::NodeRef& mn : pc_node.children()) {
+				int32_t v = 0;
+				if (!ryml::read(mn, &v)) continue;
+				if (idx == 0) lo = v;
+				else if (idx == 1) hi = v;
+				++idx;
+			}
+		} else {
+			int32_t v = 0;
+			if (this->asInt32(node, "PickCount", v)) { lo = v; hi = v; }
+		}
+		if (lo < 1) lo = 1;
+		if (hi < lo) hi = lo;
+		if (hi > 12) hi = 12; // MC_VENDING lv10 cap
+		if (lo > 12) lo = 12;
+		entry.pick_count_min = lo;
+		entry.pick_count_max = hi;
+	}
+
+	// RotationHours: 0 = never rotate. Internally stored as seconds.
+	if (this->nodeExists(node, "RotationHours")) {
+		int32_t h = 0;
+		if (this->asInt32(node, "RotationHours", h) && h > 0) {
+			if (h > 168) h = 168; // one week ceiling to keep t_tick arithmetic sane
+			entry.rotation_sec = h * 3600;
+		}
+	}
+	// RAGNAROKMAC: Buying: true -- a buying store instead of a vending stall.
+	if (this->nodeExists(node, "Buying")) {
+		bool b = false;
+		if (this->asBool(node, "Buying", b))
+			entry.buying = b;
+	}
+
+	// RAGNAROKMAC: Undercut: { Chance: pct, StepPct: [min, max] }.
+	if (this->nodeExists(node, "Undercut")) {
+		const ryml::NodeRef& un = node[c4::to_csubstr("Undercut")];
+		int32_t chance = 0;
+		if (this->nodeExists(un, "Chance") && this->asInt32(un, "Chance", chance))
+			entry.undercut_chance = std::max(0, std::min(100, chance));
+		int32_t lo = 1, hi = 5;
+		if (this->nodeExists(un, "StepPct")) {
+			const ryml::NodeRef& sn2 = un[c4::to_csubstr("StepPct")];
+			if (sn2.is_seq() && sn2.num_children() == 2) {
+				ryml::read(sn2[0], &lo);
+				ryml::read(sn2[1], &hi);
+			} else if (this->asInt32(un, "StepPct", lo)) {
+				hi = lo;
+			}
+		}
+		if (hi < lo) std::swap(lo, hi);
+		entry.undercut_step_min = std::max(0, std::min(90, lo));
+		entry.undercut_step_max = std::max(0, std::min(90, hi));
+	}
+
+	// RAGNAROKMAC: Callouts: { EverySeconds: [min, max], MapGapSeconds: n }.
+	if (this->nodeExists(node, "Callouts")) {
+		const ryml::NodeRef& cn = node[c4::to_csubstr("Callouts")];
+		if (this->nodeExists(cn, "EverySeconds")) {
+			const ryml::NodeRef& en = cn[c4::to_csubstr("EverySeconds")];
+			int32_t lo = 0, hi = 0;
+			if (en.is_seq() && en.num_children() == 2) {
+				ryml::read(en[0], &lo);
+				ryml::read(en[1], &hi);
+			} else if (this->asInt32(cn, "EverySeconds", lo)) {
+				hi = lo;
+			}
+			if (hi < lo) std::swap(lo, hi);
+			entry.callout_min_sec = std::max(0, lo);
+			entry.callout_max_sec = std::max(0, hi);
+		}
+		if (this->nodeExists(cn, "MapGapSeconds")) {
+			int32_t g = 0;
+			if (this->asInt32(cn, "MapGapSeconds", g))
+				entry.callout_map_gap_sec = std::max(0, g);
+		}
+	}
+
+	// RotationMinutes: the same in minutes, for short cycles (testing, busy
+	// markets). Wins over RotationHours when both are given.
+	if (this->nodeExists(node, "RotationMinutes")) {
+		int32_t m = 0;
+		if (this->asInt32(node, "RotationMinutes", m) && m > 0) {
+			if (m > 168 * 60) m = 168 * 60;
+			entry.rotation_sec = m * 60;
+		}
+	}
+
+	// RotationJitterMinutes: per-shell ± offset so vendors don't rotate in lockstep.
+	if (this->nodeExists(node, "RotationJitterMinutes")) {
+		int32_t m = 0;
+		if (this->asInt32(node, "RotationJitterMinutes", m) && m > 0) {
+			if (m > 180) m = 180; // cap at 3 hours of jitter
+			entry.rotation_jitter_sec = m * 60;
+		}
+	}
+
+	// PriceJitterPct: per-item price variation (0-90). 0 = fixed price.
+	if (this->nodeExists(node, "PriceJitterPct")) {
+		int32_t j = 0;
+		if (this->asInt32(node, "PriceJitterPct", j)) {
+			if (j < 0) j = 0;
+			if (j > 90) j = 90; // beyond this prices swing wildly; cap it
+			entry.price_jitter_pct = j;
+		}
+	}
+
+	// PriceMistakeOneIn: 1-in-N chance per item of a "fat-finger" (price / 10).
+	// 0 = never. Keep N large (thousands) so it stays a rare surprise.
+	if (this->nodeExists(node, "PriceMistakeOneIn")) {
+		int32_t n = 0;
+		if (this->asInt32(node, "PriceMistakeOneIn", n) && n > 0)
+			entry.price_mistake_one_in = n;
+	}
+
+	// TitleFromPool: sequence of shop-title strings; shell picks one at spawn.
+	if (this->nodeExists(node, "TitleFromPool")) {
+		const ryml::NodeRef& tp_node = node[c4::to_csubstr("TitleFromPool")];
+		if (tp_node.is_seq()) {
+			for (const ryml::NodeRef& tn : tp_node.children()) {
+				std::string t;
+				if (ryml::read(tn, &t) && !t.empty())
+					entry.title_pool.push_back(t);
+			}
+		}
+	}
+
+	// RAGNAROKMAC: Spawns: makes this a *mod vendor*. Its shells come from the mod
+	// vendor pass, never from VendorPlacement, so a mod cannot change where or how
+	// many of the engine's own vendors (or another mod's) appear. Each block is
+	// either fixed seats (Positions) or Count + Areas.
+	const bool has_spawns = this->nodeExists(node, "Spawns");
+	if (has_spawns) {
+		const ryml::NodeRef& sp_node = node[c4::to_csubstr("Spawns")];
+		if (!sp_node.is_seq()) {
+			this->invalidWarning(sp_node, "VendorKey '%s': Spawns must be a list.\n", key.c_str());
+		} else {
+			auto read_area = [&](const ryml::NodeRef& an, PopulationModSpawnArea& out) -> bool {
+				int16_t x1 = -1, y1 = -1, x2 = -1, y2 = -1;
+				if (!this->nodeExists(an, "X1") || !this->asInt16(an, "X1", x1)) return false;
+				if (!this->nodeExists(an, "Y1") || !this->asInt16(an, "Y1", y1)) return false;
+				if (!this->nodeExists(an, "X2") || !this->asInt16(an, "X2", x2)) return false;
+				if (!this->nodeExists(an, "Y2") || !this->asInt16(an, "Y2", y2)) return false;
+				if (x1 < 0 || y1 < 0 || x2 < 0 || y2 < 0) return false;
+				if (x1 > x2) std::swap(x1, x2);
+				if (y1 > y2) std::swap(y1, y2);
+				out.x1 = x1; out.y1 = y1; out.x2 = x2; out.y2 = y2;
+				return true;
+			};
+			int idx = 0;
+			for (const ryml::NodeRef& sn : sp_node.children()) {
+				PopulationModSpawn sp;
+				if (!this->asString(sn, "Map", sp.map) || sp.map.empty()) {
+					this->invalidWarning(sn, "VendorKey '%s': a Spawns entry needs Map; skipped.\n", key.c_str());
+					continue;
+				}
+				const bool has_pos = this->nodeExists(sn, "Positions");
+				const bool has_cnt = this->nodeExists(sn, "Count") || this->nodeExists(sn, "Areas") || this->nodeExists(sn, "Area");
+				if (has_pos == has_cnt) {
+					this->invalidWarning(sn, "VendorKey '%s': a Spawns entry needs either Positions, or Count with Areas — not both, not neither; skipped.\n", key.c_str());
+					continue;
+				}
+				if (has_pos) {
+					const ryml::NodeRef& pn = sn[c4::to_csubstr("Positions")];
+					if (pn.is_seq()) {
+						for (const ryml::NodeRef& cell : pn.children()) {
+							int32_t x = -1, y = -1;
+							if (!cell.is_seq() || cell.num_children() != 2 ||
+							    !ryml::read(cell[0], &x) || !ryml::read(cell[1], &y) || x < 0 || y < 0) {
+								this->invalidWarning(cell, "VendorKey '%s': a Position must be [x, y]; skipped.\n", key.c_str());
+								continue;
+							}
+							sp.positions.emplace_back(static_cast<int16_t>(x), static_cast<int16_t>(y));
+						}
+					}
+					if (sp.positions.empty()) {
+						this->invalidWarning(sn, "VendorKey '%s': Spawns entry on %s has no valid Positions; skipped.\n", key.c_str(), sp.map.c_str());
+						continue;
+					}
+				} else {
+					int32_t c = 0;
+					if (!this->nodeExists(sn, "Count") || !this->asInt32(sn, "Count", c) || c < 1) {
+						this->invalidWarning(sn, "VendorKey '%s': Spawns entry on %s needs Count >= 1; skipped.\n", key.c_str(), sp.map.c_str());
+						continue;
+					}
+					sp.count = c;
+					if (this->nodeExists(sn, "Areas")) {
+						const ryml::NodeRef& an = sn[c4::to_csubstr("Areas")];
+						if (an.is_seq()) {
+							for (const ryml::NodeRef& a : an.children()) {
+								PopulationModSpawnArea ar;
+								if (read_area(a, ar)) sp.areas.push_back(ar);
+								else this->invalidWarning(a, "VendorKey '%s': an Area needs X1, Y1, X2, Y2 >= 0; skipped.\n", key.c_str());
+							}
+						}
+					} else {
+						PopulationModSpawnArea ar;
+						if (read_area(sn[c4::to_csubstr("Area")], ar)) sp.areas.push_back(ar);
+					}
+					if (sp.areas.empty()) {
+						this->invalidWarning(sn, "VendorKey '%s': Spawns entry on %s has no valid Areas; skipped.\n", key.c_str(), sp.map.c_str());
+						continue;
+					}
+				}
+				if (this->nodeExists(sn, "MinSpacing")) {
+					int32_t s = 0;
+					if (this->asInt32(sn, "MinSpacing", s)) sp.min_spacing = std::max(0, s);
+				}
+				if (this->nodeExists(sn, "ScaleWithDensity")) {
+					bool b = false;
+					if (this->asBool(sn, "ScaleWithDensity", b)) sp.scale_with_density = b;
+				}
+				sp.spawn_id = key + "#" + sp.map + "#" + std::to_string(idx++);
+				entry.spawns.push_back(std::move(sp));
+			}
+		}
+		if (this->nodeExists(node, "VendorPlacement"))
+			this->invalidWarning(node[c4::to_csubstr("VendorPlacement")],
+				"VendorKey '%s': has Spawns, so its VendorPlacement is ignored (mod vendors place themselves).\n", key.c_str());
+	}
+
 	// VendorPlacement: optional per-vendor placement constraint (Map / MinSpacing /
 	// MaxVendors / Area). Populates the derived placements_by_map_ index used by
 	// the autosummon pass and the cell picker. If multiple vendor entries name the
 	// same Map, the last one parsed wins (a warning is emitted).
-	if (this->nodeExists(node, "VendorPlacement")) {
+	if (!has_spawns && this->nodeExists(node, "VendorPlacement")) {
 		const ryml::NodeRef& vp_node = node[c4::to_csubstr("VendorPlacement")];
 		auto parse_one_vp = [&](const ryml::NodeRef& entry_node) {
 			std::string map_name;
@@ -975,6 +1385,7 @@ void PopulationEngineDatabase::clear()
 	this->m_validationError = false;
 	this->m_gear_sets.clear();
 	this->m_profiles.clear();
+	this->m_vendor_by_key.clear();
 	this->m_arena_job_pool.clear();
 }
 
@@ -1212,8 +1623,9 @@ static void applyProfile(PopulationEngine* dst, const PopulationEngine& src)
 	dst->dungeon_behavior = src.dungeon_behavior;
 	dst->guard_range      = src.guard_range;
 	// Vendor
-	dst->vendor_message = src.vendor_message;
-	dst->vendor_key     = src.vendor_key;
+	dst->vendor_message  = src.vendor_message;
+	dst->vendor_key      = src.vendor_key;
+	dst->placement_bound = src.placement_bound; // RAGNAROKMAC
 	// Flags and role
 	dst->flags     = src.flags;
 	dst->role_type = src.role_type;
@@ -1265,16 +1677,37 @@ uint64 PopulationEngineDatabase::parseBodyNode(const ryml::NodeRef& node)
 		if (!this->asString(node, "GearSetName", name) || name.empty())
 			return 0;
 		PopulationGearSet gs;
-		this->parseEquipSlotPool(node, {"Weapon",     "weapon"     }, EQP_HAND_R,                        gs.weapon_pool,      0);
-		this->parseEquipSlotPool(node, {"Shield",     "shield"     }, EQP_HAND_L,                        gs.shield_pool,      0);
-		this->parseEquipSlotPool(node, {"HeadTop",    "head_top"   }, EQP_HEAD_TOP|EQP_COSTUME_HEAD_TOP, gs.head_top_pool,    0);
-		this->parseEquipSlotPool(node, {"HeadMid",    "head_mid"   }, EQP_HEAD_MID|EQP_COSTUME_HEAD_MID, gs.head_mid_pool,    0);
-		this->parseEquipSlotPool(node, {"HeadBottom", "head_bottom"}, EQP_HEAD_LOW|EQP_COSTUME_HEAD_LOW, gs.head_bottom_pool, 0);
-		this->parseEquipSlotPool(node, {"Armor",      "armor"      }, EQP_ARMOR,                         gs.armor_pool,       0);
-		this->parseEquipSlotPool(node, {"Garment",    "garment"    }, EQP_GARMENT|EQP_COSTUME_GARMENT,   gs.garment_pool,     0);
-		this->parseEquipSlotPool(node, {"Shoes",      "shoes"      }, EQP_SHOES,                         gs.shoes_pool,       0);
-		this->parseEquipSlotPool(node, {"AccL",       "acc_l"      }, EQP_ACC_L,                         gs.acc_l_pool,       0);
-		this->parseEquipSlotPool(node, {"AccR",       "acc_r"      }, EQP_ACC_R,                         gs.acc_r_pool,       0);
+		// RAGNAROKMAC: a pre-renewal server takes a slot from the set's PreRenewal block when the
+		// block has it. Most sets are built from renewal-only items (the Paradise/Eden gear), which
+		// the pre-renewal item db lacks; every one was skipped there, and a slot with nothing left
+		// spawned empty (#325). Renewal ignores the block.
+#ifndef RENEWAL
+		const bool has_pre = this->nodeExists(node, "PreRenewal");
+		const ryml::NodeRef pre_node = has_pre ? node[c4::to_csubstr("PreRenewal")] : node;
+#endif
+		auto slot = [&](std::initializer_list<const char*> keys, uint32_t flag, std::vector<uint16_t>& pool) {
+#ifndef RENEWAL
+			if (has_pre) {
+				for (const char* k : keys) {
+					if (this->nodeExists(pre_node, std::string(k))) {
+						this->parseEquipSlotPool(pre_node, keys, flag, pool, 0);
+						return;
+					}
+				}
+			}
+#endif
+			this->parseEquipSlotPool(node, keys, flag, pool, 0);
+		};
+		slot({"Weapon",     "weapon"     }, EQP_HAND_R,                        gs.weapon_pool);
+		slot({"Shield",     "shield"     }, EQP_HAND_L,                        gs.shield_pool);
+		slot({"HeadTop",    "head_top"   }, EQP_HEAD_TOP|EQP_COSTUME_HEAD_TOP, gs.head_top_pool);
+		slot({"HeadMid",    "head_mid"   }, EQP_HEAD_MID|EQP_COSTUME_HEAD_MID, gs.head_mid_pool);
+		slot({"HeadBottom", "head_bottom"}, EQP_HEAD_LOW|EQP_COSTUME_HEAD_LOW, gs.head_bottom_pool);
+		slot({"Armor",      "armor"      }, EQP_ARMOR,                         gs.armor_pool);
+		slot({"Garment",    "garment"    }, EQP_GARMENT|EQP_COSTUME_GARMENT,   gs.garment_pool);
+		slot({"Shoes",      "shoes"      }, EQP_SHOES,                         gs.shoes_pool);
+		slot({"AccL",       "acc_l"      }, EQP_ACC_L,                         gs.acc_l_pool);
+		slot({"AccR",       "acc_r"      }, EQP_ACC_R,                         gs.acc_r_pool);
 		if (this->nodeExists(node, "Arrow")) {
 			bool arrow = true;
 			if (this->asBool(node, "Arrow", arrow))
@@ -1345,6 +1778,7 @@ uint64 PopulationEngineDatabase::parseBodyNode(const ryml::NodeRef& node)
 		}
 		if (this->nodeExists(node, "VendorMessage")) this->asString(node, "VendorMessage", prof->vendor_message);
 		if (this->nodeExists(node, "VendorKey"))     this->asString(node, "VendorKey",     prof->vendor_key);
+		if (this->nodeExists(node, "PlacementBound")) this->asBool(node, "PlacementBound", prof->placement_bound); // RAGNAROKMAC
 		// Role
 		if (this->nodeExists(node, "Role")) {
 			std::string rs;
@@ -1469,7 +1903,16 @@ uint64 PopulationEngineDatabase::parseBodyNode(const ryml::NodeRef& node)
 						}
 					}
 
-					this->put(job_id, equipment);
+					// RAGNAROKMAC: a placement-bound vendor is resolved by its
+					// VendorKey, not its job, so keep it out of the global job map
+					// — that is what lets several vendors share a sprite job and
+					// leaves the engine's own ambient vendors untouched. Its Jobs:
+					// entry becomes purely the shell's sprite.
+					equipment->sprite_job = job_id;
+					if (equipment->placement_bound && !equipment->vendor_key.empty())
+						this->m_vendor_by_key[equipment->vendor_key] = equipment;
+					else
+						this->put(job_id, equipment);
 				}
 			} else if (!jobs_node.is_seed()) {
 				this->invalidWarning(jobs_node,
@@ -1841,4 +2284,134 @@ uint64 PopulationEngineDatabase::parseBodyNode(const ryml::NodeRef& node)
 	}
 
 	return 1;
+}
+
+// ---------------------------------------------------------------------------
+// RAGNAROKMAC: mod price tables
+// ---------------------------------------------------------------------------
+//
+// db/import/population_vendor_prices/<prefix>.csv, one row per item:
+//
+//     Id,Name,Min,Max
+//     985,Elunium,240000,285000
+//
+// Id decides; Name is for people reading the file, and is looked up (Aegis or
+// display name) only when Id is empty. Max may be left out. Min 0 (or empty)
+// means "no price set yet": the row is skipped and the YAML price stands, so
+// a table can list every item and be filled in over time. Fields may be
+// quoted, and ";" works as the separator too (Excel writes it in some
+// locales). Lines starting with # are comments.
+//
+// A table prices only the vendors whose VendorKey starts with "<prefix>/", so
+// a mod's file (prontera-vendors.csv -> prontera-vendors/*) never touches
+// another mod's vendors or the engine's own. A row wins over the YAML Price of
+// every plain stock line of that item; lines with a refine, element or cards
+// keep their YAML price. Read at load and on every reload.
+
+static std::vector<std::string> s_pop_price_files;
+
+static void pop_collect_price_file(const char* path) {
+	const size_t n = strlen(path);
+	if (n > 4 && strcmpi(path + n - 4, ".csv") == 0)
+		s_pop_price_files.emplace_back(path);
+}
+
+static std::string pop_trim(const std::string& s) {
+	const size_t a = s.find_first_not_of(" \t\r\n\"");
+	if (a == std::string::npos)
+		return "";
+	const size_t b = s.find_last_not_of(" \t\r\n\"");
+	return s.substr(a, b - a + 1);
+}
+
+void PopulationVendorDatabase::loadingFinished() {
+	const std::string dir = std::string(db_path) + "/import/population_vendor_prices";
+	if (check_filepath(dir.c_str()) != 1)
+		return; // no mod ships a price table
+	s_pop_price_files.clear();
+	findfile(dir.c_str(), ".csv", pop_collect_price_file);
+	std::sort(s_pop_price_files.begin(), s_pop_price_files.end());
+
+	for (const std::string& file : s_pop_price_files) {
+		std::string base = file.substr(file.find_last_of("/\\") + 1);
+		base.resize(base.size() - 4);
+		const std::string prefix = base + "/";
+
+		FILE* fp = fopen(file.c_str(), "r");
+		if (fp == nullptr) {
+			ShowWarning("Population engine: cannot read price table '%s'.\n", file.c_str());
+			continue;
+		}
+		std::unordered_map<t_itemid, std::pair<uint32_t, uint32_t>> prices;
+		char buf[1024];
+		int line = 0;
+		while (fgets(buf, sizeof(buf), fp) != nullptr) {
+			++line;
+			const std::string row = pop_trim(buf);
+			if (row.empty() || row[0] == '#' || row.compare(0, 2, "//") == 0)
+				continue;
+			// Split on , or ; outside double quotes ("" inside quotes is a quote).
+			std::vector<std::string> col;
+			std::string cur;
+			bool quoted = false;
+			for (size_t i = 0; i < row.size(); ++i) {
+				const char c = row[i];
+				if (c == '"') {
+					if (quoted && i + 1 < row.size() && row[i + 1] == '"') { cur += '"'; ++i; }
+					else quoted = !quoted;
+				} else if ((c == ',' || c == ';') && !quoted) {
+					col.push_back(pop_trim(cur));
+					cur.clear();
+				} else {
+					cur += c;
+				}
+			}
+			col.push_back(pop_trim(cur));
+			if (strcmpi(col[0].c_str(), "id") == 0)
+				continue; // the header row
+			if (col.size() < 3) {
+				ShowWarning("Population engine: %s:%d: expected Id,Name,Min,Max; skipped.\n", file.c_str(), line);
+				continue;
+			}
+			t_itemid id = 0;
+			if (!col[0].empty()) {
+				id = static_cast<t_itemid>(strtoul(col[0].c_str(), nullptr, 10));
+				if (!item_db.exists(id)) id = 0;
+			} else if (auto idata = item_db.searchname(col[1].c_str())) {
+				id = idata->nameid;
+			}
+			if (id == 0) {
+				ShowWarning("Population engine: %s:%d: unknown item '%s%s'; skipped.\n", file.c_str(), line,
+					col[0].c_str(), col[0].empty() ? col[1].c_str() : "");
+				continue;
+			}
+			const uint32_t lo = static_cast<uint32_t>(strtoul(col[2].c_str(), nullptr, 10));
+			uint32_t hi = col.size() > 3 && !col[3].empty() ? static_cast<uint32_t>(strtoul(col[3].c_str(), nullptr, 10)) : lo;
+			if (lo == 0)
+				continue; // 0 (or empty) = no price set yet; the YAML price stands
+			if (hi < lo) hi = lo;
+			prices[id] = { std::min<uint32_t>(lo, MAX_ZENY), std::min<uint32_t>(hi, MAX_ZENY) };
+		}
+		fclose(fp);
+
+		size_t applied = 0;
+		for (auto& kv : entries_) {
+			if (kv.first.compare(0, prefix.size(), prefix) != 0)
+				continue;
+			for (std::vector<PopulationVendorStock>* list : { &kv.second.pool, &kv.second.stock }) {
+				for (PopulationVendorStock& vs : *list) {
+					if (vs.refine_max != 0 || vs.element != 0 || vs.stars != 0 || !vs.cards.empty())
+						continue;
+					auto it = prices.find(vs.nameid);
+					if (it == prices.end())
+						continue;
+					vs.price = it->second.first;
+					vs.price_max = it->second.second > it->second.first ? it->second.second : 0;
+					++applied;
+				}
+			}
+		}
+		ShowStatus("Population engine: price table '%s': %zu items, %zu stall lines priced.\n",
+			file.c_str(), prices.size(), applied);
+	}
 }

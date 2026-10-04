@@ -1,0 +1,29 @@
+diff --git a/src/custom/battle_config_init.inc b/src/custom/battle_config_init.inc
+--- a/src/custom/battle_config_init.inc
++++ b/src/custom/battle_config_init.inc
+@@ -17,6 +17,9 @@
+ { "population_engine_demand_grace_ms",&battle_config.population_engine_demand_grace_ms,300000,0,3600000,},
+ { "population_engine_density_pct",&battle_config.population_engine_density_pct,100,10,500,},
+ { "population_engine_companion_limit",&battle_config.population_engine_companion_limit,4,4,11,},
++{ "population_engine_town_pct",&battle_config.population_engine_town_pct,100,0,100,},
++{ "population_engine_field_pct",&battle_config.population_engine_field_pct,100,0,100,},
++{ "population_engine_dungeon_pct",&battle_config.population_engine_dungeon_pct,100,0,100,},
+ { "population_engine_companion_points_per_level",&battle_config.population_engine_companion_points_per_level,90,0,2000,},
+ { "population_engine_level_from_map",&battle_config.population_engine_level_from_map,1,0,1,},
+ { "population_engine_max_count",&battle_config.population_engine_max_count,1000,1,30000,},
+diff --git a/src/custom/battle_config_struct.inc b/src/custom/battle_config_struct.inc
+--- a/src/custom/battle_config_struct.inc
++++ b/src/custom/battle_config_struct.inc
+@@ -27,6 +27,12 @@
+ /// Max fake-party invitations one player can hold; UI slider 4..11,
+ /// one under our rathena fork MAX_PARTY (12).
+ int32 population_engine_companion_limit;
++/// How busy towns, fields and dungeons are, each as a share of what
++/// population_engine_density_pct makes it (0 = none there, 100 = all of it).
++/// Settings -> Population, one slider each.
++int32 population_engine_town_pct;
++int32 population_engine_field_pct;
++int32 population_engine_dungeon_pct;
+ /// Extra status/trait points a RECRUITED companion gains per level-up, granted
+ /// only from 3rd job onward (1st/2nd/trans keep the stock economy so the growth
+ /// ramp stays visible). The stock table grants ~4,051 points over a whole

@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000018
+Subject: [PATCH] @vendorinfo: inspect mod vendor stalls in game
+
+Lists every mod vendor stall on the GM's map, or shows one vendor theme's
+settings and stock (or a market's themes), for tuning a mod's market
+without reading YAML.
+
+--- a/src/custom/atcommand.inc
++++ b/src/custom/atcommand.inc
+@@ -674,3 +674,17 @@
+ 	clif_displaymessage(fd, "Usage: @companion list | summon <name> | draft <job> [name] | jobs | skills <name> [list|none|auto] | favorite <name> | remove <name> | dismiss <name> | gear <name> [slots] | heal <a%> <b%> | homunculus <name> [on|off]");
+ 	return -1;
+ }
++
++/*==========================================
++ * @vendorinfo [theme|market]
++ *   Without an argument, every mod vendor stall on your map: owner, place,
++ *   theme, sign, items and time to rotation. With one, a vendor theme's
++ *   settings and stock with price ranges, or a market's themes and how many
++ *   of each stand now. The last part of a key is enough ("byalan").
++ *------------------------------------------*/
++ACMD_FUNC(vendorinfo)
++{
++	nullpo_retr(-1, sd);
++	population_engine_vendorinfo(sd, message);
++	return 0;
++}
+--- a/src/custom/atcommand_def.inc
++++ b/src/custom/atcommand_def.inc
+@@ -12,3 +12,4 @@
+ ACMD_DEF(populate),
+ ACMD_DEF(reloadpopenginedb),
+ ACMD_DEF(companion),
++ACMD_DEF(vendorinfo),

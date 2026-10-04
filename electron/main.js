@@ -14,8 +14,9 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell, clipboard, screen, ses
 // Mods' own settings pages are served from a private scheme, which Chromium
 // only accepts if it is declared before the app is ready.
 // Every privileged scheme in one call (Electron keeps only the last): the mod
-// settings pages' and Settings -> Tools' ro-tool://.
-require('./mod-settings-window').registerScheme(protocol, [require('./tools').schemePrivileges]);
+// settings pages', Settings -> Tools' ro-tool:// and mods' host routes'
+// mod-host:// (mod-host/sandbox.js).
+require('./mod-settings-window').registerScheme(protocol, [require('./tools').schemePrivileges, require('./mod-host/sandbox').schemePrivileges]);
 // Quiet launches mute every window for this run, without persisting a setting.
 if (process.argv.includes('--quiet')) {
     app.on('web-contents-created', (_event, contents) => contents.setAudioMuted(true));
@@ -100,6 +101,8 @@ function getSharing() {
         // Remembered logins for a friend (the autologin mod): kept in an
         // HttpOnly cookie by the gateway, exchanged here like the host's own.
         remember: () => rememberLogin(),
+        // Mods' host routes (mod-host/), for /_friend/mod/<mod>/...
+        modHost: (name, request, meta) => modHosts().request(name, request, meta),
     });
 }
 // Sign in with Google or Apple (sharing/oidc.js, docs/FRIENDS_SHARING.md):
@@ -940,7 +943,18 @@ async function linkClientOwned(paths) {
 				env: { ...process.env, PATH: toolPath(), RAGNAROKMAC_STATE: stateDir() },
 				maxBuffer: 8 * 1024 * 1024,
 			},
-			(err, stdout, stderr) => (err ? reject(new Error(stderr || String(err))) : resolve(stdout))
+			(err, stdout, stderr) => {
+				if (err) return reject(new Error(stderr || String(err)));
+				// A link that succeeds can still have something to say about a
+				// mod: a table where the client never reads it, a name table with
+				// no ids. That goes to stderr, and was dropped here, so a mod that
+				// did nothing on screen gave no reason anywhere. The log viewer
+				// files these under App, as warnings.
+				for (const line of String(stderr).split(/\r?\n/)) {
+					if (line.trim()) appLog(`link-assets warning: ${line}`);
+				}
+				resolve(stdout);
+			}
 		);
 	});
 }
@@ -1002,6 +1016,24 @@ const SETTINGS_DEFAULTS = {
 	// spawn tables ask for. This is the dial players actually want; the limit
 	// above is only a safety net.
 	population_density: 100,
+	// Each area's share of that, 0-100 (Settings -> Population): towns,
+	// fields and dungeons. 100 everywhere is the world as authored.
+	population_town_pct: 100,
+	population_field_pct: 100,
+	population_dungeon_pct: 100,
+	// Companions: 'free' (draft any job from the panel, as before), 'panel'
+	// (hired from the panel: your class tier, your level, for a fee) or 'npc'
+	// (the same, from a Companion Recruiter in town). The fee is zeny per level
+	// of the companion and/or an item (id, amount; 0 = none).
+	population_companion_hire: 'free',
+	population_companion_fee_zeny: 1000,
+	population_companion_fee_item: 0,
+	population_companion_fee_item_amount: 0,
+	// Whether companions must hold the weapon a skill asks for, as players
+	// must. Off keeps the historic behaviour: any skill with any weapon. On,
+	// a companion whose gear does not fit a skill (a performer's default bow
+	// and its songs) skips it until it is given the right weapon.
+	population_skill_weapon_check: false,
 	// How many shells one player may recruit into their party at once. The
 	// server enforces this per recruiter (not per map), and rAthena's MAX_PARTY
 	// of 12 leaves a slot for real players, which is why the UI tops out at 11.
@@ -1710,9 +1742,10 @@ async function installModFrom(src) {
 	// refused is still installed -- the player may be about to switch era, and
 	// deleting it would be worse -- but they are told now rather than after a
 	// restart that appears to do nothing.
+	const on = await switchOnInstalled(name);
 	const note = await refusalNote(name);
 	appLog(`installed mod ${name} from ${src}`);
-	return `Installed ${name}.${note} Apply to restart the server.`;
+	return `Installed ${name}.${on}${note} Apply to restart the server.`;
 }
 
 /**
@@ -1737,6 +1770,31 @@ async function pickFolderOrArchive(message, filterName) {
 	}
 	const r = await dialog.showOpenDialog({ properties: props, filters: [{ name: filterName, extensions: ['zip', 'rar'] }] });
 	return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+}
+
+/** `--eras a,b` for a restore that chose eras; nothing when it did not. */
+function eraArgs(eras) {
+	if (eras === undefined) return [];
+	if (!Array.isArray(eras) || eras.some(e => !['renewal', 'prerenewal'].includes(e))) throw new Error('Unknown era to restore.');
+	return ['--eras', eras.length ? [...new Set(eras)].join(',') : 'none'];
+}
+
+/**
+ * A mod the player has just installed is switched on: pressing Install is
+ * the choice. Without this, a mod whose manifest says `"default": "off"`
+ * (meant for mods that ship with the app) installed and stayed off. Only for
+ * a fresh install -- an update or a reinstall keeps whatever the player chose.
+ * Returns a note to add to the message; failing to switch it on does not undo
+ * the install.
+ */
+async function switchOnInstalled(name) {
+	try {
+		const off = (await runStack(['mod-enable', name])).split('\n').map(l => l.replace(/^switched off /, '').trim()).filter(Boolean);
+		return off.length ? ` Switched off ${off.join(', ')}, which cannot be on with it.` : '';
+	} catch (e) {
+		appLog(`mod-enable ${name} failed: ${(e && e.message) || e}`);
+		return ` It could not be switched on (${(e && e.message) || e}); tick it in the list.`;
+	}
 }
 
 async function refusalNote(name) {
@@ -1829,9 +1887,10 @@ async function installFromSource(entry) {
 		} });
 		committed = true;
 		appLog(`${current ? 'updated' : 'installed'} mod ${entry.name} ${release.tag} from ${repo} (${asset.name}, sha256 ${sha256})`);
+		const on = present ? '' : await switchOnInstalled(entry.name);
 		const note = await refusalNote(entry.name);
 		const done = current ? `Updated ${entry.name} to ${version}.` : `Installed ${entry.name} ${version}.`;
-		return { name: entry.name, version, tag: release.tag, message: `${done}${note} Apply to restart the server.` };
+		return { name: entry.name, version, tag: release.tag, message: `${done}${on}${note} Apply to restart the server.` };
 	} finally {
 		if (!committed) source.discard(staged);
 	}
@@ -2023,10 +2082,17 @@ const handlers = {
 		const entry = mods.find(mod => mod.name === name);
 		// Install and update are the same thing for a mod published from its
 		// own repository: fetch the latest release, show it, swap it in.
-		if (entry && entry.source) return installFromSource(entry);
+		if (entry && entry.source) {
+			const installed = await installFromSource(entry);
+			modHostsChanged();
+			return installed;
+		}
+		const present = fs.existsSync(path.join(stateDir(), 'mods', name));
 		const result = await registry.install(name, { url, mods, modsDir: path.join(stateDir(), 'mods') });
 		appLog(`installed mod ${result.name} ${result.version} (${result.files} files)`);
-		return result;
+		modHostsChanged();
+		const on = present ? '' : await switchOnInstalled(result.name);
+		return on ? { ...result, message: `Installed ${result.name} ${result.version}.${on} Apply to restart the server.` } : result;
 	},
 	// The latest release of one source entry, for its page in the list. One
 	// lookup, cached with the rest, and only when somebody opens the entry.
@@ -2078,7 +2144,7 @@ const handlers = {
 		// the app would not run it, and the difference is the whole point of
 		// having a reason to show.
 		return out.split('\n').filter(Boolean).map(l => {
-			const [state, name, description, reason, origin, version, author, grants, settings, problems, settingsPage, dir, kind] = l.split('\t');
+			const [state, name, description, reason, origin, version, author, grants, settings, problems, settingsPage, dir, kind, client] = l.split('\t');
 			return {
 				name,
 				enabled: state === 'on',
@@ -2122,11 +2188,50 @@ const handlers = {
 				// `skin` or `cursor`: at most one of each is on, and Settings
 				// draws them as a choice rather than as independent switches.
 				kind: kind || '',
+				// Whether the mod has layers the game window loads (data/,
+				// System/, BGM/, client/), so Settings asks for the game to be
+				// reopened only after an Apply that changed one. Null from an
+				// older supervisor, which cannot tell: Settings then asks.
+				clientSide: client === undefined ? null : client === 'client',
 			};
 		});
 	},
-	set_mod_enabled: ({ name, enabled }) =>
-		runStack([enabled ? 'mod-enable' : 'mod-disable', name]),
+	set_mod_enabled: async ({ name, enabled }) => {
+		const out = await runStack([enabled ? 'mod-enable' : 'mod-disable', name]);
+		modHostsChanged();
+		return out;
+	},
+	// Settings -> Mods: the mods that declare a host route, what each may
+	// connect to, and whether the host has switched it on for that list.
+	mod_host_list: async () => {
+		const consent = modHostConsent();
+		return (await hostMods({ fresh: true })).map(m => m.host instanceof Error
+			? { name: m.name, error: m.host.message, connect: [], allowed: false }
+			: { name: m.name, connect: m.host.connect, allowed: consent.allowed(m.name, m.host.connect) });
+	},
+	// Consent is to the list shown: it is stored with it, and a mod update
+	// that changes the list reads as off again (mod-host/consent.js).
+	mod_host_set: async ({ name, enabled }) => {
+		const mod = (await hostMods({ fresh: true })).find(m => m.name === name);
+		if (!mod) throw new Error(`${name} has no host route.`);
+		if (mod.host instanceof Error) throw new Error(`${name}'s host route cannot run: ${mod.host.message}`);
+		modHostConsent().set(name, !!enabled, mod.host.connect);
+		if (!enabled) modHostsInstance?.stop(name);
+		appLog(`mod-host ${name}: ${enabled ? 'switched on; may connect to ' + (mod.host.connect.join(', ') || 'nothing') : 'switched off'}`);
+		return { allowed: !!enabled };
+	},
+	// api.host.request from the host's own game page (patches/client/
+	// HostRoutes.mjs). Friends reach the same manager through the gateway.
+	mod_host_request: async (args, event) => {
+		if (!callerIsLocalGame(event)) return { status: 404, type: 'application/json; charset=utf-8', body: '{"error":"Not found"}' };
+		const name = String(args.mod || '');
+		if (!require('./mod-host/manifest').NAME.test(name)) return { status: 404, type: 'application/json; charset=utf-8', body: '{"error":"Not found"}' };
+		const result = await modHosts().request(name, {
+			method: args.method, path: args.path, query: args.query,
+			headers: { 'content-type': args.type, accept: args.accept }, body: args.body ?? null,
+		}, { client: 'host', from: 'host' });
+		return { status: result.status, type: result.type, body: result.body.toString('utf8') };
+	},
 	// Values reach the supervisor as one JSON argument; it validates them
 	// against what the mod actually declares before writing anything. The
 	// client only reads them when its config is regenerated, so rebuild the
@@ -2151,7 +2256,9 @@ const handlers = {
 		// offer files only, so a mod folder could not be picked at all.
 		const src = await pickFolderOrArchive('Install a mod from…', 'Mod folder, .zip or .rar');
 		if (!src) return 'Cancelled.';
-		return installModFrom(src);
+		const installed = await installModFrom(src);
+		modHostsChanged();
+		return installed;
 	},
 	// A UI skin (official client format: a folder of .bmp files, or a zip
 	// of one) or a cursor pack (cursors.spr + cursors.act), made into a mod.
@@ -2193,6 +2300,8 @@ const handlers = {
 			throw new Error(`${name} could not be moved to the trash (${(e && e.message) || e}). Nothing was removed; you can delete the folder from Open mods folder.`);
 		}
 		appLog(`removed mod ${name} to the trash`);
+		modHostsChanged();
+		try { modHostConsent().forget(name); } catch { /* nothing was stored */ }
 		// The folder is already gone, so a failure past this point is reported
 		// but does not undo anything.
 		try {
@@ -2442,6 +2551,14 @@ const handlers = {
 				add(`nebula/${file}`, tail(p2, want));
 			}
 		}
+		// The last database restore, step by step, with what the database said
+		// if it refused the file. Restore used to report only "Restore failed",
+		// and a player could not tell us any more than that.
+		try {
+			const logs = path.join(stateDir(), 'logs');
+			const last = fs.readdirSync(logs).filter(f => /^restore-\d+\.log$/.test(f)).sort().pop();
+			if (last) add(`logs/${last}`, tail(path.join(logs, last), 80));
+		} catch { /* no restore has run */ }
 		// Guest image sizes against what the shipped archives say they should
 		// be. The report that led to this check could not distinguish a
 		// hypervisor problem from a rootfs that antivirus had truncated.
@@ -2638,8 +2755,10 @@ const handlers = {
 		if (getClientPaths().mode !== 'host') throw new Error('Hosting checks belong to your own server.');
 		return JSON.parse(await runStack(['hosting-check']));
 	},
+	// Both eras' databases in one .sql (stack/src/db_backup.rs).
 	db_backup: ({ path: p }) => runStack(['backup', p]),
-	db_restore: ({ path: p }) => runStack(['restore', p]),
+	db_inspect: async ({ path: p }) => JSON.parse(await runStack(['inspect', p])),
+	db_restore: ({ path: p, eras }) => runStack(['restore', p, ...eraArgs(eras)]),
 	// The whole world: every era's database, settings and installed mods, in
 	// one .tar.gz (stack/src/world.rs). Secrets are never in it.
 	db_backup_full: ({ path: p }) => runStack(['backup', '--full', p]),
@@ -2647,14 +2766,20 @@ const handlers = {
 	// restores, and leaves the game stopped. Starting again is the same work
 	// as Apply: the restored settings.json implies battle_conf, the restored
 	// mods a new overlay, so the server is brought up and the client relinked.
-	db_restore_full: async ({ path: p }) => {
+	// What a whole-world backup holds -- eras with their account and character
+	// counts, settings, mods -- for Restore to offer. Reads only.
+	db_inspect_full: async ({ path: p }) => JSON.parse(await runStack(['inspect', '--full', p])),
+	// `eras` and `settings` choose what is put back; left out, everything is.
+	db_restore_full: async ({ path: p, eras, settings }) => {
 		const client = getClientPaths();
 		if (client.mode === 'join') throw new Error('Restoring belongs to your own server. Switch to hosting your own server first.');
+		const choice = eraArgs(eras);
+		if (settings === false) choice.push('--no-settings');
 		const cycleAssets = assetServer.running;
 		if (cycleAssets) await assetsStop();
 		let out;
 		try {
-			out = (await runStack(['restore', '--full', p])).trim();
+			out = (await runStack(['restore', '--full', p, ...choice])).trim();
 		} catch (error) {
 			if (cycleAssets) await assetsStart().catch(() => {});
 			throw error;
@@ -3031,12 +3156,16 @@ function appLog(line) {
 // Adding a name here is a decision about what a page served by a stranger may
 // do to this machine — not a convenience.
 //
-// The one name on it, `remember_login`, checks for itself that the page is
-// this app's own game window on its own world (callerIsLocalGame) and answers
-// no to anything else, so a joined host's page gets nothing from it. Even on
-// our own page it can only remember the account that page is already logged
-// in to, and hand back a one-time login token for it.
-const GAME_PAGE_HANDLERS = new Set(['remember_login']);
+// `remember_login` checks for itself that the page is this app's own game
+// window on its own world (callerIsLocalGame) and answers no to anything else,
+// so a joined host's page gets nothing from it. Even on our own page it can
+// only remember the account that page is already logged in to, and hand back a
+// one-time login token for it.
+//
+// `mod_host_request` makes the same check, and then reaches only what a
+// friend could reach through the gateway: a mod's host route, if the host has
+// switched it on (mod-host/), with the same limits.
+const GAME_PAGE_HANDLERS = new Set(['remember_login', 'mod_host_request']);
 
 // The host's own game window, on the host's own world: the main frame of the
 // game window, at the asset server's origin, while not joined to anyone.
@@ -3126,6 +3255,64 @@ function modSettingsWindows() {
 	return modSettingsController;
 }
 
+// Mods' host routes (mod-host/, docs/MODDING.md "Host routes"): a mod's own
+// JavaScript that answers requests from invited friends and from the host's
+// own game page, in a hidden sandboxed window that can reach only what its
+// mod.json declares -- and nothing at all until the host switches it on.
+let modHostsInstance = null;
+let modHostTransport = null;
+let hostModsCache = null;
+function modHostConsent() {
+	return require('./mod-host/consent').createConsentStore(path.join(stateDir(), 'mod-host.json'));
+}
+// Every installed mod with a "host" section: { name, enabled, host }, where
+// host is the validated declaration or an Error saying what is wrong with it.
+// Cached briefly, since each listing asks the supervisor.
+async function hostMods({ fresh = false } = {}) {
+	if (!fresh && hostModsCache && Date.now() - hostModsCache.at < 10000) return hostModsCache.mods;
+	const { readHost } = require('./mod-host/manifest');
+	const mods = (await handlers.list_mods())
+		.filter(m => m.dir)
+		.map(m => ({ name: m.name, enabled: m.enabled && !m.refused, host: readHost(m.dir, m.name, { ports: gamePorts() }) }))
+		.filter(m => m.host);
+	hostModsCache = { at: Date.now(), mods };
+	return mods;
+}
+// A mod was installed, removed, updated or switched: running handlers are
+// stopped, and the next request starts whatever is current.
+function modHostsChanged() {
+	hostModsCache = null;
+	modHostsInstance?.stopAll();
+}
+function modHosts() {
+	return modHostsInstance ||= new (require('./mod-host/manager').ModHostManager)({
+		resolve: async name => {
+			if (tearingDown) return null;
+			const mod = (await hostMods()).find(m => m.name === name);
+			if (!mod || !mod.enabled || mod.host instanceof Error) return null;
+			return modHostConsent().allowed(name, mod.host.connect) ? mod.host : null;
+		},
+		transport: decl => {
+			modHostTransport ||= require('./mod-host/sandbox').create({
+				BrowserWindow, session,
+				preload: path.join(__dirname, 'mod-host', 'preload.js'),
+				log: (name, text) => modHosts().hostLog(name, text),
+			});
+			return modHostTransport(decl);
+		},
+		log: appLog,
+	});
+}
+// The hidden handler windows count as windows, so without this closing the
+// last real one would leave the app running with nothing on screen.
+app.on('browser-window-created', (_event, win) => {
+	win.once('closed', () => {
+		if (!modHostsInstance) return;
+		const { isHostWindow } = require('./mod-host/sandbox');
+		if (!BrowserWindow.getAllWindows().some(other => !other.isDestroyed() && !isHostWindow(other))) modHostsInstance.stopAll();
+	});
+});
+
 // Only our exact bundled top-level pages own the host controls. A generic
 // file:// check would also grant them to any other local document.
 function callerIsOwnPage(event) {
@@ -3174,12 +3361,27 @@ ipcMain.handle('invoke', async (event, name, args) => {
 // Menu
 // ---------------------------------------------------------------------------
 
+// GPL-3.0: whoever has the app can get its source. The About panel says where,
+// and the menu item below opens it (macOS draws the panel's credits as plain text).
+const SOURCE_URL = 'https://github.com/Flux159/ragnarokoffline.app';
+
+function setAboutPanel() {
+	app.setAboutPanelOptions({
+		applicationName: app.name,
+		applicationVersion: app.getVersion(),
+		copyright: 'Free software under the GNU General Public License v3.0 (GPL-3.0).',
+		credits: `Source code: ${SOURCE_URL}`,
+		website: SOURCE_URL,
+	});
+}
+
 function buildMenu() {
 	return Menu.buildFromTemplate([
 		{
 			label: app.name,
 			submenu: [
 				{ role: 'about' },
+				{ label: 'Source Code on GitHub', click: () => shell.openExternal(SOURCE_URL) },
 				{ type: 'separator' },
 				{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings },
 				{ type: 'separator' },
@@ -3234,6 +3436,7 @@ function stackEnv() {
 // responding until the containers finished stopping. Quitting must stay
 // responsive even though the work behind it is slow.
 async function teardownAsync() {
+	modHostsInstance?.stopAll();
 	// The account stays as it is: the server is going down with it.
 	if (agentPlayInstance?.running()) await agentPlayInstance.stop({ disableAccount: false }).catch(() => {});
     ++sharingStartRequest;
@@ -3319,7 +3522,7 @@ if (!app.requestSingleInstanceLock()) {
 			return;
 		}
 		// Otherwise it is "show me the game", and the window already exists.
-		const win = windows.game || BrowserWindow.getAllWindows()[0];
+		const win = windows.game || BrowserWindow.getAllWindows().find(w => !require('./mod-host/sandbox').isHostWindow(w));
 		if (win && !win.isDestroyed()) {
 			if (win.isMinimized()) win.restore();
 			win.focus();
@@ -3352,6 +3555,7 @@ app.whenReady().then(() => {
 		if (entry.installed) appLog(`desktop entry ${entry.updated ? 'updated' : 'written'}: ${entry.file}`);
 		else if (entry.file) appLog(`desktop entry not written: ${entry.reason}`);
 	}
+	setAboutPanel();
 	Menu.setApplicationMenu(buildMenu());
 	// Only the listener and its files: the agent's window waits for an agent.
 	try {

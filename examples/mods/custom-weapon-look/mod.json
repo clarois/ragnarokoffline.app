@@ -1,0 +1,7 @@
+{
+  "name": "custom-weapon-look",
+  "version": "1.0.0",
+  "author": "Ragnarok Offline",
+  "description": "Example: a dagger with a look of its own (a recoloured stock dagger for every class, made by scripts/mkweapon.py). Get it with @item 50101.",
+  "requires": { "app": ">=1.4.7", "era": "any" }
+}

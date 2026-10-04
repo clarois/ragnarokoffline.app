@@ -1,0 +1,77 @@
+//===== Ragnarok Offline ==========================================
+//= Companion Recruiter
+//===== Description: ==============================================
+//= Hires out companions when Settings -> Population -> Companions is
+//= "Hired from a recruiter" (population_engine_companion_hire: 2):
+//= a companion of the player's own class tier, at their level, for
+//= the fee set there. In any other mode every recruiter hides itself
+//= at start-up, and the Companions panel drafts as before.
+//=
+//= The rules and the fee live in the engine (population_engine.cpp,
+//= population_engine_companion_hire); this only asks and shows.
+//=================================================================
+
+-	script	Companion Recruiter::CompanionRecruiter	-1,{
+	.@n$ = "[Companion Recruiter]";
+	if (getbattleflag("population_engine_companion_hire") != 2) {
+		mes .@n$;
+		mes "I'm not hiring anyone out right now.";
+		close;
+	}
+	.@jobs$ = companion_hire_jobs();
+	if (.@jobs$ == "") {
+		mes .@n$;
+		mes "I have nobody of your standing on my books right now.";
+		close;
+	}
+	.@count = explode(.@list$, .@jobs$, ":");
+	.@fee = companion_hire_fee();
+	.@item = getbattleflag("population_engine_companion_hire_item");
+	.@amount = getbattleflag("population_engine_companion_hire_item_amount");
+	.@cost$ = "";
+	if (.@fee > 0)
+		.@cost$ = F_InsertComma(.@fee) + " zeny";
+	if (.@item > 0 && .@amount > 0)
+		.@cost$ = .@cost$ + (.@cost$ != "" ? " and " : "") + .@amount + " " + getitemname(.@item);
+	mes .@n$;
+	mes "Looking for someone to travel with?";
+	mes "I can find you a companion of your own standing, at your level.";
+	if (.@cost$ != "")
+		mes "My fee is " + .@cost$ + ".";
+	next;
+	.@menu$ = implode(.@list$, ":") + ":Never mind";
+	.@i = select(.@menu$) - 1;
+	if (.@i >= .@count) {
+		mes .@n$;
+		mes "Come back any time.";
+		close;
+	}
+	mes .@n$;
+	mes "A " + .@list$[.@i] + "? Let me see who's free...";
+	close2;
+	.@ok = companion_hire(.@list$[.@i]);
+	end;
+
+OnInit:
+	if (getbattleflag("population_engine_companion_hire") != 2)
+		disablenpc strnpcinfo(0);
+	end;
+}
+
+// Beside each town's healer (npc/custom/healer.txt), two cells east.
+alberta,27,240,6	duplicate(CompanionRecruiter)	Companion Recruiter#alb	4_M_JOB_KNIGHT1
+aldebaran,137,118,6	duplicate(CompanionRecruiter)	Companion Recruiter#alde	4_M_JOB_KNIGHT1
+amatsu,202,79,4	duplicate(CompanionRecruiter)	Companion Recruiter#ama	4_M_JOB_KNIGHT1
+comodo,186,158,6	duplicate(CompanionRecruiter)	Companion Recruiter#com	4_M_JOB_KNIGHT1
+einbroch,59,202,6	duplicate(CompanionRecruiter)	Companion Recruiter#einbr	4_M_JOB_KNIGHT1
+geffen,117,72,6	duplicate(CompanionRecruiter)	Companion Recruiter#gef	4_M_JOB_KNIGHT1
+hugel,91,150,6	duplicate(CompanionRecruiter)	Companion Recruiter#hug	4_M_JOB_KNIGHT1
+izlude,123,150,6	duplicate(CompanionRecruiter)	Companion Recruiter#izl	4_M_JOB_KNIGHT1
+lighthalzen,154,100,6	duplicate(CompanionRecruiter)	Companion Recruiter#lhz	4_M_JOB_KNIGHT1
+morocc,155,97,6	duplicate(CompanionRecruiter)	Companion Recruiter#mor	4_M_JOB_KNIGHT1
+payon,181,106,4	duplicate(CompanionRecruiter)	Companion Recruiter#pay	4_M_JOB_KNIGHT1
+prontera,164,193,4	duplicate(CompanionRecruiter)	Companion Recruiter#prt	4_M_JOB_KNIGHT1
+rachel,127,116,6	duplicate(CompanionRecruiter)	Companion Recruiter#rac	4_M_JOB_KNIGHT1
+umbala,107,148,3	duplicate(CompanionRecruiter)	Companion Recruiter#umb	4_M_JOB_KNIGHT1
+veins,219,121,4	duplicate(CompanionRecruiter)	Companion Recruiter#ve	4_M_JOB_KNIGHT1
+yuno,166,45,4	duplicate(CompanionRecruiter)	Companion Recruiter#yuno	4_M_JOB_KNIGHT1

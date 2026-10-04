@@ -28,6 +28,43 @@
       "files": []
     },
     {
+      "name": "autoloot",
+      "version": "1.0.0",
+      "author": "BlaXun",
+      "description": "An Autoloot window in game: loot every drop at or below a rarity you choose, whole item types such as cards, and a list of exact items -- with a monster check that shows what you would pick up. Works even where @autoloot is kept for GMs, and your item list is kept across logins.",
+      "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/autoloot",
+      "tags": [
+        "drops",
+        "loot",
+        "quality-of-life"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "any",
+        "app": ">=1.4.8"
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "f64b046033070073fb4d9ef8e12fe8a4e76e7fdb27834518f4f9e413c7d3fffa"
+        },
+        {
+          "path": "client/index.js",
+          "sha256": "0b824bfde3bd66d0472f50f0715e6226b020f025593bb31d13d7e914893fc9b4"
+        },
+        {
+          "path": "mod.json",
+          "sha256": "99d831b471098d1e110120d4698589960c9be8b2d46d7e0731a056103589cad5"
+        },
+        {
+          "path": "npc/autoloot.txt",
+          "sha256": "ca6a6ec16475f0a6410b997078179e3c859fbdd704af3ca873176f108d1e1603"
+        }
+      ]
+    },
+    {
       "name": "blaze-shield",
       "version": "1.0.0",
       "author": "BlaXun, Ragnarok Offline",
@@ -139,10 +176,56 @@
       ]
     },
     {
-      "name": "exp-card",
+      "name": "card-remover",
       "version": "1.0.0",
       "author": "BlaXun",
-      "description": "Every monster kill has a chance to drop a tiered Exp Card, bound to the killer for the standard pickup window. Two families -- Base Exp Cards and Job Exp Cards -- each with ten levels; higher-level mobs drop higher-level cards. A level 10 card grants roughly 5% of the exp a level-98 character needs for the next level, and each lower level is about half the one above it. Streamlines offline levelling without touching per-mob drop tables.",
+      "description": "A Card Remover in Prontera, Geffen, Alberta, Morroc, Payon, Izlude and Al De Baran takes one card out of the equipment you are wearing -- the item and the card both survive. He is paid in cards, not zeny: every card is worth points by its tier, and the cost depends on the tier of the card you free. Pick the card and your payment in his window.",
+      "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/card-remover",
+      "tags": [
+        "cards",
+        "equipment",
+        "npc",
+        "quality-of-life"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "any",
+        "app": ">=1.4.8"
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "6752389d02d5f8cefb6dd99262339fd7b7e829652351576dfd0386fa048f9c5b"
+        },
+        {
+          "path": "System/jobname.lub",
+          "sha256": "69bc24fecf683920b3cd7dc47e66e541aaac1a31ff0b7687c13fecabacff7043"
+        },
+        {
+          "path": "client/index.js",
+          "sha256": "e954f09cf861826021c51eae98d2a70b623c3d341456d713948d8429fa3c7c44"
+        },
+        {
+          "path": "mod.json",
+          "sha256": "24a7d37523fbc598ea4f27d54916d7ae248a8390a745be7710491e7c81cadee2"
+        },
+        {
+          "path": "npc/card_remover.txt",
+          "sha256": "2af3527d53fcd60a3b8195a22b3e352450f2d2c544911054952b4945718f6062"
+        },
+        {
+          "path": "npc/card_tiers.txt",
+          "sha256": "0c28dedaef78ca51c35fd173fa8b2fd8864bccf2fdc9082f25186b96a20e883d"
+        }
+      ]
+    },
+    {
+      "name": "exp-card",
+      "version": "1.1.0",
+      "author": "BlaXun",
+      "description": "Every monster kill has a chance to drop a tiered Exp Card, bound to the killer for the standard pickup window. Two families -- Base Exp Cards and Job Exp Cards -- each with ten levels; higher-level mobs drop higher-level cards. At 1x, a level 10 card grants roughly 5% of the exp a level-98 character needs for the next level, and each lower level is about half the one above it; card exp scales with the server's Base/Job EXP rates. Streamlines offline levelling without touching per-mob drop tables.",
       "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/exp-card",
       "tags": [
         "drops",
@@ -162,15 +245,15 @@
       "files": [
         {
           "path": "README.md",
-          "sha256": "41bf812d670f32ad1641f1e1b171a20ed33fb5bd94e2f9604f42e2667a1fc008"
+          "sha256": "8a92b7ab55ec3b76f42385c2ecaa6a6c737f7b1620f0605e7ad56524111e05e9"
         },
         {
           "path": "System/itemInfo.lua",
-          "sha256": "65998dffa84ae55470b28231d7f1d990ffbc50b72196e263ecb4fc712feb133e"
+          "sha256": "b105f6a21ab7f12bb67c16b87b928275bac605850b39707f827c73eec8a8fa8a"
         },
         {
           "path": "db/item_db.yml",
-          "sha256": "20b3d15e771766dfe8ad32d2277c4eb358f8456997760d7f3f34783868a14d9f"
+          "sha256": "fb5d7eb528238a877dac9be5d5c0125efb6478c378cfc6b83cc8e70e44b2026d"
         },
         {
           "path": "images/exp-card.png",
@@ -182,11 +265,66 @@
         },
         {
           "path": "mod.json",
-          "sha256": "4e7d04f78ecc9dc979f8966abb31e24f828131a01d7c55a3a99d9d7b26eb58e7"
+          "sha256": "952e56168647401194448832c4ffbdb464ee959d0d87ec88acfc1800bc93cdca"
         },
         {
           "path": "npc/exp_card.txt",
           "sha256": "e06490d46d57710a922eb67fffdb3f584e98725fb8bebb1a4264d8b0536bd774"
+        }
+      ]
+    },
+    {
+      "name": "map-spawn-rate",
+      "version": "1.0.0",
+      "author": "BlaXun",
+      "description": "Change how many monsters spawn on any map you choose. Search maps by name or by the monsters on them in the Settings\u2026 window, give each one a rate (200% doubles it, 50% halves it), and apply. Bosses and other single-monster spawns are left alone.",
+      "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/map-spawn-rate",
+      "tags": [
+        "maps",
+        "monsters",
+        "quality-of-life",
+        "rates",
+        "spawns"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "any",
+        "app": ">=1.4.6"
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "d7836c415a366ef0a71dc688ba1c81eac1acdcd1ce6b24ffc333671de86ed8b9"
+        },
+        {
+          "path": "db/extension_db.yml",
+          "sha256": "da89ad3549cec30290569a052ba0c746410b8f2f3564b2ab27511e5ae2ecaf6d"
+        },
+        {
+          "path": "images/icon.png",
+          "sha256": "bc7d761785830ca1dfa14f0581be8dfa41a145ff0b8cf1209e382343fbba5cb1"
+        },
+        {
+          "path": "images/map-spawn-rate.png",
+          "sha256": "1c2fed692d5e087cf9306c2d336b0c6268ce27f7b6f3b0958058aaa93703e725"
+        },
+        {
+          "path": "mod.json",
+          "sha256": "5a0822a0c4e7761e7a7c012799c6f8d56a3a0c8dbe31d7d22b47b550638adea4"
+        },
+        {
+          "path": "npc/map_spawn_rate.txt",
+          "sha256": "cbb80265735b670ff60c2826aa34beb4b609a309dd37812e48c2fa9fcb4044fa"
+        },
+        {
+          "path": "settings/index.html",
+          "sha256": "b47b9da014106cdc9685bf2d2fe758c541159518609729aa3ff119cbb36e0a2f"
+        },
+        {
+          "path": "settings/maps.json",
+          "sha256": "59a8c09cdbcf23e8f870a484f010087644384cb0fc5be73438cb9969dd9071fc"
         }
       ]
     },
@@ -226,6 +364,80 @@
         {
           "path": "mod.json",
           "sha256": "e256016b9a6e83b3b1fea49f281866c4002f0e5dcfb511fa7d404c920792f8aa"
+        }
+      ]
+    },
+    {
+      "name": "prontera-vendors",
+      "version": "1.1.0",
+      "author": "BlaXun",
+      "description": "A living player market on Prontera's main road. Fake players run real vending stalls on the inner sidewalks (cards, weapons and armor by class, refined gear, potions, gems, pet eggs, loot from every dungeon and more) and real buying stores on the outer sidewalks that buy your ores, cards, boxes and loot. Prices follow a real server's market (kRO), stalls undercut each other and change as their owners come and go, and everything is tunable in Settings. Needs the population engine switched on.",
+      "homepage": "",
+      "tags": [
+        "buying-store",
+        "economy",
+        "market",
+        "population",
+        "prontera",
+        "vending"
+      ],
+      "icon": "images/icon.png",
+      "screenshots": [
+        "images/prontera-vendors.png"
+      ],
+      "requires": {
+        "mods": [],
+        "era": "any",
+        "app": ">=1.4.5"
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "48c2f76a22e749d49d56d199d1b478a5d6d8b9b6c2002f9c0fc3308305f354e8"
+        },
+        {
+          "path": "db/population_vendor_pop.yml",
+          "sha256": "19a85098e167ef933a637a81a04b20250b9dca791e2e42c666ebfa259cf7e031"
+        },
+        {
+          "path": "db/population_vendor_prices/prontera-vendors.csv",
+          "sha256": "0f0ebc588f375a94f5847c817c3d4086f7f5c9e4d115c85390dc1a80cbc340c3"
+        },
+        {
+          "path": "db/population_vendors.yml",
+          "sha256": "02421e972646a725ed6879bba29b21c71f8a16aa712cda4612b9bf0b435ea308"
+        },
+        {
+          "path": "images/icon.png",
+          "sha256": "7970e5e7d060154e80725ef4653c6b2196b74cab00f022e2f46fc3a4f99052fd"
+        },
+        {
+          "path": "images/prontera-vendors.png",
+          "sha256": "b354081d75c1abc5ccb458b23748cb88f38c96279b21e3ece9f2b712c5028129"
+        },
+        {
+          "path": "mod.json",
+          "sha256": "dccaeb32fab5c841accfb5f3d6c64051eb5a513f3c0c6dde92e00212512b4978"
+        },
+        {
+          "path": "npc/prontera-vendors-newer.txt",
+          "sha256": "bc8ad6de84fe69e05aa7d29e7b6c8673c5e3c5d94a65804b496644a879323da1"
+        },
+        {
+          "path": "npc/prontera-vendors.txt",
+          "sha256": "d85a1bd2ee97c8e8de40a352c59943f68bba42115f6148a0f07cbdf597559021"
+        },
+        {
+          "path": "pre-re/db/population_vendor_pop.yml",
+          "sha256": "94d4d4374a5f3003cf517fe0797ea445871a66894e32455c7c5e411db5bf0800"
+        },
+        {
+          "path": "pre-re/db/population_vendor_prices/prontera-vendors.csv",
+          "sha256": "655f3b987f44ddf2fc0d87312ccc2dbcd2c05a17b0477a21b33aed3112b39501"
+        },
+        {
+          "path": "pre-re/db/population_vendors.yml",
+          "sha256": "efa841259ae38a63d34531ee4e44b8648009777427e68eab60b5eb5ca3e1eb0c"
         }
       ]
     },
@@ -277,16 +489,25 @@
       "name": "standart-npc",
       "version": "",
       "author": "MondoTruth and the Ragnarok Offline community",
-      "description": "Warper, Buffer, Job Master, Kafra, Refiner, Bounty Hunter and a town's worth of other custom NPCs in one mod. Every NPC can be switched off on its own from the mod's Settings\u2026 window. Some NPCs need the Cash Shop for full functionality.",
+      "description": "Warper, Buffer with 1st\u20134th class buffs, Job Master, Kafra, Refiners, Bounty Hunter, an MVP dungeon, training dummies and a town's worth of other custom NPCs in one mod, for both eras. Switch any NPC off and pick the Buffer's buffs in the mod's Settings\u2026 window. Some NPCs need the Cash Shop for full functionality.",
       "homepage": "https://github.com/MondoTruth/standart-npc",
       "tags": [
+        "4th-class",
+        "bounty",
         "buffer",
+        "mvp",
         "npc",
         "quality-of-life",
+        "refine",
         "warper"
       ],
-      "icon": "",
-      "screenshots": [],
+      "icon": "images/icon.png",
+      "screenshots": [
+        "images/prontera-fountain.png",
+        "images/prontera-square.png",
+        "images/settings.png",
+        "images/settings-buffer.png"
+      ],
       "requires": {
         "mods": [],
         "era": "",
@@ -296,7 +517,28 @@
         "github": "MondoTruth/standart-npc",
         "asset": "standart-npc-*.zip"
       },
-      "files": []
+      "files": [
+        {
+          "path": "images/icon.png",
+          "sha256": "c3989debb761bf0b0acfc98b3601c846206d8fda6128bd8fa20a1556ca2b125b"
+        },
+        {
+          "path": "images/prontera-fountain.png",
+          "sha256": "e0509df7b1d561ddb0e946989c57f1feb38d1fb3488ec8715b0c5d0e033fcb01"
+        },
+        {
+          "path": "images/prontera-square.png",
+          "sha256": "d3a160118c5e958d700bfa3bbaf2bb9575b6e19f428603973012ad25a679cb59"
+        },
+        {
+          "path": "images/settings-buffer.png",
+          "sha256": "7bcff49b297eb808acd9595a9d03da92bc7583f9f9c2d6ba58d929623a794952"
+        },
+        {
+          "path": "images/settings.png",
+          "sha256": "3c406adc5cf60d554d2b5e3d3a0e3815002bbc2144c718e9d84cb4b52eb0051a"
+        }
+      ]
     },
     {
       "name": "steal-cards",

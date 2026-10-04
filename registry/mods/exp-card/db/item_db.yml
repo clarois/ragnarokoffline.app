@@ -9,12 +9,12 @@
 #   50051..50060  Base_Exp_Card_1  .. Base_Exp_Card_10   -- grant BASE exp
 #   50061..50070  Job_Exp_Card_1   .. Job_Exp_Card_10    -- grant JOB exp
 #
-# Exp per card is a roughly geometric curve, anchored at Lv 10 = 60,000
-# (~5% of the Renewal level-98 base-exp requirement, ~1.25M in
-# db/re/job_exp.yml). Each level down halves-or-so, matching the shape
-# of rAthena's own NextBaseExp curve -- so a Lv 1 card at player level 5
-# is roughly the same 3-5% chunk of the next level that a Lv 10 card is
-# at player level 98:
+# Exp per card at a 1x rate is a roughly geometric curve, anchored at
+# Lv 10 = 60,000 (~5% of the Renewal level-98 base-exp requirement,
+# ~1.25M in db/re/job_exp.yml). Each level down halves-or-so, matching
+# the shape of rAthena's own NextBaseExp curve -- so a Lv 1 card at
+# player level 5 is roughly the same 3-5% chunk of the next level that a
+# Lv 10 card is at player level 98:
 #
 #   Lv 1  ->     100      Lv 6  ->  4,000
 #   Lv 2  ->     250      Lv 7  ->  7,500
@@ -23,8 +23,17 @@
 #   Lv 5  ->   2,000      Lv 10 -> 60,000
 #
 # Job cards use the same numbers on the job axis. If you want a different
-# curve, edit the twenty scripts below -- and keep System/itemInfo.lua's
-# EXP_BY_LEVEL table in sync so descriptions still show the right +N.
+# curve, edit the twenty scripts below.
+#
+# Each amount is scaled by the server's kill-exp rate -- base_exp_rate for
+# Base cards, job_exp_rate for Job cards, read live with getbattleflag --
+# so a card stays the same share of the exp a kill gives at any rate. It
+# is granted with getexp2, not getexp: getexp would multiply by
+# quest_exp_rate on top, and its other adjustments (guild exp tax, Battle
+# Manuals) would make the "+N" message disagree with what was granted.
+# getexp2 grants exactly .@exp, so the message is always the real number.
+# The client tooltip (System/itemInfo.lua) cannot know the rate, so it
+# names no number at all.
 #
 # EquipLevelMin gates use to a player who is at least "expected level for
 # this tier". rAthena's pc_isUseitem checks it before consuming the item,
@@ -53,8 +62,9 @@ Body:
     Weight: 1
     EquipLevelMin: 1
     Script: |
-      getexp 100, 0;
-      dispbottom "Base Exp Card Lv1: +100 base experience.";
+      .@exp = 100 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv1: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50052
     AegisName: Base_Exp_Card_2
@@ -64,8 +74,9 @@ Body:
     Weight: 1
     EquipLevelMin: 11
     Script: |
-      getexp 250, 0;
-      dispbottom "Base Exp Card Lv2: +250 base experience.";
+      .@exp = 250 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv2: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50053
     AegisName: Base_Exp_Card_3
@@ -75,8 +86,9 @@ Body:
     Weight: 1
     EquipLevelMin: 21
     Script: |
-      getexp 500, 0;
-      dispbottom "Base Exp Card Lv3: +500 base experience.";
+      .@exp = 500 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv3: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50054
     AegisName: Base_Exp_Card_4
@@ -86,8 +98,9 @@ Body:
     Weight: 1
     EquipLevelMin: 31
     Script: |
-      getexp 1000, 0;
-      dispbottom "Base Exp Card Lv4: +1,000 base experience.";
+      .@exp = 1000 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv4: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50055
     AegisName: Base_Exp_Card_5
@@ -97,8 +110,9 @@ Body:
     Weight: 1
     EquipLevelMin: 41
     Script: |
-      getexp 2000, 0;
-      dispbottom "Base Exp Card Lv5: +2,000 base experience.";
+      .@exp = 2000 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv5: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50056
     AegisName: Base_Exp_Card_6
@@ -108,8 +122,9 @@ Body:
     Weight: 1
     EquipLevelMin: 51
     Script: |
-      getexp 4000, 0;
-      dispbottom "Base Exp Card Lv6: +4,000 base experience.";
+      .@exp = 4000 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv6: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50057
     AegisName: Base_Exp_Card_7
@@ -119,8 +134,9 @@ Body:
     Weight: 1
     EquipLevelMin: 61
     Script: |
-      getexp 7500, 0;
-      dispbottom "Base Exp Card Lv7: +7,500 base experience.";
+      .@exp = 7500 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv7: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50058
     AegisName: Base_Exp_Card_8
@@ -130,8 +146,9 @@ Body:
     Weight: 1
     EquipLevelMin: 71
     Script: |
-      getexp 15000, 0;
-      dispbottom "Base Exp Card Lv8: +15,000 base experience.";
+      .@exp = 15000 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv8: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50059
     AegisName: Base_Exp_Card_9
@@ -141,8 +158,9 @@ Body:
     Weight: 1
     EquipLevelMin: 81
     Script: |
-      getexp 30000, 0;
-      dispbottom "Base Exp Card Lv9: +30,000 base experience.";
+      .@exp = 30000 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv9: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   - Id: 50060
     AegisName: Base_Exp_Card_10
@@ -152,8 +170,9 @@ Body:
     Weight: 1
     EquipLevelMin: 91
     Script: |
-      getexp 60000, 0;
-      dispbottom "Base Exp Card Lv10: +60,000 base experience.";
+      .@exp = 60000 * getbattleflag("base_exp_rate") / 100;
+      if (.@exp > 0) getexp2 .@exp, 0;
+      dispbottom "Base Exp Card Lv10: +" + callfunc("F_InsertComma", .@exp) + " base experience.";
 
   # -- Job Exp Cards -------------------------------------------------------
   - Id: 50061
@@ -164,8 +183,9 @@ Body:
     Weight: 1
     EquipLevelMin: 1
     Script: |
-      getexp 0, 100;
-      dispbottom "Job Exp Card Lv1: +100 job experience.";
+      .@exp = 100 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv1: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50062
     AegisName: Job_Exp_Card_2
@@ -175,8 +195,9 @@ Body:
     Weight: 1
     EquipLevelMin: 11
     Script: |
-      getexp 0, 250;
-      dispbottom "Job Exp Card Lv2: +250 job experience.";
+      .@exp = 250 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv2: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50063
     AegisName: Job_Exp_Card_3
@@ -186,8 +207,9 @@ Body:
     Weight: 1
     EquipLevelMin: 21
     Script: |
-      getexp 0, 500;
-      dispbottom "Job Exp Card Lv3: +500 job experience.";
+      .@exp = 500 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv3: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50064
     AegisName: Job_Exp_Card_4
@@ -197,8 +219,9 @@ Body:
     Weight: 1
     EquipLevelMin: 31
     Script: |
-      getexp 0, 1000;
-      dispbottom "Job Exp Card Lv4: +1,000 job experience.";
+      .@exp = 1000 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv4: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50065
     AegisName: Job_Exp_Card_5
@@ -208,8 +231,9 @@ Body:
     Weight: 1
     EquipLevelMin: 41
     Script: |
-      getexp 0, 2000;
-      dispbottom "Job Exp Card Lv5: +2,000 job experience.";
+      .@exp = 2000 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv5: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50066
     AegisName: Job_Exp_Card_6
@@ -219,8 +243,9 @@ Body:
     Weight: 1
     EquipLevelMin: 51
     Script: |
-      getexp 0, 4000;
-      dispbottom "Job Exp Card Lv6: +4,000 job experience.";
+      .@exp = 4000 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv6: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50067
     AegisName: Job_Exp_Card_7
@@ -230,8 +255,9 @@ Body:
     Weight: 1
     EquipLevelMin: 61
     Script: |
-      getexp 0, 7500;
-      dispbottom "Job Exp Card Lv7: +7,500 job experience.";
+      .@exp = 7500 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv7: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50068
     AegisName: Job_Exp_Card_8
@@ -241,8 +267,9 @@ Body:
     Weight: 1
     EquipLevelMin: 71
     Script: |
-      getexp 0, 15000;
-      dispbottom "Job Exp Card Lv8: +15,000 job experience.";
+      .@exp = 15000 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv8: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50069
     AegisName: Job_Exp_Card_9
@@ -252,8 +279,9 @@ Body:
     Weight: 1
     EquipLevelMin: 81
     Script: |
-      getexp 0, 30000;
-      dispbottom "Job Exp Card Lv9: +30,000 job experience.";
+      .@exp = 30000 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv9: +" + callfunc("F_InsertComma", .@exp) + " job experience.";
 
   - Id: 50070
     AegisName: Job_Exp_Card_10
@@ -263,5 +291,6 @@ Body:
     Weight: 1
     EquipLevelMin: 91
     Script: |
-      getexp 0, 60000;
-      dispbottom "Job Exp Card Lv10: +60,000 job experience.";
+      .@exp = 60000 * getbattleflag("job_exp_rate") / 100;
+      if (.@exp > 0) getexp2 0, .@exp;
+      dispbottom "Job Exp Card Lv10: +" + callfunc("F_InsertComma", .@exp) + " job experience.";

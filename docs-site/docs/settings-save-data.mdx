@@ -2,10 +2,15 @@
 
 Your characters and accounts, and the folder everything lives in.
 
-## Back up
+There are two kinds of backup. **Back up database** keeps your characters and
+accounts. **Back up everything** keeps those too, plus your settings and
+installed mods. Each has a matching restore.
 
-Writes the whole database to a file you choose — every account, character,
-item, guild and storage, for the era you are on.
+## Back up database
+
+Writes one `.sql` file with every account, character, item, guild and storage
+of **both** eras, renewal and pre-renewal. Your settings and installed mods are
+not in it; use Back up everything for those.
 
 Players are briefly disconnected so their latest state is saved consistently.
 That is a few seconds, not a stop.
@@ -13,11 +18,46 @@ That is a few seconds, not a stop.
 Worth doing before an app update, before enabling internet hosting, and before
 any experiment you would mind losing.
 
-## Restore
+## Restore database
 
-Replaces the current database with a backup file, and **keeps the game stopped
-until you restart it**. A backup of the database it replaced is kept, so a
-restore is itself undoable.
+Opens a `.sql` backup and shows what it holds — which version made it and when,
+and how many accounts and characters each era has — with a checkbox for each
+era. What you leave unticked stays as it is. The era you have now is saved
+first, and you are shown where, so a restore is itself undoable. The game stays
+stopped until you restart the server.
+
+A `.sql` backup from 1.4.3 or before holds one era and does not say which. It
+restores into the era you have set in Settings → General → **Game era**, so set
+that first.
+
+## Back up everything
+
+Writes one `.tar.gz` with both eras' characters and accounts, **your settings
+and your installed mods**: everything you need to keep a world or move it to
+another computer. Sharing and Cloudflare credentials and your game client's
+files are never in it; your accounts' passwords are, so keep it private.
+
+## Restore everything
+
+Opens a `.tar.gz` backup and shows what it holds, with a checkbox for each part:
+
+- **Renewal characters & accounts**
+- **Pre-renewal characters & accounts**
+- **Settings & installed mods**
+
+What you leave unticked stays as it is. Everything as it is now is saved first,
+and you are shown where. The server restarts with the restored world.
+
+## When a restore fails
+
+The message says what the database objected to, and every step is kept in
+`state/logs/restore-<time>.log` in the app's data folder. Settings → Tools →
+**Log viewer** shows every backup and restore under *Backup & restore*, and
+Settings → **Report a problem** includes the last restore.
+
+Backups record which version of the app made them, the era and the client
+version, and a backup from an older version is brought up to date as it is
+restored.
 
 An untested backup is not a backup. Restoring one into a throwaway install once
 is worth the five minutes.

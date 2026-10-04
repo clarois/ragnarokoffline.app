@@ -106,7 +106,10 @@ test('a whole world backs up from both eras and restores into another install', 
   assert.equal(manifest.kind, 'backup');
   assert.equal(manifest.app_version, '1.3.5');
   assert.deepEqual(manifest.databases.map(d => d.era), ['renewal', 'prerenewal']);
-  assert.equal(entries.get('database/prerenewal.sql').toString(), '-- pre-renewal: Swordie, level 99\n');
+  // Each era's dump says which app made it, and which era it is -- the
+  // pre-renewal one too, though renewal was the era running.
+  assert.match(entries.get('database/prerenewal.sql').toString(),
+    /^-- Ragnarok Offline backup: app 1\.3\.5, era prerenewal, packetver \d+, made \d{4}-\d\d-\d\dT[\d:]+Z\n-- pre-renewal: Swordie, level 99\n$/);
   assert.equal(entries.get('mods/disabled.txt').toString(), 'npc-pack\n');
   const crypto = require('node:crypto');
   for (const f of manifest.files) {
@@ -136,7 +139,8 @@ test('a whole world backs up from both eras and restores into another install', 
   assert.ok(!fs.existsSync(path.join(target.state, 'agent')));
   // And the world it replaced is in the pre-restore backup.
   const before = untar(safety);
-  assert.equal(before.get('database/renewal.sql').toString(), '-- the target\'s own renewal world\n');
+  assert.match(before.get('database/renewal.sql').toString(),
+    /^-- Ragnarok Offline backup: app 1\.3\.5, era renewal, [^\n]+\n-- the target's own renewal world\n$/);
   assert.equal(before.get('mods/old-mod/npc/a.txt').toString(), 'old');
   assert.equal(JSON.parse(before.get('manifest.json')).databases.length, 1);
 

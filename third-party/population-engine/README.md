@@ -214,6 +214,76 @@ engine. It now skips shells whose map holds no real player. A shell standing
 still on an empty map is indistinguishable from one wandering there, and it
 starts moving again the moment somebody arrives.
 
+### Vendors a mod can add
+
+Upstream places vendors per map with one `VendorPlacement` each, and picks the
+shell's stock by its job. A mod can now add its own vendors without changing
+either. The additions do nothing unless a mod uses them; with no mods, the
+engine's vendors spawn exactly as upstream's do.
+
+- `Type: Pool` in `population_vendors.yml`: each shell draws `PickCount` items
+  from a list, rolls each price by `PriceJitterPct`, rarely drops a digit
+  (`PriceMistakeOneIn`), picks a title from `TitleFromPool`, and is replaced
+  after `RotationHours` (or `RotationMinutes`) ± `RotationJitterMinutes` with
+  a fresh pick. `{name}` in a shop title is the shell's own name.
+- `Spawns:` on a vendor entry makes it a mod vendor. Each block names a `Map`
+  and either fixed `Positions` (one shell per seat; a taken seat stays empty
+  until it is free) or `Count` shells in `Areas` (with optional `MinSpacing`).
+  A shell in `Areas` keeps `min_npc_vendchat_distance` (3 cells) from any
+  NPC, as a player's own shop must, so an NPC another mod puts there is not
+  covered by a stall; fixed `Positions` are taken as given.
+  Counts are exact unless `ScaleWithDensity: true`. Mod vendors are spawned by
+  their own pass after the engine's, never count toward a map's `MaxVendors`,
+  and do count toward the global Limit.
+- `PlacementBound: true` on a profile in `population_vendor_pop.yml` keys the
+  profile by its `VendorKey` instead of its job, so the job is only the sprite.
+  A mod vendor's look comes from the profile with its key.
+- Pool stock lines can say what a player's cart really holds: `Refine: 7` (or
+  `[min, max]`), a forged `Element: Fire` with `Stars: 0-3`, or `Cards: [...]`.
+  `Price: [min, max]` rolls in a range, `Undercut: { Chance, StepPct }` lists
+  some items just under the cheapest rival shell stall on the map, and no
+  price goes below the NPC sell value except a fat-finger.
+- A mod vendor stall that sells out packs up, and its spot refills.
+- A `Market:` entry holds spots (`Spawns:`) and a weighted list of themes
+  (`Themes: [{ Theme, Weight, Min, Max }]`, each theme an ordinary vendor
+  entry without Spawns). Every time a spot gets a stall it rolls a theme:
+  first any below its Min, then by weight, each theme's weight divided by
+  one plus the stalls of it already standing, skipping any at its Max. So
+  the stalls change as they rotate rather than only on a restart.
+- `Buying: true` on a Pool vendor makes its shells open a real buying store
+  instead of a stall: up to 5 items from the pool (only items rAthena lets a
+  buying store take), each with its wanted amount and a price rolled in its
+  range at the mod's price level, never below what an NPC pays. The shell
+  gets one of each item, exactly the zeny it offers and room to carry it all;
+  when its store closes (all bought, or out of zeny) it packs up like a
+  sold-out stall. Its callouts come from `buyer_call` in population_chat.yml.
+  Patch 0020 keeps shells' buying stores out of the database, as 0001 does
+  for vending.
+- Patch 0021: a pet egg bought from a shell's stall is created for the buyer
+  there and then (`pet_create_egg`), since a stall's eggs are placeholders
+  with no pet row and would not hatch; unsold eggs leave nothing behind.
+- `@vendorinfo` (patch 0019) lists the mod stalls on the GM's map, or shows a
+  theme's stock and prices or a market's themes.
+- A mod's price table, `db/population_vendor_prices/<prefix>.csv` with rows
+  `Id,Name,Min,Max`, prices the plain stock lines of the vendors whose key
+  starts with `<prefix>/`, over their YAML Price. Hand-editable in a
+  spreadsheet.
+- `Callouts: { EverySeconds: [min, max], MapGapSeconds }` paces a mod vendor's
+  callouts and keeps stalls on one map from talking over one another.
+- Script commands (patch 0018) let a mod's settings reach its vendors at
+  startup, per VendorKey prefix: `population_vendor_count` (a total split
+  across the mod's Spawns by their Counts), `population_vendor_rotation`
+  (minutes), `population_vendor_callouts` (on/off and pace),
+  `population_vendor_limit` (whether they wait for room under the population
+  limit) and `population_vendor_price` (price level in percent).
+- `{item}` and `{price}` in a chat line name a real item from the speaking
+  shell's own stall. The shipped `vendor_call` lines use them.
+- Both vendor databases import `db/import/`, with empty stubs in
+  `db/import-tmpl/`, so a mod's file is read rather than ignored.
+
+`registry/mods/prontera-vendors` is the worked example (its generator is in
+`registry/tools/prontera-vendors`).
+
 ## Measured cost
 
 Alpine/musl, arm64, packetver 20221005, map server only, 4 GiB guest:

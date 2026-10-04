@@ -21,6 +21,10 @@ const STATE_KEY = 'state';
 const LIST_WAIT_MS = 6000;
 // How long after Play before the screen is handed back if nothing happened.
 const PLAY_WAIT_MS = 20000;
+// How long character select may be gone before that counts as closing it.
+// The client hides and redraws the window while logging in, before the list
+// arrives; a hide that is not followed by a show within this is the real one.
+const REDRAW_WAIT_MS = 1500;
 // Refusals in a row before a remembered login is given up on. One can be the
 // server restarting; two is a login server that will not take it.
 const MAX_REFUSALS = 2;
@@ -99,7 +103,7 @@ export function createAutologin(api, parameters = {}, env = globalThis) {
     // 'charSelect' (waiting to play), 'playing' (Play pressed).
     let stage = 'idle';
     let removeLogin = null, removeCharSelect = null;
-    let listTimer = null, playTimer = null;
+    let listTimer = null, playTimer = null, hideTimer = null;
     let submitted = false;
     let card = null;
 
@@ -116,7 +120,7 @@ export function createAutologin(api, parameters = {}, env = globalThis) {
         button.addEventListener('click', () => stop('cancelled'));
         box.append(heading, hint, button); veil.append(box);
         root.replaceChildren?.(style, veil);
-        card = { heading };
+        card = { heading, root };
     }
 
     // Hand both screens back to the client. Deferred: this can be reached
@@ -126,6 +130,7 @@ export function createAutologin(api, parameters = {}, env = globalThis) {
         stage = 'idle';
         if (listTimer) { cancelLater(listTimer); listTimer = null; }
         if (playTimer) { cancelLater(playTimer); playTimer = null; }
+        if (hideTimer) { cancelLater(hideTimer); hideTimer = null; }
         const login = removeLogin, charSelect = removeCharSelect;
         removeLogin = removeCharSelect = null;
         card = null;
@@ -196,10 +201,14 @@ export function createAutologin(api, parameters = {}, env = globalThis) {
     }
 
     function onCharSelect(view) {
+        // Shown again after a hide: the client redrawing the window, not the
+        // player closing it.
+        if (hideTimer) { cancelLater(hideTimer); hideTimer = null; }
         accepted();
         if (stage === 'playing') return;
         if (stage !== 'charSelect') return;
-        if (!card) drawCard(view.root, state.characterName ? `Entering as ${state.characterName}…` : 'Entering the game…', 'Choose a character');
+        // A redrawn window is a new root, without the card on it.
+        if (!card || card.root !== view.root) drawCard(view.root, state.characterName ? `Entering as ${state.characterName}…` : 'Entering the game…', 'Choose a character');
         if (shift) return stop('cancelled');
         const character = view.characters.find(entry => entry.id === state.characterId);
         if (character && character.deletePending) {
@@ -241,8 +250,16 @@ export function createAutologin(api, parameters = {}, env = globalThis) {
                 show: onCharSelect,
                 update: onCharSelect,
                 // The window closes on Play (and on Cancel); once playing,
-                // map:enter finishes the job.
-                hide() { if (stage === 'charSelect') stop('closed'); },
+                // map:enter finishes the job. While logging in the client
+                // also hides it and draws it again before the list arrives,
+                // so a hide only counts once nothing has shown it again.
+                // Stopping on the first one left every relaunch at character
+                // select, silently.
+                hide() {
+                    if (stage !== 'charSelect') return;
+                    if (hideTimer) cancelLater(hideTimer);
+                    hideTimer = later(() => { hideTimer = null; if (stage === 'charSelect') stop('closed'); }, REDRAW_WAIT_MS);
+                },
             });
         }
         return true;

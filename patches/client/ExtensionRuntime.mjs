@@ -2,7 +2,7 @@ import { createMovement } from './MovementCore.mjs';
 
 import { SCREENS } from './PregameViews.mjs';
 
-const EVENTS = new Set(['map:enter', 'map:leave', 'connection', 'ui:append', 'ui:remove', 'movement:clear', 'preferences:change', 'item:use', 'exit']);
+const EVENTS = new Set(['map:enter', 'map:leave', 'connection', 'ui:append', 'ui:remove', 'movement:clear', 'preferences:change', 'item:use', 'exit', 'server:event']);
 const copy = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 function freeze(value) {
     if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
@@ -312,6 +312,41 @@ export function createRuntime({ storage, report = (...args) => console.error(...
                 },
                 forget: () => Promise.resolve(bridge.account?.forget() ?? false),
             }),
+            // How an account on the client's GM list (adminList) is drawn:
+            // the GM sprite in place of its class, the GM name style and
+            // GM-styled chat. Each can be turned off (the fork's
+            // Session.AdminLook) -- a GM who wants to look like their class.
+            // Applies to characters drawn from then on, so call it from init.
+            // Put back when the plugin goes.
+            players: Object.freeze({
+                gmLookSupported: () => typeof bridge.gmLook === 'function',
+                gmLook(parts = {}) {
+                    if (disposed) throw new Error(`Plugin ${name} is disposed`);
+                    if (!parts || typeof parts !== 'object') throw new TypeError('gmLook takes { sprite?, name?, chat? }');
+                    const wanted = {};
+                    for (const key of ['sprite', 'name', 'chat']) {
+                        if (!(key in parts)) continue;
+                        if (typeof parts[key] !== 'boolean') throw new TypeError(`gmLook: ${key} must be true or false`);
+                        wanted[key] = parts[key];
+                    }
+                    if (typeof bridge.gmLook !== 'function') return null;
+                    const before = bridge.gmLook();
+                    const now = bridge.gmLook(wanted);
+                    cleanup(() => bridge.gmLook(before));
+                    return freeze(copy(now));
+                },
+            }),
+            // The mod's own host route (HostRoutes.mjs): its handler on the
+            // host's machine, reached from the host's window and from a
+            // friend's alike. Only this plugin's own: the name is bound here.
+            host: Object.freeze({
+                request(path, options = {}) {
+                    if (disposed) return Promise.reject(new Error(`Plugin ${name} is disposed`));
+                    if (typeof bridge.hostRequest !== 'function') return Promise.reject(new Error('this client cannot reach host routes'));
+                    return Promise.resolve().then(() => bridge.hostRequest(name, path, copy(options)))
+                        .then(value => freeze(copy(value)));
+                },
+            }),
             server: Object.freeze({
                 // Ask the mod's server script for something: it answers an
                 // @command (bindatcmd) with @@reply lines (dispbottom).
@@ -352,6 +387,11 @@ export function createRuntime({ storage, report = (...args) => console.error(...
         // sends, so it carries the item's type id (ITID), resolved from the live
         // inventory before the server consumes the stack.
         useItem(itemId) { if (Number.isInteger(itemId)) emit('item:use', Object.freeze({ itemId })); },
+        // A mod's server script spoke first: `@@event <command> <text>`
+        // (PluginWindows.mjs).
+        serverEvent(command, text) {
+            if (typeof command === 'string' && typeof text === 'string') emit('server:event', Object.freeze({ command, text }));
+        },
         // The player chose to leave: { to: 'charSelect' | 'login', from:
         // 'escape' | 'charSelect' } (the fork's UI/ExitHooks.js). Not sent
         // for a disconnect.

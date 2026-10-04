@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000020
+Subject: [PATCH] vending: a pet egg bought from a population shell hatches
+
+An egg needs a pet row behind it (card[0] = CARD0_PET, the pet id in
+card[1..2]); a shell's stall holds plain egg items, which pet_select_egg
+rejects. When a player buys one from a shell, create a real egg for them
+with pet_create_egg instead of handing over the placeholder, so unsold
+eggs never leave rows in the pet table. Players' eggs (which always carry
+CARD0_PET) and every other item are unchanged.
+
+--- a/src/map/vending.cpp
++++ b/src/map/vending.cpp
+@@ -23,6 +23,7 @@
+ #include "npc.hpp"
+ #include "path.hpp"
+ #include "pc.hpp"
++#include "pet.hpp"
+ #include "pc_groups.hpp"
+ 
+ static uint32 vending_nextid = 0; ///Vending_id counter
+@@ -227,7 +228,18 @@
+ 		z = 0.; // zeny counter
+ 
+ 		// vending item
+-		pc_additem(sd, &vsd->cart.u.items_cart[idx], amount, LOG_TYPE_VENDING);
++		// Population engine: a shell's pet eggs are placeholders with no pet
++		// behind them (an egg needs a pet row to hatch). The buyer gets a real
++		// egg, created now, so a stall that never sells one leaves nothing in
++		// the pet table. The slot counted for it above stays free for it.
++		std::shared_ptr<s_pet_db> shell_egg = nullptr;
++		if( IS_POPULATION_ENGINE_ACCOUNT_ID(vsd->status.account_id) && vsd->cart.u.items_cart[idx].card[0] != CARD0_PET )
++			shell_egg = pet_db_search(vsd->cart.u.items_cart[idx].nameid, PET_EGG);
++		if( shell_egg != nullptr ){
++			for( int16 k = 0; k < amount; k++ )
++				pet_create_egg(sd, vsd->cart.u.items_cart[idx].nameid);
++		}else
++			pc_additem(sd, &vsd->cart.u.items_cart[idx], amount, LOG_TYPE_VENDING);
+ 		vsd->vending[vend_list[i]].amount -= amount;
+ 		z += ((double)vsd->vending[vend_list[i]].value * (double)amount);
+ 

@@ -1,0 +1,16 @@
+// An NPC with a sprite of its own. 19500 is its view id: an NPC id the
+// server accepts (10001-19999) and the client draws from data/sprite/npc/
+// (10001-19998), high enough that no official NPC uses it. System/jobname.lub
+// gives it the sprite name RO_GUIDE; data/sprite/npc/ro_guide.spr/.act draw it.
+
+prontera,156,197,4	script	Ro the Guide	19500,{
+	mes "[Ro the Guide]";
+	mes "Hello! I am drawn with a sprite that came";
+	mes "from one PNG, made into a .spr and an .act";
+	mes "by scripts/mksprite.py.";
+	next;
+	mes "[Ro the Guide]";
+	mes "Copy this mod, swap in your own picture,";
+	mes "and you have your own NPC.";
+	close;
+}

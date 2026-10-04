@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000019
+Subject: [PATCH] buying stores: population shells skip the database
+
+The same as 0001 does for vending: a population shell's buying store lives
+in memory only, so opening, trading with and closing one never writes the
+buyingstores tables (which also feed autotrade restore). Players' stores
+are unchanged.
+
+--- a/src/map/buyingstore.cpp
++++ b/src/map/buyingstore.cpp
+@@ -229,23 +229,26 @@
+ 	sd->buyingstore.slots = i;  // store actual amount of items
+ 	safestrncpy(sd->message, storename, sizeof(sd->message));
+ 
+-	Sql_EscapeString( mmysql_handle, message_sql, sd->message );
+-
+-	if( Sql_Query( mmysql_handle, "INSERT INTO `%s`(`id`, `account_id`, `char_id`, `sex`, `map`, `x`, `y`, `title`, `limit`, `autotrade`, `body_direction`, `head_direction`, `sit`) "
+-		"VALUES( %d, %d, %d, '%c', '%s', %d, %d, '%s', %d, %d, '%d', '%d', '%d' );",
+-		buyingstores_table, sd->buyer_id, sd->status.account_id, sd->status.char_id, sd->status.sex == 0 ? 'F' : 'M', map_getmapdata(sd->m)->name, sd->x, sd->y, message_sql, sd->buyingstore.zenylimit, sd->state.autotrade, at ? at->dir : sd->ud.dir, at ? at->head_dir : sd->head_dir, at ? at->sit : pc_issit(sd) ) != SQL_SUCCESS ){
+-		Sql_ShowDebug(mmysql_handle);
+-	}
++	// Population engine shells keep their buying stores in memory only.
++	if( !IS_POPULATION_ENGINE_ACCOUNT_ID(sd->status.account_id) ) {
++		Sql_EscapeString( mmysql_handle, message_sql, sd->message );
++
++		if( Sql_Query( mmysql_handle, "INSERT INTO `%s`(`id`, `account_id`, `char_id`, `sex`, `map`, `x`, `y`, `title`, `limit`, `autotrade`, `body_direction`, `head_direction`, `sit`) "
++			"VALUES( %d, %d, %d, '%c', '%s', %d, %d, '%s', %d, %d, '%d', '%d', '%d' );",
++			buyingstores_table, sd->buyer_id, sd->status.account_id, sd->status.char_id, sd->status.sex == 0 ? 'F' : 'M', map_getmapdata(sd->m)->name, sd->x, sd->y, message_sql, sd->buyingstore.zenylimit, sd->state.autotrade, at ? at->dir : sd->ud.dir, at ? at->head_dir : sd->head_dir, at ? at->sit : pc_issit(sd) ) != SQL_SUCCESS ){
++			Sql_ShowDebug(mmysql_handle);
++		}
+ 
+-	StringBuf_Init(&buf);
+-	StringBuf_Printf(&buf, "INSERT INTO `%s`(`buyingstore_id`,`index`,`item_id`,`amount`,`price`) VALUES", buyingstore_items_table);
+-	for (i = 0; i < sd->buyingstore.slots; i++){
+-		StringBuf_Printf(&buf, "(%d,%d,%u,%d,%d)", sd->buyer_id, i, sd->buyingstore.items[i].nameid, sd->buyingstore.items[i].amount, sd->buyingstore.items[i].price);
+-		if (i < sd->buyingstore.slots-1)
+-			StringBuf_AppendStr(&buf, ",");
++		StringBuf_Init(&buf);
++		StringBuf_Printf(&buf, "INSERT INTO `%s`(`buyingstore_id`,`index`,`item_id`,`amount`,`price`) VALUES", buyingstore_items_table);
++		for (i = 0; i < sd->buyingstore.slots; i++){
++			StringBuf_Printf(&buf, "(%d,%d,%u,%d,%d)", sd->buyer_id, i, sd->buyingstore.items[i].nameid, sd->buyingstore.items[i].amount, sd->buyingstore.items[i].price);
++			if (i < sd->buyingstore.slots-1)
++				StringBuf_AppendStr(&buf, ",");
++		}
++		if (SQL_ERROR == Sql_QueryStr(mmysql_handle, StringBuf_Value(&buf)))
++			Sql_ShowDebug(mmysql_handle);
+ 	}
+-	if (SQL_ERROR == Sql_QueryStr(mmysql_handle, StringBuf_Value(&buf)))
+-		Sql_ShowDebug(mmysql_handle);
+ 
+ 	clif_buyingstore_myitemlist( *sd );
+ 	clif_buyingstore_entry( *sd );
+@@ -262,10 +265,11 @@
+ 	nullpo_retv(sd);
+ 
+ 	if( sd->state.buyingstore ) {
+-		if( 
++		// Population engine shells keep their buying stores in memory only.
++		if( !IS_POPULATION_ENGINE_ACCOUNT_ID(sd->status.account_id) && (
+ 			Sql_Query( mmysql_handle, "DELETE FROM `%s` WHERE buyingstore_id = %d;", buyingstore_items_table, sd->buyer_id ) != SQL_SUCCESS ||
+ 			Sql_Query( mmysql_handle, "DELETE FROM `%s` WHERE `id` = %d;", buyingstores_table, sd->buyer_id ) != SQL_SUCCESS
+-		) {
++		) ) {
+ 			Sql_ShowDebug(mmysql_handle);
+ 		}
+ 
+@@ -450,7 +454,9 @@
+ 		pc_delitem(sd, index, item->amount, 1, 0, LOG_TYPE_BUYING_STORE);
+ 		pl_sd->buyingstore.items[listidx].amount -= item->amount;
+ 
+-		if( pl_sd->buyingstore.items[listidx].amount > 0 ){
++		if( IS_POPULATION_ENGINE_ACCOUNT_ID(pl_sd->status.account_id) ){
++			// Population engine shells keep their buying stores in memory only.
++		}else if( pl_sd->buyingstore.items[listidx].amount > 0 ){
+ 			if( Sql_Query( mmysql_handle, "UPDATE `%s` SET `amount` = %d WHERE `buyingstore_id` = %d AND `index` = %d;", buyingstore_items_table, pl_sd->buyingstore.items[listidx].amount, pl_sd->buyer_id, listidx ) != SQL_SUCCESS ){
+ 				Sql_ShowDebug( mmysql_handle );
+ 			}
+@@ -488,7 +494,7 @@
+ 	}
+ 	else
+ 	{// continue buying
+-		if( Sql_Query( mmysql_handle, "UPDATE `%s` SET `limit` = %d WHERE `id` = %d;", buyingstores_table, pl_sd->buyingstore.zenylimit, pl_sd->buyer_id ) != SQL_SUCCESS ){
++		if( !IS_POPULATION_ENGINE_ACCOUNT_ID(pl_sd->status.account_id) && Sql_Query( mmysql_handle, "UPDATE `%s` SET `limit` = %d WHERE `id` = %d;", buyingstores_table, pl_sd->buyingstore.zenylimit, pl_sd->buyer_id ) != SQL_SUCCESS ){
+ 			Sql_ShowDebug( mmysql_handle );
+ 		}
+ 
+@@ -803,6 +809,8 @@
+ */
+ void buyingstore_update(map_session_data &sd)
+ {
++	if (IS_POPULATION_ENGINE_ACCOUNT_ID(sd.status.account_id))
++		return;
+ 	if (Sql_Query(mmysql_handle, "UPDATE `%s` SET `map` = '%s', `x` = '%d', `y` = '%d', `body_direction` = '%d', `head_direction` = '%d', `sit` = '%d', `autotrade` = '%d' WHERE `id` = '%d'",
+ 		buyingstores_table, map_getmapdata(sd.m)->name, sd.x, sd.y, sd.ud.dir, sd.head_dir, pc_issit(&sd), sd.state.autotrade,
+ 		sd.buyer_id

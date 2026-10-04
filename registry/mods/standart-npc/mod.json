@@ -1,8 +1,24 @@
 {
   "name": "standart-npc",
   "author": "MondoTruth and the Ragnarok Offline community",
-  "description": "Warper, Buffer, Job Master, Kafra, Refiner, Bounty Hunter and a town's worth of other custom NPCs in one mod. Every NPC can be switched off on its own from the mod's Settings… window. Some NPCs need the Cash Shop for full functionality.",
-  "tags": ["npc", "warper", "buffer", "quality-of-life"],
+  "description": "Warper, Buffer with 1st–4th class buffs, Job Master, Kafra, Refiners, Bounty Hunter, an MVP dungeon, training dummies and a town's worth of other custom NPCs in one mod, for both eras. Switch any NPC off and pick the Buffer's buffs in the mod's Settings… window. Some NPCs need the Cash Shop for full functionality.",
+  "tags": [
+    "npc",
+    "warper",
+    "buffer",
+    "quality-of-life",
+    "bounty",
+    "mvp",
+    "refine",
+    "4th-class"
+  ],
+  "icon": "images/icon.png",
+  "screenshots": [
+    "images/prontera-fountain.png",
+    "images/prontera-square.png",
+    "images/settings.png",
+    "images/settings-buffer.png"
+  ],
   "homepage": "https://github.com/MondoTruth/standart-npc",
   "source": {
     "github": "MondoTruth/standart-npc",

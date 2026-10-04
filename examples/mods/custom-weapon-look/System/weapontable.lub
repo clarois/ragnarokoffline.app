@@ -1,0 +1,10 @@
+-- Written by scripts/mkweapon.py: each new weapon look's sprite name, and
+-- the weapon type it attacks like. Only these rows: the app adds them to
+-- the client's own table.
+WeaponNameTable = {
+	[5001] = "_jade",
+}
+
+Expansion_Weapon_IDs = {
+	[5001] = 1,
+}

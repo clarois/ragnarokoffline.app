@@ -54,6 +54,23 @@ fn agent_slot(request: &Value) -> Result<u32, String> {
 }
 /// Documented in docs/MODDING.md ("Group 20 is taken") so mods keep off it.
 pub const AGENT_GROUP: u32 = 20;
+/// What every player may use, whatever mods are installed: `@companion`, the
+/// population engine's command that the Companions panel in game drives
+/// (draft, summon, dismiss, gear...). rAthena grants a command only through
+/// groups.yml, and the engine adds it to no group, so without this only GMs
+/// could have companions. Group 0 is rAthena's own, so the entry needs no
+/// Name or Level; the groups that inherit from it get the command too.
+pub const PLAYER_GRANT_OWNER: &str = "Ragnarok Offline (companions)";
+pub const PLAYER_GRANT_YML: &str = "Header:
+  Type: PLAYER_GROUP_DB
+  Version: 1
+
+Body:
+  - Id: 0
+    Commands:
+      companion: true
+";
+
 pub const AGENT_GROUP_OWNER: &str = "Ragnarok Offline (AI agent)";
 pub const AGENT_GROUP_YML: &str = "Header:
   Type: PLAYER_GROUP_DB
@@ -720,6 +737,38 @@ mod tests {
         for command in ["warp: true", "go: true", "load: true", "Player: true"] {
             assert!(body.contains(command), "{body}");
         }
+    }
+
+    /// Every player can drive their companions: group 0 gets @companion, and
+    /// it survives the merge beside the agent group and the bundled
+    /// player-commands grants, with nothing repeated.
+    #[test]
+    fn players_are_given_the_companion_command() {
+        let player_commands = include_str!("../../mods/player-commands/conf/groups.yml");
+        let (body, notes) = crate::mods::combine_whole_conf(
+            "groups.yml",
+            &[
+                (AGENT_GROUP_OWNER.to_string(), AGENT_GROUP_YML.to_string()),
+                (PLAYER_GRANT_OWNER.to_string(), PLAYER_GRANT_YML.to_string()),
+                ("player-commands".to_string(), player_commands.to_string()),
+            ],
+            &[],
+        );
+        assert!(notes.is_empty(), "{notes:?}");
+        let body = body.unwrap();
+        assert!(body.contains("  - Id: 0\n    Commands:\n      companion: true\n"), "{body}");
+        assert_eq!(body.matches("companion: true").count(), 1, "{body}");
+        // A mod that also gives it is told, and the rest of its grants stand.
+        let (_, notes) = crate::mods::combine_whole_conf(
+            "groups.yml",
+            &[
+                (PLAYER_GRANT_OWNER.to_string(), PLAYER_GRANT_YML.to_string()),
+                ("m".to_string(), PLAYER_GRANT_YML.replace("companion: true", "companion: true\n      showexp: true")),
+            ],
+            &[],
+        );
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("@companion"), "{notes:?}");
     }
 
     #[test]

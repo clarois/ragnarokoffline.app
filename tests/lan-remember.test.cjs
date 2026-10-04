@@ -48,7 +48,10 @@ const post = (port, route, { host, origin, cookie, body = {}, forwarded = '192.1
     let text = ''; res.on('data', c => text += c);
     res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, json: () => JSON.parse(text) }));
   });
-  req.on('error', error => reject(Object.assign(error, { message: `${route} (${method}, ${origin}): ${error.message}` }))); req.end(JSON.stringify(body));
+  req.on('error', error => reject(Object.assign(error, { message: `${route} (${method}, ${origin}): ${error.message}` })));
+  // A GET has no body: one without a length would reach the server as a
+  // second, malformed request.
+  req.end(method === 'GET' ? undefined : JSON.stringify(body));
 });
 
 test('a LAN player: same routes as the gateway, in a plain-HTTP cookie scoped to the asset port and path', async t => {

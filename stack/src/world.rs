@@ -87,6 +87,11 @@ pub const EXCLUDED: [&str; 6] = [
 
 pub struct Manifest {
     pub app_version: Option<String>,
+    /// When it was made, as written (RFC 3339, UTC).
+    pub created: Option<String>,
+    pub packetver: Option<String>,
+    /// The mods installed in `state/mods` when it was made, by name.
+    pub mods: Vec<String>,
     pub era: String,
     /// (era, archive path)
     pub databases: Vec<(String, String)>,
@@ -182,7 +187,76 @@ pub fn parse_manifest(body: &str, ours: Option<&str>) -> Result<Manifest, String
             databases.push((era.to_string(), path.to_string()));
         }
     }
-    Ok(Manifest { app_version, era, databases, files })
+    let created = v.str("created").map(str::to_string);
+    let packetver = v.str("packetver").map(str::to_string);
+    let mods = match v.get("mods") {
+        Some(Value::Array(list)) => list
+            .iter()
+            .filter(|m| m.str("source") == Some("installed"))
+            .filter_map(|m| m.str("name").map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    };
+    Ok(Manifest { app_version, created, packetver, mods, era, databases, files })
+}
+
+/// The first column of every row a dump inserts into `table`, read the way
+/// MariaDB reads them: a statement runs to its `;` across lines (mariadb-dump
+/// 11.4 puts each row on its own), and tuples are counted outside quoted
+/// strings, so a name with "),(" or ';' in it is one row.
+fn first_columns(dump: &str, table: &str) -> Vec<i64> {
+    let head = format!("INSERT INTO `{table}` VALUES");
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(at) = dump[from..].find(&head) {
+        let body = &dump[from + at + head.len()..];
+        let (mut depth, mut quoted, mut escaped) = (0u32, false, false);
+        let mut start: Option<usize> = None;
+        let mut end = body.len();
+        for (i, c) in body.char_indices() {
+            if quoted {
+                match (escaped, c) {
+                    (true, _) => escaped = false,
+                    (false, '\\') => escaped = true,
+                    (false, '\'') => quoted = false,
+                    _ => {}
+                }
+                continue;
+            }
+            match c {
+                '\'' => quoted = true,
+                ';' if depth == 0 => {
+                    end = i;
+                    break;
+                }
+                '(' => {
+                    depth += 1;
+                    if depth == 1 {
+                        start = Some(i + 1);
+                    }
+                }
+                ',' | ')' if depth == 1 => {
+                    if let Some(first) = start.take() {
+                        out.push(body[first..i].trim().trim_matches('\'').parse().unwrap_or(-1));
+                    }
+                    if c == ')' {
+                        depth -= 1;
+                    }
+                }
+                ')' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        from += at + head.len() + end;
+    }
+    out
+}
+
+/// Player accounts (ids from 2000000, as rAthena numbers them; the
+/// server's own login is below that) and characters in one era's dump.
+pub(crate) fn players_and_characters(dump: &str) -> (usize, usize) {
+    let accounts = first_columns(dump, "login").into_iter().filter(|id| *id >= 2_000_000).count();
+    (accounts, first_columns(dump, "char").len())
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +280,7 @@ fn utc(t: SystemTime) -> (i64, u32, u32, u32, u32, u32) {
     (y, m, d, (rem / 3600) as u32, (rem % 3600 / 60) as u32, (rem % 60) as u32)
 }
 
-fn rfc3339(t: SystemTime) -> String {
+pub(crate) fn rfc3339(t: SystemTime) -> String {
     let (y, mo, d, h, mi, s) = utc(t);
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
 }
@@ -354,7 +428,7 @@ fn manifest_json(cfg: &Config, items: &[Item], dumps: &[(&str, PathBuf)], create
     // Installed mods, with a hash over their files so a later reader can tell
     // whether a mod changed between two archives; bundled ones by name, since
     // the app carries them.
-    let listed: BTreeMap<String, [String; 13]> = crate::mods::list(cfg).into_iter().map(|r| (r[1].clone(), r)).collect();
+    let listed: BTreeMap<String, [String; 14]> = crate::mods::list(cfg).into_iter().map(|r| (r[1].clone(), r)).collect();
     let mut installed: BTreeMap<&str, (Sha256, u64, u64)> = BTreeMap::new();
     for item in items {
         let Some(rest) = item.name.strip_prefix("mods/") else { continue };
@@ -578,10 +652,10 @@ pub fn apply(staged: &Path, manifest: &Manifest, state: &Path) -> Result<(), Str
 // ---------------------------------------------------------------------------
 
 /// A private working folder under state/private, removed however we leave.
-struct Scratch(PathBuf);
+pub(crate) struct Scratch(pub PathBuf);
 
 impl Scratch {
-    fn new(cfg: &Config) -> Result<Scratch, String> {
+    pub(crate) fn new(cfg: &Config) -> Result<Scratch, String> {
         crate::private_fs::directory(&cfg.state)?;
         let private = cfg.state.join("private");
         crate::private_fs::directory(&private)?;
@@ -598,7 +672,7 @@ impl Drop for Scratch {
 }
 
 /// Dump every era's database that exists, the running one first.
-fn dump_all(cfg: &Config, dk: &Docker, into: &Path, running: &'static str) -> Result<Vec<(&'static str, PathBuf)>, String> {
+pub(crate) fn dump_all(cfg: &Config, dk: &Docker, into: &Path, running: &'static str) -> Result<Vec<(&'static str, PathBuf)>, String> {
     let mut out = Vec::new();
     for era in std::iter::once(running).chain(ERAS.into_iter().filter(|e| *e != running)) {
         if era != running && !crate::cmds::era_volume_exists(dk, era) {
@@ -614,7 +688,7 @@ fn dump_all(cfg: &Config, dk: &Docker, into: &Path, running: &'static str) -> Re
     Ok(out)
 }
 
-fn era_name(era: &str) -> &'static str {
+pub(crate) fn era_name(era: &str) -> &'static str {
     if era == "prerenewal" { "pre-renewal" } else { "renewal" }
 }
 
@@ -644,10 +718,97 @@ pub fn backup(cfg: &Config, dk: &Docker, dest: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn restore(cfg: &Config, dk: &Docker, src: &str) -> Result<(), String> {
+/// What a backup holds, as JSON, for the Restore dialog to offer: read and
+/// checked like a restore, but nothing is stopped or changed.
+pub fn inspect(cfg: &Config, src: &str) -> Result<(), String> {
+    let scratch = Scratch::new(cfg)?;
+    let staged = scratch.0.join("inspect");
+    let manifest = stage(Path::new(src), &staged, cfg.app_version.as_deref())?;
+    let q = |s: &str| json::quote(s);
+    let opt = |s: Option<&str>| s.map(q).unwrap_or_else(|| "null".into());
+    let databases: Vec<String> = manifest
+        .databases
+        .iter()
+        .map(|(era, path)| {
+            let dump = fs::read(staged.join(path)).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+            let (accounts, characters) = players_and_characters(&dump);
+            format!("{{\"era\": {}, \"accounts\": {accounts}, \"characters\": {characters}}}", q(era))
+        })
+        .collect();
+    let settings = SETTINGS.iter().any(|(archived, _)| manifest.files.contains_key(*archived));
+    let mods: Vec<String> = manifest.mods.iter().map(|m| q(m)).collect();
+    println!(
+        "{{\"app_version\": {}, \"created\": {}, \"packetver\": {}, \"era\": {}, \"databases\": [{}], \"settings\": {settings}, \"mods\": [{}], \"running_era\": {}}}",
+        opt(manifest.app_version.as_deref()),
+        opt(manifest.created.as_deref()),
+        opt(manifest.packetver.as_deref()),
+        q(&manifest.era),
+        databases.join(", "),
+        mods.join(", "),
+        q(crate::service_credentials::era(cfg)),
+    );
+    Ok(())
+}
+
+/// Which parts of a backup to restore. By default, everything in it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Choice {
+    /// The eras whose characters to restore; `None` is every era it has.
+    pub eras: Option<Vec<String>>,
+    /// Settings and installed mods.
+    pub settings: bool,
+}
+
+impl Default for Choice {
+    fn default() -> Choice {
+        Choice { eras: None, settings: true }
+    }
+}
+
+impl Choice {
+    /// `--eras renewal,prerenewal` (or `--eras none`) and `--no-settings`,
+    /// after the file.
+    pub fn parse(args: &[String]) -> Result<Choice, String> {
+        let mut choice = Choice::default();
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--no-settings" => choice.settings = false,
+                "--eras" => {
+                    let list = args.get(i + 1).ok_or("--eras needs a list: renewal, prerenewal, both separated by a comma, or none")?;
+                    let eras: Vec<String> = list.split(',').map(str::trim).filter(|e| !e.is_empty() && *e != "none").map(String::from).collect();
+                    if let Some(bad) = eras.iter().find(|e| !ERAS.contains(&e.as_str())) {
+                        return Err(format!("unknown era {bad:?}: use renewal or prerenewal"));
+                    }
+                    choice.eras = Some(eras);
+                    i += 1;
+                }
+                other => return Err(format!("unknown option {other:?}")),
+            }
+            i += 1;
+        }
+        Ok(choice)
+    }
+
+    fn wants(&self, era: &str) -> bool {
+        self.eras.as_ref().map(|e| e.iter().any(|x| x == era)).unwrap_or(true)
+    }
+}
+
+pub fn restore(cfg: &Config, dk: &Docker, src: &str, choice: &Choice) -> Result<(), String> {
     let scratch = Scratch::new(cfg)?;
     let staged = scratch.0.join("restore");
     let manifest = stage(Path::new(src), &staged, cfg.app_version.as_deref())?;
+    // Said before anything stops: an era the backup does not have, or nothing
+    // chosen at all.
+    if let Some(eras) = &choice.eras {
+        if let Some(missing) = eras.iter().find(|e| !manifest.databases.iter().any(|(d, _)| d == *e)) {
+            return Err(format!("This backup has no {} characters. Nothing was restored.", era_name(missing)));
+        }
+        if eras.is_empty() && !choice.settings {
+            return Err("Nothing was chosen to restore.".into());
+        }
+    }
 
     let era = crate::service_credentials::era(cfg);
     crate::accounts::verify_era(cfg, dk, era)?;
@@ -655,9 +816,8 @@ pub fn restore(cfg: &Config, dk: &Docker, src: &str) -> Result<(), String> {
 
     // Everything as it is now, first, in the same format: the way back from
     // this restore is restoring that file.
-    // Not state/backups: on Windows that whole folder is copied into the
-    // database container for every dump that is loaded, and this file holds
-    // every mod.
+    // Its own folder rather than state/backups, which holds the database
+    // dumps: this file holds every mod too.
     let backups = cfg.state.join("world-backups");
     fs::create_dir_all(&backups).map_err(|e| e.to_string())?;
     crate::private_fs::directory(&backups)?;
@@ -678,25 +838,57 @@ pub fn restore(cfg: &Config, dk: &Docker, src: &str) -> Result<(), String> {
         format!("{what} Game services are stopped. Everything as it was before this restore is saved in {safety_text}; restore that file to go back.")
     };
 
-    for (db_era, path) in &manifest.databases {
-        crate::cmds::with_era_database(cfg, dk, db_era, || {
-            crate::cmds::load_dump(cfg, dk, &staged.join(path))
-                .map_err(|_| "the database did not accept the dump".to_string())?;
+    for (db_era, path) in manifest.databases.iter().filter(|(e, _)| choice.wants(e)) {
+        // Each era's dump is brought up to this version's expectations
+        // first, as a single-database restore does.
+        let prepared = crate::dump_migrations::prepare(cfg, &staged.join(path))
+            .map_err(|e| failed(format!("Preparing the {} database failed: {e}.", era_name(db_era))))?;
+        if let Err(e) = prepared.check_era(db_era) {
+            prepared.cleanup();
+            return Err(failed(format!("The archive's {} database is not what it says: {e}", era_name(db_era))));
+        }
+        for done in &prepared.done {
+            println!("{} database, {}: migrated: {done}", era_name(db_era), prepared.describe_version());
+        }
+        let loaded = crate::cmds::with_era_database(cfg, dk, db_era, || {
+            crate::cmds::load_dump(cfg, dk, &prepared.load)
+                .map_err(|e| format!("the database did not accept the dump: {e}"))?;
             crate::cmds::adopt_loaded_dump(cfg, dk, db_era)
-        })
+        });
+        prepared.cleanup();
+        loaded
         .map_err(|e| failed(format!("Restoring the {} database failed: {e}.", era_name(db_era))))?;
     }
-    apply(&staged, &manifest, &cfg.state).map_err(|e| failed(format!("The databases were restored, but {e}.")))?;
+    if choice.settings {
+        apply(&staged, &manifest, &cfg.state).map_err(|e| failed(format!("The databases were restored, but {e}.")))?;
+    } else {
+        println!("Settings and installed mods were left as they were.");
+    }
 
     for other in ERAS {
-        if !manifest.databases.iter().any(|(e, _)| e == other) && crate::cmds::era_volume_exists(dk, other) {
+        let in_backup = manifest.databases.iter().any(|(e, _)| e == other);
+        if in_backup && !choice.wants(other) {
+            println!("The {} characters were left as they were.", era_name(other));
+        } else if !in_backup && crate::cmds::era_volume_exists(dk, other) {
             println!("The {} database was not in this backup and was left as it was.", era_name(other));
         }
     }
+    let restored: Vec<String> = manifest
+        .databases
+        .iter()
+        .filter(|(e, _)| choice.wants(e))
+        .map(|(e, _)| format!("{} characters", era_name(e)))
+        .chain(choice.settings.then(|| "settings and mods".to_string()))
+        .collect();
+    let playing = if choice.settings { era_name(&manifest.era) } else { era_name(crate::service_credentials::era(cfg)) };
     println!(
-        "restored {src} (made by Ragnarok Offline {}, playing {}); game services are stopped. Start the server to play the restored world -- the app rebuilds the client's assets as it starts. The pre-restore backup is {safety_text}.",
+        "restored {} from {src} (made by Ragnarok Offline {}, playing {playing}); game services are stopped. Start the server to play the restored world -- the app rebuilds the client's assets as it starts. The pre-restore backup is {safety_text}.",
+        match restored.as_slice() {
+            [] => "nothing".to_string(),
+            [one] => one.clone(),
+            [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        },
         manifest.app_version.as_deref().unwrap_or("of an unknown version"),
-        era_name(&manifest.era),
     );
     Ok(())
 }
@@ -704,6 +896,37 @@ pub fn restore(cfg: &Config, dk: &Docker, src: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rows are counted the way MariaDB reads them: a quoted name with
+    /// "),(" or an escaped quote in it is still one row.
+    #[test]
+    fn players_and_characters_are_counted_from_the_dump() {
+        let dump = "INSERT INTO `login` VALUES (1,'s1','p1'),(2000000,'ragnarok','x'),(2000001,'Gig\\'gi','y');\n\
+            INSERT INTO `char` VALUES (150000,2000001,0,'Gigginox'),(150001,2000000,1,'a),(b'),(150002,2000000,2,'Ninja');\n\
+            INSERT INTO `char` VALUES (150003,2000000,3,'More');\n";
+        assert_eq!(first_columns(dump, "char"), vec![150000, 150001, 150002, 150003]);
+        assert_eq!(players_and_characters(dump), (2, 4));
+        assert_eq!(players_and_characters(""), (0, 0));
+        // mariadb-dump 11.4's layout: VALUES ends the line, a row per line.
+        let lines = "INSERT INTO `login` VALUES\n(1,'s1','p1;x'),\n(2000000,'ragnarok','x'),\n(2000001,'Giggi','y');\n\
+            /*!40000 ALTER TABLE `login` ENABLE KEYS */;\nINSERT INTO `char` VALUES\n(150000,2000001,'Gigginox');\n";
+        assert_eq!(players_and_characters(lines), (2, 1));
+    }
+
+    /// What to restore comes after the file; the default is everything.
+    #[test]
+    fn a_restore_can_choose_eras_and_leave_settings() {
+        let parse = |a: &[&str]| Choice::parse(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(parse(&[]).unwrap(), Choice::default());
+        let one = parse(&["--eras", "prerenewal", "--no-settings"]).unwrap();
+        assert_eq!(one.eras.as_deref(), Some(&["prerenewal".to_string()][..]));
+        assert!(!one.settings && one.wants("prerenewal") && !one.wants("renewal"));
+        assert!(Choice::default().wants("renewal") && Choice::default().wants("prerenewal"));
+        assert_eq!(parse(&["--eras", "none"]).unwrap().eras, Some(vec![]));
+        assert!(parse(&["--eras", "classic"]).unwrap_err().contains("classic"));
+        assert!(parse(&["--eras"]).is_err());
+        assert!(parse(&["--everything"]).is_err());
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("ro-world-{name}-{}", crate::private_fs::random_hex(6).unwrap()));

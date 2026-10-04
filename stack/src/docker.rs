@@ -596,6 +596,36 @@ impl Docker {
         }
     }
 
+    /// Stream one host file into a *running* container, at `dest`, through
+    /// `exec -i` and the container's own `cat`, and check that every byte
+    /// arrived.
+    ///
+    /// Not `cp`: slim's `cp` into a running container exits 0 and copies
+    /// nothing (seen on macOS, 2026-10-02), so a restore staged that way read
+    /// a file that was never there. Stdin is the path `console_sql` already
+    /// relies on, and the size check turns any short write into an error that
+    /// says so instead of half a database.
+    pub fn write_into(&self, container: &str, host: &Path, dest: &str) -> Result<(), String> {
+        let size = fs::metadata(host).map_err(|e| format!("reading {}: {e}", host.display()))?.len();
+        let file = fs::File::open(host).map_err(|e| format!("reading {}: {e}", host.display()))?;
+        let quoted = format!("'{}'", dest.replace('\'', ""));
+        let out = self
+            .base()
+            .args(["exec", "-i", container, "sh", "-c", &format!("umask 077; cat > {quoted}")])
+            .stdin(Stdio::from(file))
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(format!("could not write {dest} in {container}: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        let arrived = self.output(["exec", container, "sh", "-c", &format!("wc -c < {quoted}")])?;
+        match arrived.trim().parse::<u64>() {
+            Ok(n) if n == size => Ok(()),
+            Ok(n) => Err(format!("only {n} of {size} bytes of {} reached {container}", host.display())),
+            Err(_) => Err(format!("could not check {dest} in {container}: {}", arrived.trim())),
+        }
+    }
+
     pub fn copy_out(&self, container: &str, src: &str, host: &Path) -> Result<(), String> {
         // Same drive-letter problem in the other direction.
         let parent = host.parent().ok_or_else(|| format!("{} has no parent", host.display()))?;

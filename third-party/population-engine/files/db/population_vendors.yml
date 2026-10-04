@@ -324,3 +324,13 @@ Body:
   #   ItemFlags:
   #     AllowEquipment: false
   #     AllowCards: false
+
+# RAGNAROKMAC: declare the import overlay so mods can layer VendorKey entries
+# through db/import/population_vendors.yml. population_spawn.yml already does
+# this for its spawn table; the vendor DBs were missing it, so mod YAMLs
+# landed in the right place and were ignored. Matches rAthena's standard
+# Footer: Imports: convention; the empty stub in db/import-tmpl stands in when
+# no mod ships the file, so a stock install without mods is unchanged.
+Footer:
+  Imports:
+    - Path: db/import/population_vendors.yml

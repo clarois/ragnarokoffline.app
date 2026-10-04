@@ -828,8 +828,8 @@ fn apply(cfg: &Config, dk: &Docker, request: &Value) -> Result<String, String> {
             let undone = crate::cmds::load_dump(cfg, dk, &backup);
             return Err(match undone {
                 Ok(()) => format!("{which}: {error}. Nothing was saved: the database was put back as it was."),
-                Err(_) => format!(
-                    "{which}: {error}. Putting the database back failed too; restore {} from Settings before playing.",
+                Err(e) => format!(
+                    "{which}: {error}. Putting the database back failed too ({e}); restore {} from Settings before playing.",
                     backup.display()
                 ),
             });

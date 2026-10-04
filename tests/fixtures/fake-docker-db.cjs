@@ -231,10 +231,21 @@ if (verb === 'exec') {
 	}
 	if (program === 'sh' && more[0] === '-c') {
 		const command = more[1];
-		// load_dump: `mariadb ... < /backups/restore-*.sql` puts a backup back.
-		const restore = command.match(/< \/backups\/([A-Za-z0-9._-]+)$/);
+		// load_dump streams the backup into the container's /tmp on stdin,
+		// checks its size, then feeds it to `mariadb ragnarok < /tmp/...`.
+		const write = command.match(/cat > '(\/tmp\/[A-Za-z0-9._-]+)'$/);
+		if (write) { fs.writeFileSync(inContainer(write[1]), fs.readFileSync(0)); process.exit(0); }
+		const size = command.match(/^wc -c < '(\/tmp\/[A-Za-z0-9._-]+)'$/);
+		if (size) {
+			if (!fs.existsSync(inContainer(size[1]))) { process.stderr.write('sh: no such file\n'); process.exit(1); }
+			process.stdout.write(`${fs.statSync(inContainer(size[1])).size}\n`);
+			process.exit(0);
+		}
+		const restore = command.match(/< (\/(?:backups|tmp)\/[A-Za-z0-9._-]+)$/);
 		if (restore) {
-			const dump = fs.readFileSync(path.join(backups, restore[1]), 'utf8');
+			// The dump's own first line, and the app's version stamp, are
+			// comments the real database skips.
+			const dump = fs.readFileSync(inContainer(restore[1]), 'utf8').replace(/^-- Ragnarok Offline backup: .*\n/m, '');
 			fs.writeFileSync(dbFile, dump.slice(dump.indexOf('\n') + 1));
 			process.exit(0);
 		}

@@ -67,6 +67,13 @@ function validate() {
 async function main() {
     if (command === 'prepare') {
         if (fs.existsSync(world)) throw new Error('Choose a new empty world path; existing state is never overwritten');
+        // nebula listens on Unix sockets under <world>/nebula/run, and macOS caps
+        // a socket path at 104 bytes with its NUL. Too long a world path only
+        // shows up minutes later, as nebulad's "path must be shorter than SUN_LEN".
+        const socketPath = path.join(world, 'nebula', 'run', 'containerd.sock');
+        if (process.platform !== 'win32' && Buffer.byteLength(socketPath) > 103) {
+            throw new Error(`World path too long: ${socketPath} is ${Buffer.byteLength(socketPath)} bytes and Unix sockets allow 103. Choose a shorter RO_E2E_WORLD, such as ~/hrw.`);
+        }
         const runtime = process.env.RO_E2E_RUNTIME;
         const selection = process.env.RO_E2E_CLIENT_JSON;
         if (!runtime || !selection) throw new Error('Preparation needs RO_E2E_RUNTIME and RO_E2E_CLIENT_JSON');
@@ -81,9 +88,19 @@ async function main() {
         fs.writeFileSync(marker, JSON.stringify({ disposable: true, created: new Date().toISOString() }));
         const copy = (source, target) => { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.cpSync(source, target, { recursive: true }); };
         for (const name of ['bin', 'guest']) copy(path.join(runtime, name), path.join(root, name));
+        // libkrun, which nebula loads from ../lib next to bin/: only Linux and
+        // Windows runtimes carry it (scripts/package.sh), and there the engine
+        // cannot start without it ("backend `krun` is not available").
+        if (fs.existsSync(path.join(runtime, 'lib'))) copy(path.join(runtime, 'lib'), path.join(root, 'lib'));
         for (const name of ['config', 'sql', 'mods', 'client-assets', 'db-import']) {
             const source = path.join(repo, name);
             if (fs.existsSync(source)) copy(source, path.join(root, name));
+        }
+        // rAthena's db/import stubs are staged by packaging, not kept in the
+        // repository, so a checkout has none: take the installed runtime's, or
+        // every mod table starts with "no db-import stubs".
+        if (!fs.existsSync(path.join(root, 'db-import')) && fs.existsSync(path.join(runtime, 'db-import'))) {
+            copy(path.join(runtime, 'db-import'), path.join(root, 'db-import'));
         }
         copy(path.join(repo, 'stack/target/debug/ragnarok-stack' + suffix), stack);
         copy(path.join(repo, 'bin/robrowser-remoteclient' + suffix), path.join(root, 'bin/robrowser-remoteclient' + suffix));

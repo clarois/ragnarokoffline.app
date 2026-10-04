@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000017
+Subject: [PATCH] population_vendor_*: mod vendor settings from scripts
+
+A mod vendor's count, rotation, callouts, population-limit behaviour and
+price level live in YAML or engine defaults, which a player can't change
+from the app. Mod settings do reach scripts, so these let a mod's OnInit
+hand its settings to the engine, per VendorKey prefix. They do nothing
+unless a script calls them.
+
+--- a/src/custom/script.inc
++++ b/src/custom/script.inc
+@@ -238,3 +238,59 @@
+ 	script_pushstrcopy(st, csv.c_str());
+ 	return SCRIPT_CMD_SUCCESS;
+ }
++
++/*==========================================
++ * Mod vendor settings. Each applies to the mod vendors whose VendorKey starts
++ * with the prefix, and a mod calls them from OnInit with its own settings:
++ *
++ * population_vendor_count("<prefix>", <total>)
++ *   How many shells those vendors keep in total, split across their Spawns
++ *   blocks by the YAML counts. A negative total goes back to the YAML.
++ * population_vendor_rotation("<prefix>", <minutes>)
++ *   How long a stall stays before another takes its place (0 = never).
++ *   A negative value goes back to the YAML.
++ * population_vendor_callouts("<prefix>", <on>{, <min seconds>{, <max seconds>}})
++ *   Whether those stalls shout their wares, and how long each waits between
++ *   shouts. Leaving the seconds out keeps the YAML pace.
++ *
++ * population_vendor_limit("<prefix>", <respect>)
++ *   1 (the default): those stalls wait for room under the population limit.
++ *   0: they spawn even when the population is full (they still count in it).
++ *
++ * population_vendor_price("<prefix>", <percent>)
++ *   Those stalls' price level: every price they list × percent / 100
++ *   (100 = as listed). Nothing goes below the NPC sell price either way.
++ *
++ *   population_vendor_count "my-mod/", callfunc("F_ModSetting", "my-mod", "vendors", 20);
++ *------------------------------------------*/
++BUILDIN_FUNC(population_vendor_count)
++{
++	population_engine_set_mod_vendor_total(script_getstr(st, 2), script_getnum(st, 3));
++	return SCRIPT_CMD_SUCCESS;
++}
++
++BUILDIN_FUNC(population_vendor_rotation)
++{
++	population_engine_set_mod_vendor_rotation(script_getstr(st, 2), script_getnum(st, 3));
++	return SCRIPT_CMD_SUCCESS;
++}
++
++BUILDIN_FUNC(population_vendor_callouts)
++{
++	const int min_sec = script_hasdata(st, 4) ? script_getnum(st, 4) : 0;
++	const int max_sec = script_hasdata(st, 5) ? script_getnum(st, 5) : min_sec;
++	population_engine_set_mod_vendor_callouts(script_getstr(st, 2), script_getnum(st, 3), min_sec, max_sec);
++	return SCRIPT_CMD_SUCCESS;
++}
++
++BUILDIN_FUNC(population_vendor_limit)
++{
++	population_engine_set_mod_vendor_limit(script_getstr(st, 2), script_getnum(st, 3));
++	return SCRIPT_CMD_SUCCESS;
++}
++
++BUILDIN_FUNC(population_vendor_price)
++{
++	population_engine_set_mod_vendor_price(script_getstr(st, 2), script_getnum(st, 3));
++	return SCRIPT_CMD_SUCCESS;
++}
+--- a/src/custom/script_def.inc
++++ b/src/custom/script_def.inc
+@@ -19,3 +19,8 @@
+ BUILDIN_DEF(population_arena_start, "si????"),
+ BUILDIN_DEF(population_arena_stop,  "s"),
+ BUILDIN_DEF(population_arena_jobs,  ""),
++BUILDIN_DEF(population_vendor_count, "si"),
++BUILDIN_DEF(population_vendor_rotation, "si"),
++BUILDIN_DEF(population_vendor_callouts, "si??"),
++BUILDIN_DEF(population_vendor_limit, "si"),
++BUILDIN_DEF(population_vendor_price, "si"),

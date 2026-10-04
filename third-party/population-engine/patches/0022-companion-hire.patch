@@ -1,0 +1,147 @@
+From 0000000000000000000000000000000000000022
+Subject: [PATCH] Hired companions: settings, recruiter script commands, @companion terms
+
+Settings -> Population -> Companions can make a companion something you hire:
+of your own class tier, at your level, for zeny and/or an item, from the
+Companions panel or from a Companion Recruiter in town. Free choice (any job)
+stays the default.
+
+--- a/src/custom/battle_config_init.inc
++++ b/src/custom/battle_config_init.inc
+@@ -61,3 +61,7 @@
+ { "population_engine_vending_enable",&battle_config.population_engine_vending_enable,0,0,1,},
+ { "population_engine_arena_custom_pool",&battle_config.population_engine_arena_custom_pool,0,0,1,},
+ { "population_engine_path_attempts",&battle_config.population_engine_path_attempts,16,1,256,},
++{ "population_engine_companion_hire",&battle_config.population_engine_companion_hire,0,0,2,},
++{ "population_engine_companion_hire_zeny_per_level",&battle_config.population_engine_companion_hire_zeny_per_level,0,0,1000000,},
++{ "population_engine_companion_hire_item",&battle_config.population_engine_companion_hire_item,0,0,INT_MAX,},
++{ "population_engine_companion_hire_item_amount",&battle_config.population_engine_companion_hire_item_amount,0,0,30000,},
+--- a/src/custom/battle_config_struct.inc
++++ b/src/custom/battle_config_struct.inc
+@@ -121,3 +121,11 @@
+ /// global in population_engine.cpp. This field signals that a custom pool was configured (1=yes,0=no).
+ int32 population_engine_arena_custom_pool;
+ int32 population_engine_path_attempts;
++/// Companions: 0 = free choice (any job, as before); 1 = hired from the
++/// Companions panel; 2 = hired from a Companion Recruiter NPC. Hired companions
++/// are of the player's own class tier and level, for the fee below.
++int32 population_engine_companion_hire;
++/// The hiring fee: zeny per level of the companion, and/or an item and amount.
++int32 population_engine_companion_hire_zeny_per_level;
++int32 population_engine_companion_hire_item;
++int32 population_engine_companion_hire_item_amount;
+--- a/src/custom/script.inc
++++ b/src/custom/script.inc
+@@ -292,5 +292,62 @@
+ BUILDIN_FUNC(population_vendor_price)
+ {
+ 	population_engine_set_mod_vendor_price(script_getstr(st, 2), script_getnum(st, 3));
++	return SCRIPT_CMD_SUCCESS;
++}
++
++/*==========================================
++ * Hired companions, for the Companion Recruiter (npc/custom/population/recruiter.txt).
++ *
++ * companion_hire_jobs()      the jobs the attached player may hire, ':'-joined
++ * companion_hire_fee()       the zeny it costs them (their level x the fee)
++ * companion_hire("<job>")    hire one: 1 on success, 0 if refused; the reason
++ *                            or what was paid is shown to the player
++ *------------------------------------------*/
++BUILDIN_FUNC(companion_hire_jobs)
++{
++	map_session_data* sd;
++	if( !script_rid2sd(sd) ){
++		script_pushconststr(st, "");
++		return SCRIPT_CMD_SUCCESS;
++	}
++	std::string out;
++	for (uint16_t job : population_engine_companion_hire_jobs(sd)) {
++		if (!out.empty())
++			out += ':';
++		out += population_engine_hire_job_name(job);
++	}
++	script_pushstrcopy(st, out.c_str());
+ 	return SCRIPT_CMD_SUCCESS;
+ }
++
++BUILDIN_FUNC(companion_hire_fee)
++{
++	map_session_data* sd;
++	if( !script_rid2sd(sd) ){
++		script_pushint(st, 0);
++		return SCRIPT_CMD_SUCCESS;
++	}
++	script_pushint(st, static_cast<int32>(population_engine_companion_hire_zeny(sd)));
++	return SCRIPT_CMD_SUCCESS;
++}
++
++BUILDIN_FUNC(companion_hire)
++{
++	map_session_data* sd;
++	if( !script_rid2sd(sd) ){
++		script_pushint(st, 0);
++		return SCRIPT_CMD_SUCCESS;
++	}
++	const uint16_t job = population_engine_job_id_from_name(script_getstr(st, 2));
++	std::string msg;
++	uint32_t made = 0;
++	if (job == 0)
++		msg = "Unknown job.";
++	else if (!population_engine_can_recruit_companion(sd))
++		msg = "Your party is at the companion limit.";
++	else
++		made = population_engine_companion_hire(sd, job, nullptr, true, msg);
++	clif_displaymessage(sd->fd, msg.c_str());
++	script_pushint(st, made != 0 ? 1 : 0);
++	return SCRIPT_CMD_SUCCESS;
++}
+--- a/src/custom/script_def.inc
++++ b/src/custom/script_def.inc
+@@ -24,3 +24,6 @@
+ BUILDIN_DEF(population_vendor_callouts, "si??"),
+ BUILDIN_DEF(population_vendor_limit, "si"),
+ BUILDIN_DEF(population_vendor_price, "si"),
++BUILDIN_DEF(companion_hire_jobs, ""),
++BUILDIN_DEF(companion_hire_fee, ""),
++BUILDIN_DEF(companion_hire, "s"),
+--- a/src/custom/atcommand.inc
++++ b/src/custom/atcommand.inc
+@@ -509,17 +509,26 @@
+ 			}
+ 			safestrncpy(chosen, nametok, NAME_LENGTH);
+ 		}
+-		const uint32_t made = population_engine_companion_draft(sd, job_id, 1, chosen[0] ? chosen : nullptr);
+-		char msg[128];
++		// RAGNAROKMAC: through the hiring rules (Settings -> Population ->
++		// Companions): free choice, or the player's tier and level for a fee.
++		std::string why;
++		const uint32_t made = population_engine_companion_hire(sd, job_id, chosen[0] ? chosen : nullptr, false, why);
++		char msg[160];
+ 		if (made != 0)
+-			snprintf(msg, sizeof(msg), "Drafted a %s companion. It is in your party now.",
+-				job_name(job_id));
++			snprintf(msg, sizeof(msg), "Drafted a %s companion. It is in your party now.%s%s",
++				job_name(job_id), population_engine_companion_hire_mode() != 0 ? " " : "",
++				population_engine_companion_hire_mode() != 0 ? why.c_str() : "");
+ 		else
+-			snprintf(msg, sizeof(msg), "Could not draft a %s companion (see map-server console).", job_name(job_id));
++			snprintf(msg, sizeof(msg), "%s", why.c_str());
+ 		clif_displaymessage(fd, msg);
+ 		return made != 0 ? 0 : -1;
+ 	}
+ 	// RAGNAROKMAC (Phase 3): list the job names @companion draft accepts.
++	// RAGNAROKMAC: the hiring rules for this player, for the Companions panel.
++	if (strcmpi(cmd, "terms") == 0) {
++		population_engine_companion_terms(sd, fd);
++		return 0;
++	}
+ 	if (strcmpi(cmd, "jobs") == 0) {
+ 		clif_displaymessage(fd, "=== Draggable companion jobs ===");
+ 		clif_displaymessage(fd, "1st: Novice Swordsman Mage Archer Acolyte Merchant Thief");
+--- a/npc/scripts_custom.conf
++++ b/npc/scripts_custom.conf
+@@ -119,3 +119,4 @@
+ // ----------------------- Population Engine -----------------------
+ // -- Population Arena (stages 1v1/3v3/5v5 bot battles on a PvP map)
+ npc: npc/custom/population/arena.txt
++npc: npc/custom/population/recruiter.txt

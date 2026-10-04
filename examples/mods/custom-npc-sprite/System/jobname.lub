@@ -1,0 +1,9 @@
+-- Which sprite NPC 19500 uses: data/sprite/npc/ro_guide.spr and .act, shipped
+-- in this mod's data/ folder. The client lower-cases the name and looks under
+-- data/sprite/npc/ because 19500 is in its NPC range (10001-19998).
+--
+-- Only this one row. The app loads it after the client's own table and merges
+-- it by id, so every other NPC and monster keeps its sprite.
+JobNameTable = {
+	[19500] = "RO_GUIDE",
+}

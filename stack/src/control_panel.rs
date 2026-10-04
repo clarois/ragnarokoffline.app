@@ -633,7 +633,7 @@ fn delete_character(cfg: &Config, dk: &Docker, id: u32, typed: &str) -> Result<S
                 .unwrap_or_else(|| "The delete failed".into());
             return Err(match crate::cmds::load_dump(cfg, dk, &backup) {
                 Ok(()) => format!("{which}: {error}. Nothing was deleted: the database was put back as it was."),
-                Err(_) => format!("{which}: {error}. Putting the database back failed too; restore {} from Settings before playing.", backup.display()),
+                Err(e) => format!("{which}: {error}. Putting the database back failed too ({e}); restore {} from Settings before playing.", backup.display()),
             });
         }
         deleted.set(true);

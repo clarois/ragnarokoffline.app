@@ -1,0 +1,27 @@
+{
+  "name": "gm-class-look",
+  "version": "1.0.0",
+  "author": "Ragnarok Offline",
+  "description": "Draws GM accounts as their class -- job outfit, costumes and hairstyle -- instead of the GM suit. GM commands are unchanged. Off until you turn it on.",
+  "default": "off",
+  "requires": {
+    "app": ">=1.4.5",
+    "era": "any"
+  },
+  "settings": [
+    {
+      "key": "keep_gm_name",
+      "type": "boolean",
+      "default": true,
+      "label": "Keep the GM name style",
+      "description": "Turn this off to show a GM's name like anyone else's."
+    },
+    {
+      "key": "keep_gm_chat",
+      "type": "boolean",
+      "default": true,
+      "label": "Keep GM-styled chat",
+      "description": "Turn this off to show what a GM says like anyone else's chat."
+    }
+  ]
+}

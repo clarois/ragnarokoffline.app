@@ -94,7 +94,8 @@ pub struct Manifest {
     /// Whether the mod is on before the player has said anything about it.
     ///
     /// Only meaningful for mods that ship with the app: a mod somebody went to
-    /// the trouble of installing should be on. A *bundled* one that changes how
+    /// the trouble of installing should be on, so the shell records it as
+    /// switched on when it is installed (`switchOnInstalled` in electron/main.js). A *bundled* one that changes how
     /// the game is played -- free warps, instant job changes -- should be
     /// offered rather than applied, so it declares `"default": "off"` and waits
     /// to be ticked.
@@ -570,7 +571,7 @@ fn app_requirement_met(rule: &str, have: Option<&str>) -> Result<(), String> {
 /// Anything after the numbers -- `-beta.1`, `+build` -- is dropped. This is
 /// not semver: a mod that needs to distinguish `1.0.6-beta` from `1.0.6` is
 /// asking a question this mechanism should not answer.
-fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+pub(crate) fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     fn parts(s: &str) -> Vec<u64> {
         s.split(|c: char| c == '-' || c == '+')
             .next()
@@ -1032,6 +1033,30 @@ impl Installed {
                     .map(|rd| rd.flatten().any(|e| whole(&e.path())))
                     .unwrap_or(false)
         })
+    }
+}
+
+/// The folders whose files reach the game window rather than the server:
+/// assets, client Lua tables, music and a roBrowser plugin.
+const CLIENT_LAYERS: [&str; 4] = ["data", "System", "BGM", "client"];
+
+impl Installed {
+    /// Whether switching this mod or changing its options changes what the
+    /// game window loads, so the game has to be reopened after Apply. A mod
+    /// that only has server layers (db/, npc/, conf/, lua/) takes effect with
+    /// the server restart alone.
+    ///
+    /// Read from the folder, like `grants_commands`, and from both era
+    /// folders: the list is drawn for mods that are off, and switching era is
+    /// one click.
+    pub fn has_client_layers(&self) -> bool {
+        let mut roots = vec![self.dir.clone()];
+        for era in [&self.manifest.renewal_folder, &self.manifest.prerenewal_folder] {
+            if !era.is_empty() {
+                roots.push(self.dir.join(era));
+            }
+        }
+        roots.iter().any(|root| CLIENT_LAYERS.iter().any(|layer| root.join(layer).is_dir()))
     }
 }
 
@@ -1527,6 +1552,7 @@ pub fn assemble(cfg: &Config) -> Result<Assembled, String> {
             .flat_map(|m| m.roots.iter().map(move |r| (m.name.as_str(), r.as_path())))
             .collect();
         clashes.extend(id_collisions(&named));
+        clashes.extend(vendor_ownership(&named));
         write_clashes(&dst, &clashes);
         if !maps.is_empty() {
             write_map_layer(&dst, &maps)?;
@@ -2170,6 +2196,118 @@ fn id_collisions(mods: &[(&str, &Path)]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The population engine's vendor tables. A mod's vendors there live next to
+/// the engine's own and every other mod's, in one table per file.
+const VENDOR_TABLES: &[&str] = &["population_vendors.yml", "population_vendor_pop.yml"];
+
+/// One entry of a vendor table: its VendorKey, and whether it uses the
+/// mod-vendor features (`Spawns:` in population_vendors.yml, `PlacementBound:
+/// true` in population_vendor_pop.yml), which is what makes it a mod's own.
+struct VendorEntry {
+    key: String,
+    mod_owned: bool,
+}
+
+/// The entries of a vendor table's Body, block style (`  - VendorKey: x`, or a
+/// profile carrying `    VendorKey: x`) or flow style (`  - { VendorKey: x }`).
+fn vendor_entries(text: &str) -> Vec<VendorEntry> {
+    let Some((_, body)) = section(text, "Body:") else { return Vec::new() };
+    let end = section(text, "Footer:").map_or(text.len(), |(start, _)| start);
+    let mut chunks: Vec<String> = Vec::new();
+    for line in text[body..end].lines() {
+        if line.trim_start().starts_with('#') {
+            continue;
+        }
+        if line.starts_with("  - ") || line.starts_with("- ") {
+            chunks.push(String::new());
+        }
+        if let Some(chunk) = chunks.last_mut() {
+            chunk.push_str(line);
+            chunk.push('\n');
+        }
+    }
+    chunks
+        .iter()
+        .filter_map(|chunk| {
+            // A vendor (`VendorKey:`) or a market (`Market:`, which is always a
+            // mod's own: it exists only to spawn).
+            let (at, label) = match chunk.find("VendorKey:") {
+                Some(at) => (at, "VendorKey:"),
+                None => (chunk.find("Market:")?, "Market:"),
+            };
+            let value = chunk[at + label.len()..].trim_start();
+            let stop = value.find(|c: char| c == ',' || c == '}' || c == '#' || c.is_whitespace()).unwrap_or(value.len());
+            let key = value[..stop].trim_matches(|c| c == '"' || c == '\'').to_string();
+            if key.is_empty() {
+                return None;
+            }
+            let mod_owned = label == "Market:" || chunk.contains("Spawns:") || chunk.lines().any(|l| {
+                let l = l.trim_start().trim_start_matches("- ").trim_start_matches('{').trim();
+                l.starts_with("PlacementBound:") && l["PlacementBound:".len()..].trim().starts_with("true")
+            }) || chunk.contains("PlacementBound: true");
+            Some(VendorEntry { key, mod_owned })
+        })
+        .collect()
+}
+
+/// Mod vendors are a mod's own (see the population engine's README): keys
+/// that say which mod they belong to, never another mod's, and never the
+/// engine's whole table cleared. Nothing here stops a mod loading; it is said
+/// under the mod, the same way as an id two mods share, so the player and the
+/// mod's author can see it.
+fn vendor_ownership(mods: &[(&str, &Path)]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut owner: BTreeMap<(&'static str, String), String> = BTreeMap::new();
+    let mut shared: BTreeMap<(String, String, &'static str), Vec<String>> = BTreeMap::new();
+    for (name, dir) in mods {
+        let prefix = format!("{name}/");
+        for table in VENDOR_TABLES {
+            let Ok(text) = fs::read_to_string(dir.join("db").join(table)) else { continue };
+            if header_clears(&text) {
+                out.push((
+                    name.to_string(),
+                    format!("db/{table} has `Clear: true`, which empties the population engine's whole table: its own vendors and every other mod's go with it. A mod only needs to add its own entries."),
+                ));
+            }
+            let entries = vendor_entries(&text);
+            let foreign: Vec<&str> = entries
+                .iter()
+                .filter(|e| e.mod_owned && !e.key.starts_with(&prefix))
+                .map(|e| e.key.as_str())
+                .collect();
+            if !foreign.is_empty() {
+                let shown: Vec<String> = foreign.iter().take(5).map(|k| format!("'{k}'")).collect();
+                let more = if foreign.len() > 5 { format!(" and {} more", foreign.len() - 5) } else { String::new() };
+                out.push((
+                    name.to_string(),
+                    format!("db/{table}: mod vendor key {}{more} should start with '{prefix}', so it can't collide with the engine's own or another mod's.", shown.join(", ")),
+                ));
+            }
+            let mut seen_here: BTreeMap<String, ()> = BTreeMap::new();
+            for e in entries {
+                if seen_here.insert(e.key.clone(), ()).is_some() {
+                    continue;
+                }
+                if let Some(before) = owner.insert((table, e.key.clone()), name.to_string()) {
+                    if before != *name {
+                        shared.entry((before, name.to_string(), table)).or_default().push(e.key);
+                    }
+                }
+            }
+        }
+    }
+    for ((earlier, later, table), mut keys) in shared {
+        keys.sort();
+        let shown: Vec<String> = keys.iter().take(5).map(|k| format!("'{k}'")).collect();
+        let more = if keys.len() > 5 { format!(" and {} more", keys.len() - 5) } else { String::new() };
+        out.push((
+            earlier,
+            format!("{later} also defines vendor {}{more} in db/{table}, so {later}'s version is the one in effect.", shown.join(", ")),
+        ));
+    }
+    out
+}
+
 fn write_clashes(dst: &Path, clashes: &[(String, String)]) {
     let mut body = String::new();
     for (owner, message) in clashes {
@@ -2444,7 +2582,7 @@ fn load_report(state: &Path) -> BTreeMap<String, Vec<String>> {
     out
 }
 
-pub fn list(cfg: &Config) -> Vec<[String; 13]> {
+pub fn list(cfg: &Config) -> Vec<[String; 14]> {
     let saved = read_settings(&cfg.state).unwrap_or_default();
     let reported = load_report(&cfg.state);
     scan(cfg)
@@ -2495,6 +2633,10 @@ pub fn list(cfg: &Config) -> Vec<[String; 13]> {
                 // `skin`, `cursor` or empty. Last, like every addition, so an
                 // older shell reads the columns it knows.
                 m.manifest.kind.clone(),
+                // `client` when the mod has layers the game window loads, so
+                // Settings asks for the game to be reopened only after an
+                // Apply that changed one of those.
+                if m.has_client_layers() { "client" } else { "" }.to_string(),
             ]
         })
         .collect()
@@ -3104,6 +3246,76 @@ mod tests {
             ]
         );
         assert!(id_collisions(&[("a", a.as_path())]).is_empty());
+    }
+
+    #[test]
+    fn vendor_keys_are_checked_for_their_mods_prefix_sharing_and_clear() {
+        let root = tmp("vendor-ownership");
+        let a = root.join("shop-a");
+        let b = root.join("shop-b");
+        fs::create_dir_all(a.join("db")).unwrap();
+        fs::create_dir_all(b.join("db")).unwrap();
+        let head = "Header:\n  Type: POPULATION_VENDORS_DB\n  Version: 1\n\nBody:\n";
+        // shop-a: one properly named mod vendor, one unprefixed mod vendor, and
+        // an override of an engine vendor (no Spawns), which is fine as is.
+        fs::write(
+            a.join("db/population_vendors.yml"),
+            format!(
+                "{head}  - VendorKey: shop-a/potions\n    Spawns:\n      - Map: prontera\n        Count: 1\n        Areas:\n          - {{ X1: 1, Y1: 1, X2: 2, Y2: 2 }}\n\
+                 # - VendorKey: commented/out\n\
+                 \x20 - VendorKey: \"cards\"\n    Spawns:\n      - Map: prontera\n        Positions:\n          - [150, 150]\n\
+                 \x20 - VendorKey: dungeon_drops\n    Type: Dynamic\n"
+            ),
+        )
+        .unwrap();
+        // shop-b: clears the table, and also defines shop-a's key and the
+        // engine key shop-a overrides.
+        fs::write(
+            b.join("db/population_vendors.yml"),
+            "Header:\n  Type: POPULATION_VENDORS_DB\n  Version: 1\n  Clear: true\n\nBody:\n  - { VendorKey: shop-a/potions, Type: Pool }\n  - VendorKey: dungeon_drops\n",
+        )
+        .unwrap();
+        fs::write(
+            b.join("db/population_vendor_pop.yml"),
+            "Header:\n  Type: POPULATION_ENGINE_DB\n  Version: 2\n\nBody:\n  - Profile: x\n    PlacementBound: true\n    VendorKey: other/x\n",
+        )
+        .unwrap();
+
+        let found = vendor_ownership(&[("shop-a", a.as_path()), ("shop-b", b.as_path())]);
+        assert_eq!(
+            found,
+            vec![
+                (
+                    "shop-a".to_string(),
+                    "db/population_vendors.yml: mod vendor key 'cards' should start with 'shop-a/', so it can't collide with the engine's own or another mod's.".to_string()
+                ),
+                (
+                    "shop-b".to_string(),
+                    "db/population_vendors.yml has `Clear: true`, which empties the population engine's whole table: its own vendors and every other mod's go with it. A mod only needs to add its own entries.".to_string()
+                ),
+                (
+                    "shop-b".to_string(),
+                    "db/population_vendor_pop.yml: mod vendor key 'other/x' should start with 'shop-b/', so it can't collide with the engine's own or another mod's.".to_string()
+                ),
+                (
+                    "shop-a".to_string(),
+                    "shop-b also defines vendor 'dungeon_drops', 'shop-a/potions' in db/population_vendors.yml, so shop-b's version is the one in effect.".to_string()
+                ),
+            ]
+        );
+        assert!(vendor_ownership(&[("shop-a", a.as_path())]).len() == 1, "alone, only its own unprefixed key");
+
+        // A market is a mod's own too, and needs the prefix.
+        let c = root.join("shop-c");
+        fs::create_dir_all(c.join("db")).unwrap();
+        fs::write(
+            c.join("db/population_vendors.yml"),
+            "Header:\n  Type: POPULATION_VENDORS_DB\n  Version: 1\n\nBody:\n  - Market: street\n    Themes:\n      - { Theme: shop-c/a }\n  - Market: shop-c/street\n",
+        )
+        .unwrap();
+        let found = vendor_ownership(&[("shop-c", c.as_path())]);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].1.contains("'street' should start with 'shop-c/'"), "{found:?}");
     }
 
     fn setting(key: &str, value: SettingValue, min: f64, max: f64) -> Setting {
@@ -3716,5 +3928,26 @@ mod tests {
         assert_eq!(kind("skin-a"), "skin");
         assert_eq!(kind("cursor-red"), "cursor");
         assert_eq!(kind("plain"), "");
+    }
+
+    /// Settings asks for the game to be reopened only when an applied change
+    /// touched a mod with client layers, so a server-only mod must not claim
+    /// one and a client one must not be missed -- including one whose client
+    /// files are only in an era folder.
+    #[test]
+    fn client_layers_are_reported_for_the_game_window_only() {
+        let mk = |name: &str, folders: &[&str], manifest: Manifest| {
+            let d = tmp(name);
+            for f in folders {
+                fs::create_dir_all(d.join(f)).unwrap();
+            }
+            Installed { name: name.into(), dir: d, status: Status::Off, manifest, bundled: false, roots: Vec::new() }
+        };
+        assert!(!mk("client-server-only", &["db", "npc", "conf", "lua"], Manifest::default()).has_client_layers());
+        for layer in CLIENT_LAYERS {
+            assert!(mk(&format!("client-{layer}"), &[layer], Manifest::default()).has_client_layers(), "{layer}");
+        }
+        let era = Manifest { prerenewal_folder: "pre-renewal".into(), ..Manifest::default() };
+        assert!(mk("client-era", &["npc", "pre-renewal/data"], era).has_client_layers());
     }
 }

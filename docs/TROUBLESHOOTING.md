@@ -305,12 +305,11 @@ Your hosting choice is kept, and the era you prepared still hosts.
 
 ## My characters are gone / I want to move them to another machine
 
-Settings → Save Data → **Back up everything…** writes both eras' characters,
-your settings and your installed mods to a single file, and **Restore
-everything…** reads it back on any machine. Characters live inside the app's
-database, not in a folder you can copy. **Back up…** on its own saves only the
-database of the era you are playing. See
-[Backing up everything](DATABASE.md#backing-up-everything).
+Settings → Save Data → **Back up database…** writes both eras' characters and
+accounts to one `.sql` file, and **Back up everything…** adds your settings and
+installed mods. **Restore database…** and **Restore everything…** read them
+back on any machine, restoring the parts you tick. Characters live inside the
+app's database, not in a folder you can copy. See [Backups](DATABASE.md#backups).
 
 ## It is slow, or my machine gets hot
 

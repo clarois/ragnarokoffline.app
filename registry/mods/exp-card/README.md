@@ -11,12 +11,13 @@ content the player is fighting.
 
 ## The cards
 
-Exp per card follows a roughly geometric curve (~2× per level), anchored so a
+Exp per card (at a 1x rate — see [Exp rates](#exp-rates)) follows a roughly
+geometric curve (~2× per level), anchored so a
 Lv 10 card is about 5% of a level-98 Renewal character's next-level bar and
 each lower level is roughly the same 3–5% at the player level *that band of
 mobs suits* — matching the shape of rAthena's own NextBaseExp curve.
 
-| Level | Exp | Required base level | Item ids (base / job) |
+| Level | Exp at 1x | Required base level | Item ids (base / job) |
 |---|---|---|---|
 | 1  | 100    | 1  | 50051 / 50061 |
 | 2  | 250    | 11 | 50052 / 50062 |
@@ -41,8 +42,7 @@ it in the bag until they reach the level. Prevents a level 20 alt from
 downing a Lv 10 base card for two-thirds of a level in one click.
 
 If you want a different curve, edit the twenty scripts in `db/item_db.yml`
-and update the `EXP_BY_LEVEL` table in `System/itemInfo.lua` to match (so
-the tooltips still show the right numbers).
+— the tooltips name no number, so nothing else needs to change.
 
 ## How drops work
 
@@ -75,17 +75,31 @@ next restart):
   Sizing rule of thumb: at ~150 kills per hour and the 50/50 base/job
   split, `drop_chance` × 0.0006 is roughly the "% of a level per hour"
   bonus on whichever axis the player is currently pushing. At the default
-  2.25% that is ~5–9% of a level per hour — meaningful without
+  2.25% and 1x rates that is ~5–9% of a level per hour (scaling with the
+  rates, like kill exp) — meaningful without
   trivialising the grind. Bump to 500 for a more generous curve, drop to
   100 for background-noise pace.
 
 Card exp values are hard-coded in `db/item_db.yml` (twenty scripts, one
 per card). Change them there if you want a different curve.
 
-The cards grant exp through `getexp`, which rAthena scales by
-`quest_exp_rate` -- the **Quest EXP** rate in the app's server settings, not
-the kill-exp rate. At 1x a Lv 10 card is exactly 60,000; at 2x it is
-120,000.
+## Exp rates
+
+Card exp follows the server's kill-exp rates: Base cards scale with
+**Base EXP**, Job cards with **Job EXP** (the app's server settings,
+`base_exp_rate` / `job_exp_rate`). At 1x a Lv 10 Base card gives exactly
+60,000; at 10x it gives 600,000. So a card stays the same share of what
+kills pay at any rate. The rate is read when the card is used, so a rate
+change applies to cards already in the bag.
+
+The amount is granted with `getexp2`, which applies nothing further: the
+**Quest EXP** rate, Battle Manuals and the guild exp tax do not touch it.
+That is what lets the message after use (`Base Exp Card Lv10: +600,000
+base experience.`) print the exact amount granted.
+
+The tooltip names no amount — it is a static client file and cannot know
+the server's rate. It says what the card does, that higher levels grant
+more, and the base level required to use it.
 
 ## Requirements
 
@@ -113,7 +127,7 @@ Or copy this folder into your mods directory and restart the app:
 - The map-server log's NPC count goes up by one (`exp_card_ctrl`). A
   parse error names the file and line.
 - In game: `@item Base_Exp_Card_10` gives you one, and using it grants
-  60,000 base exp; that isolates the item side from the on-kill roll.
+  60,000 base exp at 1x; that isolates the item side from the on-kill roll.
 
 ## What to look at first
 

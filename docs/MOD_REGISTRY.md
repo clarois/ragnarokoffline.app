@@ -59,7 +59,7 @@ that can drift from the reviewed one.
 
 The index only carries these extensions, so anything else is a decision to make
 in [`scripts/mod-index.py`](../scripts/mod-index.py), not a file to sneak in:
-`.json .yml .yaml .txt .lua .lub .js .mjs .css .html .png .bmp .jpg .gif .spr
+`.json .yml .yaml .txt .csv .lua .lub .js .mjs .css .html .png .bmp .jpg .gif .spr
 .act .gat .gnd .rsw .rsm .wav .mp3 .ttf .md`.
 
 To update: raise `version` in `mod.json`, change the files, regenerate the index

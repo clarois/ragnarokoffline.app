@@ -67,3 +67,12 @@ Body:
     VendorKey: "dungeon_drops"
     Script: |
       setcart;
+
+# RAGNAROKMAC: declare the import overlay so mods can layer Profile entries
+# through db/import/population_vendor_pop.yml. population_spawn.yml already
+# does this for its spawn table; the vendor DBs were missing it. Mods that
+# only want to add a Profile (not override one) just need their file in the
+# import directory; the stub in db/import-tmpl keeps the file present otherwise.
+Footer:
+  Imports:
+    - Path: db/import/population_vendor_pop.yml

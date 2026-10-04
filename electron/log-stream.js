@@ -33,6 +33,9 @@ const SOURCES = [
 	{ id: 'app', name: 'App', files: ['app.log'] },
 	{ id: 'assets', name: 'Asset server', files: ['assets.log', 'assets/logs/missing-files.log'] },
 	{ id: 'engine', name: 'Engine', files: ['nebula:nebulad.log', 'nebula:vessel-console.log', 'nebula:vessel-console.worker-stderr.log'] },
+	// Every database backup and restore, step by step, with what the database
+	// said when it refused one (stack/src/cmds.rs, StepLog).
+	{ id: 'saves', name: 'Backup & restore', files: ['logs/backup-restore.log'] },
 ];
 
 // ---------------------------------------------------------------------------

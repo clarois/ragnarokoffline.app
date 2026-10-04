@@ -1,6 +1,6 @@
 {
   "name": "player-commands",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Ragnarok Offline",
   "description": "Gives every account @autoloot, @showexp and the rest of the information commands, instead of reserving them for GMs. Off until you turn it on.",
   "default": "off",

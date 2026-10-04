@@ -30,6 +30,9 @@
 #     Categories: [ names ]      List of ChatGlobal category names to draw from (uniform random).
 #
 # Placeholders in lines: {name} {map} {job}
+#   {item} {price}  - resolve to a random real item (and its price) from the
+#                     speaking shell's own vend. Vendor shells only; a line using
+#                     them is skipped for any shell that has nothing for sale.
 # Lines matching population_names.yml Blocklist entries are skipped (substring, case-insensitive).
 ###########################################################################
 
@@ -409,18 +412,47 @@ Body:
           - "I'll stay solo for now."
           - "No offence, not looking for a party."
         vendor_call:
+          # Generic callouts (no stock lookup).
           - "Selling consumables here!"
           - "Fresh stock, low prices!"
-          - "Potions and wings - come take a look!"
           - "Shop open! Check my items."
           - "Best prices on {map}, probably."
           - "Buying and selling - mostly selling."
           - "Stop by, browse for free!"
           - "Affordable gear solutions."
           - "My cart doesn't bite."
-          - "Wing of Butterfly in stock!"
-          - "Potion up before the dungeon!"
           - "Don't fight empty - buy here!"
+          # Stock-aware callouts: {item}/{price} resolve to a real item in this
+          # shell's vend at its real price. Skipped if the shell has nothing to sell.
+          - "{item} in stock!"
+          - "{item}, only {price}!"
+          - "Grab some {item} - just {price}!"
+          - "Fresh {item}, {price} each!"
+          - "Need {item}? {price} and it's yours."
+          - "{item} going cheap - {price}!"
+          - "Selling {item} right here!"
+          # Classic trade-chat shorthand (S> = selling, WTS> = want to sell).
+          - "S> {item}"
+          - "S> {item} {price}"
+          - "S> {item}, {price}"
+          - "S> {item} @ {price}"
+          - "WTS> {item}"
+          - "WTS> {item} - {price}"
+          - "WTS {item} {price} pm me"
+        # RAGNAROKMAC: buying stores (mod buyers only; {item}/{price} are what
+        # the store buys and what it pays).
+        buyer_call:
+          - "B> {item} {price}"
+          - "B> {item} @ {price}"
+          - "B>{item} {price} ea"
+          - "Buying {item}, {price} each!"
+          - "Buying {item} - {price}!"
+          - "WTB {item} {price}"
+          - "WTB> {item}, paying {price}"
+          - "Need {item}! Paying {price}."
+          - "buying {item} pm me"
+          - "Got {item}? I pay {price}."
+          - "Selling loot? I buy {item}."
 
   - ChatProfile: default
     Categories:

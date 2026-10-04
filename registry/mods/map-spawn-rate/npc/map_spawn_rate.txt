@@ -1,0 +1,38 @@
+//===== Ragnarok Offline mod: map-spawn-rate =================
+//= Scales the monster count of the maps chosen in the mod's Settings…
+//= window. The window stores them as "map=percent" pairs, ";"-separated,
+//= spread over the settings rates_1 .. rates_10 (one setting holds 200
+//= characters). setmapmobcountrate needs the fork's map_mob_count_rate
+//= extension, which this mod's db/extension_db.yml switches on.
+//============================================================
+
+-	script	map_spawn_rate#mod	-1,{
+	end;
+
+OnInit:
+	.@maps = 0;
+	for (.@slot = 1; .@slot <= 10; .@slot++) {
+		.@list$ = callfunc("F_ModSetting", "map-spawn-rate", "rates_" + .@slot, "");
+		if (.@list$ == "")
+			continue;
+		deletearray .@pairs$;
+		explode(.@pairs$, .@list$, ";");
+		for (.@i = 0; .@i < getarraysize(.@pairs$); .@i++) {
+			deletearray .@pair$;
+			explode(.@pair$, .@pairs$[.@i], "=");
+			if (getarraysize(.@pair$) != 2 || .@pair$[0] == "")
+				continue;
+			.@rate = atoi(.@pair$[1]);
+			if (.@rate <= 0 || .@rate == 100)
+				continue;
+			.@lines = setmapmobcountrate(.@pair$[0], .@rate);
+			if (.@lines >= 0) {
+				.@maps++;
+				debugmes "map-spawn-rate: " + .@pair$[0] + " at " + .@rate + "% (" + .@lines + " spawn lines)";
+			}
+		}
+	}
+	if (.@maps > 0)
+		debugmes "map-spawn-rate: " + .@maps + " maps changed";
+	end;
+}

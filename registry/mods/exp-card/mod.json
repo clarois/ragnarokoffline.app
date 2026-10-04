@@ -1,8 +1,8 @@
 {
   "name": "exp-card",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "BlaXun",
-  "description": "Every monster kill has a chance to drop a tiered Exp Card, bound to the killer for the standard pickup window. Two families -- Base Exp Cards and Job Exp Cards -- each with ten levels; higher-level mobs drop higher-level cards. A level 10 card grants roughly 5% of the exp a level-98 character needs for the next level, and each lower level is about half the one above it. Streamlines offline levelling without touching per-mob drop tables.",
+  "description": "Every monster kill has a chance to drop a tiered Exp Card, bound to the killer for the standard pickup window. Two families -- Base Exp Cards and Job Exp Cards -- each with ten levels; higher-level mobs drop higher-level cards. At 1x, a level 10 card grants roughly 5% of the exp a level-98 character needs for the next level, and each lower level is about half the one above it; card exp scales with the server's Base/Job EXP rates. Streamlines offline levelling without touching per-mob drop tables.",
   "requires": { "app": ">=1.3.9", "era": "any" },
   "tags": [
     "experience",

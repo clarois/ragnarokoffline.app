@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Map spawn rate</title>
+<style>
+  :root { color-scheme: light dark; --dim: #888; --accent: #4a8fe7; --line: #8884; --changed: #4a8fe722; --warn: #d9822b; }
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 18px 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { color: var(--dim); margin: 0 0 12px; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .bar input[type=search] { flex: 1 1 260px; padding: 6px 8px; font-size: 14px; }
+  .bar label { display: flex; gap: 6px; align-items: center; color: var(--dim); white-space: nowrap; }
+  input[type=checkbox] { accent-color: var(--accent); }
+  #list { border: 1px solid var(--line); border-radius: 8px; max-height: 58vh; overflow-y: auto; }
+  .row { display: grid; grid-template-columns: minmax(110px, 160px) 1fr auto; gap: 4px 12px; align-items: center; padding: 7px 12px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row.changed { background: var(--changed); }
+  .map { font-weight: 600; font-family: ui-monospace, monospace; }
+  .mobs { color: var(--dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rate { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  .rate input { width: 64px; padding: 3px 5px; text-align: right; }
+  .rate .count { color: var(--dim); font-size: 12px; min-width: 76px; text-align: right; }
+  .rate button { padding: 2px 8px; }
+  .empty { padding: 14px 12px; color: var(--dim); }
+  .actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+  .actions .space { flex: 1; }
+  button { padding: 6px 14px; }
+  #usage { color: var(--dim); font-size: 12px; }
+  #usage.full { color: var(--warn); }
+  #status { margin-top: 10px; color: var(--dim); min-height: 1.4em; }
+</style>
+</head>
+<body>
+<h1>Map spawn rate</h1>
+<p class="note" id="about"></p>
+<p class="note">
+  Search for a map by its name or a monster on it, and give it a rate: 200% doubles the monsters there,
+  50% halves them, empty or 100% leaves it stock. Bosses and other single-monster spawns are not changed.
+  Rates multiply with the server-wide monster count in Settings → Rates.
+</p>
+
+<div class="bar">
+  <input type="search" id="filter" placeholder="Filter: map name (prt_fild08) or monster (Poring)" autofocus>
+  <label><input type="checkbox" id="onlyChanged"> Only changed maps</label>
+</div>
+<div id="list"></div>
+
+<div class="actions">
+  <button id="reset">Reset all</button>
+  <span id="usage"></span>
+  <span class="space"></span>
+  <button id="save">Save</button>
+  <button id="apply">Save and restart server</button>
+</div>
+<div id="status"></div>
+
+<script>
+// Rates are stored as "map=percent" pairs joined by ";", spread across the
+// settings rates_1 .. rates_N, because one string setting holds 200
+// characters. npc/map_spawn_rate.txt reads them back the same way.
+const $ = id => document.getElementById(id);
+const status = text => { $('status').textContent = text; };
+const MIN_RATE = 1, MAX_RATE = 1000, SHOWN = 200;
+const MAP_NAME = /^[a-z0-9_@.-]{1,15}$/i;
+
+let maps = {};        // map -> [[name, id, scaling, singles], ...] for this era
+let slots = [];       // [{ key, max }] in order
+const rates = new Map(); // map -> percent, only maps that differ from 100
+
+function parseSlots(settings) {
+  for (const s of settings) {
+    if (!/^rates_\d+$/.test(s.key)) continue;
+    slots.push({ key: s.key, max: s.maxLength || 200 });
+    for (const pair of String(s.value || '').split(';')) {
+      const [map, value] = pair.split('=');
+      const rate = parseInt(value, 10);
+      if (map && MAP_NAME.test(map) && rate > 0 && rate !== 100) rates.set(map, rate);
+    }
+  }
+  slots.sort((a, b) => parseInt(a.key.slice(6)) - parseInt(b.key.slice(6)));
+}
+
+// Pack the pairs into the slots, or say how many maps did not fit.
+function pack() {
+  const values = Object.fromEntries(slots.map(s => [s.key, '']));
+  const pairs = [...rates].sort(([a], [b]) => a.localeCompare(b)).map(([m, r]) => `${m}=${r}`);
+  let slot = 0, left = 0;
+  for (const pair of pairs) {
+    while (slot < slots.length) {
+      const cur = values[slots[slot].key];
+      const next = cur ? `${cur};${pair}` : pair;
+      if (next.length <= slots[slot].max) { values[slots[slot].key] = next; break; }
+      slot++;
+    }
+    if (slot >= slots.length) left++;
+  }
+  return { values, left };
+}
+
+function updateUsage() {
+  const { left } = pack();
+  const used = rates.size;
+  $('usage').textContent = left
+    ? `${used} maps changed — ${left} do not fit, remove some before saving`
+    : `${used} map${used === 1 ? '' : 's'} changed`;
+  $('usage').className = left ? 'full' : '';
+  $('save').disabled = $('apply').disabled = left > 0;
+}
+
+function scaled(n, rate) {
+  return n <= 1 ? n : Math.max(1, Math.floor(n * rate / 100));
+}
+
+function mobSummary(mobs) {
+  return mobs.map(([name, , n, singles]) => n ? `${name} ×${n}` : `${name}${singles > 1 ? ` ×${singles}` : ''} (single)`).join(', ');
+}
+
+function rowFor(map) {
+  const mobs = maps[map] || [];
+  const total = mobs.reduce((t, [, , n]) => t + n, 0);
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const name = document.createElement('span');
+  name.className = 'map';
+  name.textContent = map;
+
+  const info = document.createElement('span');
+  info.className = 'mobs';
+  info.textContent = mobs.length ? mobSummary(mobs) : 'not in the stock spawn list (a custom map?)';
+  info.title = info.textContent;
+
+  const rate = document.createElement('span');
+  rate.className = 'rate';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = MIN_RATE; input.max = MAX_RATE; input.step = 10;
+  input.placeholder = '100';
+  input.value = rates.has(map) ? rates.get(map) : '';
+  const pct = document.createElement('span');
+  pct.textContent = '%';
+  const count = document.createElement('span');
+  count.className = 'count';
+  const reset = document.createElement('button');
+  reset.textContent = 'Reset';
+
+  const refresh = () => {
+    const r = rates.get(map) || 100;
+    row.classList.toggle('changed', rates.has(map));
+    count.textContent = mobs.length ? (r === 100 ? `${total} monsters` : `${total} → ${scaled(total, r)}`) : '';
+    reset.disabled = !rates.has(map);
+  };
+  input.oninput = () => {
+    const v = parseInt(input.value, 10);
+    if (!input.value || v === 100) rates.delete(map);
+    else if (v >= MIN_RATE) rates.set(map, Math.min(v, MAX_RATE));
+    refresh(); updateUsage();
+  };
+  input.onchange = () => { input.value = rates.has(map) ? rates.get(map) : ''; };
+  reset.onclick = () => { rates.delete(map); input.value = ''; refresh(); updateUsage(); };
+  refresh();
+
+  rate.append(input, pct, count, reset);
+  row.append(name, info, rate);
+  return row;
+}
+
+function render() {
+  const q = $('filter').value.trim().toLowerCase();
+  const only = $('onlyChanged').checked;
+  const names = new Set([...Object.keys(maps), ...rates.keys()]);
+  let shown = [...names].filter(map => {
+    if (only && !rates.has(map)) return false;
+    if (!q) return true;
+    return map.toLowerCase().includes(q) || (maps[map] || []).some(([name]) => name.toLowerCase().includes(q));
+  });
+  // Exact map-name hits first, then changed maps, then the rest by name.
+  shown.sort((a, b) => (b.toLowerCase() === q) - (a.toLowerCase() === q)
+    || rates.has(b) - rates.has(a) || a.localeCompare(b));
+
+  const list = $('list');
+  list.replaceChildren();
+  for (const map of shown.slice(0, SHOWN)) list.append(rowFor(map));
+
+  // A map the list does not know -- one a mod adds -- can still be set by name.
+  if (q && MAP_NAME.test(q) && !names.has(q)) {
+    const add = document.createElement('div');
+    add.className = 'empty';
+    const b = document.createElement('button');
+    b.textContent = `Set a rate for "${q}"`;
+    b.onclick = () => { rates.set(q, 200); render(); updateUsage(); };
+    add.append(b, document.createTextNode(' — not in the stock spawn list; use this for a map a mod adds.'));
+    list.append(add);
+  } else if (!shown.length) {
+    list.innerHTML = '<div class="empty">No map or monster matches.</div>';
+  }
+  if (shown.length > SHOWN) {
+    const more = document.createElement('div');
+    more.className = 'empty';
+    more.textContent = `${shown.length - SHOWN} more — narrow the filter to see them.`;
+    list.append(more);
+  }
+}
+
+async function run(button, work, done) {
+  button.disabled = true;
+  try { await work(); status(done); }
+  catch (e) { status('Error: ' + (e && e.message || e)); }
+  button.disabled = false;
+  updateUsage();
+}
+
+(async () => {
+  try {
+    const mod = await window.modSettings.get();
+    const era = mod.context.era === 'pre-renewal' ? 'pre-renewal' : 'renewal';
+    $('about').textContent = `${mod.name} ${mod.version} · ${era} · app ${mod.context.appVersion}`
+      + (mod.enabled ? '' : ' · this mod is switched off in the Mods tab');
+    parseSlots(mod.settings);
+    const data = await (await fetch('maps.json')).json();
+    maps = data.eras[era] || {};
+  } catch (e) {
+    status('Could not load: ' + (e && e.message || e));
+  }
+  render();
+  updateUsage();
+})();
+
+let pending;
+$('filter').oninput = () => { clearTimeout(pending); pending = setTimeout(render, 120); };
+$('onlyChanged').onchange = render;
+$('reset').onclick = () => { rates.clear(); render(); updateUsage(); };
+
+$('save').onclick = () => run($('save'),
+  () => window.modSettings.set(pack().values),
+  'Saved. The new rates take effect when the server restarts.');
+
+$('apply').onclick = () => run($('apply'), async () => {
+  await window.modSettings.set(pack().values);
+  status('Restarting the server…');
+  await window.modSettings.apply();
+}, 'Saved and applied. The maps spawn at their new rates.');
+</script>
+</body>
+</html>

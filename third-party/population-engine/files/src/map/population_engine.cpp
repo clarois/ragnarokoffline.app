@@ -52,6 +52,7 @@
 #include "status.hpp"
 #include "unit.hpp"
 #include "vending.hpp"
+#include "buyingstore.hpp"
 
 #include "population_engine/config/population_config.hpp"
 #include "population_engine/config/population_yaml_types.hpp"
@@ -107,6 +108,10 @@ struct PopVendorCacheBucket {
 };
 static std::unordered_map<std::string, PopVendorCacheBucket> g_pop_vendor_dyn_cache;
 
+/// RAGNAROKMAC: the base level the next spawn should take, set only around a
+/// hired companion's draft (population_engine_companion_hire). 0 = roll as usual.
+static int16_t g_pop_draft_level = 0;
+
 void population_engine_vendor_dyn_cache_clear() {
 	g_pop_vendor_dyn_cache.clear();
 }
@@ -120,6 +125,9 @@ void population_engine_vendor_job_pool_clear() {
 	g_pop_vendor_job_pool_built = false;
 }
 static std::unordered_map<int32, t_tick> g_pop_chat_next_tick; ///< Per-shell next chat eligibility tick.
+/// RAGNAROKMAC: last vendor callout per map, for a mod vendor's Callouts MapGapSeconds.
+static std::unordered_map<int16, t_tick> g_pop_vendor_last_callout;
+static bool pop_mod_vendor_callout_pace(const map_session_data* sd, const PopulationVendorEntry* ve, int& lo, int& hi);
 static int32 g_pop_chat_timer = INVALID_TIMER;
 static int32 g_population_combat_global_timer = INVALID_TIMER;
 static size_t g_chat_cursor = 0;    ///< Round-robin index for batched chat replies.
@@ -145,6 +153,72 @@ static void population_engine_chat_replace_all(std::string& s, const char* needl
 	}
 }
 
+/// RAGNAROKMAC: compact zeny for a chat callout - 1500000 -> "1.5M", 12000 -> "12K",
+/// 500 -> "500z". Deliberately approximate (one decimal place); the exact price is in
+/// the vend window. The {price} placeholder in population_chat.yml resolves through here.
+static void population_engine_format_zeny_compact(uint32 z, char* out, size_t out_sz) {
+	if (z >= 1000000) {
+		const uint32 whole = z / 1000000;
+		const uint32 frac = (z % 1000000) / 100000; // first decimal digit
+		if (frac > 0)
+			safesnprintf(out, out_sz, "%u.%uM", whole, frac);
+		else
+			safesnprintf(out, out_sz, "%uM", whole);
+	} else if (z >= 10000) {
+		safesnprintf(out, out_sz, "%uK", z / 1000);
+	} else if (z >= 1000) {
+		const uint32 whole = z / 1000;
+		const uint32 frac = (z % 1000) / 100;
+		if (frac > 0)
+			safesnprintf(out, out_sz, "%u.%uK", whole, frac);
+		else
+			safesnprintf(out, out_sz, "%uK", whole);
+	} else {
+		safesnprintf(out, out_sz, "%uz", z);
+	}
+}
+
+/// RAGNAROKMAC: pick one random live vend slot for a vendor shell so a callout names
+/// something the shell actually sells, at its real price. Reads the standard rAthena
+/// vending data (sd->vending[]/vend_num) populated by vending_openvending() at spawn.
+/// Returns false when the shell is not vending or the slot is unusable, which the
+/// {item}/{price} formatting path treats as "skip this line".
+static bool population_engine_pick_vend_stock(map_session_data* sd, const char** ename_out, uint32* price_out) {
+	// RAGNAROKMAC: a buying store's callout names something it is buying, at
+	// what it pays.
+	if (sd != nullptr && sd->state.buyingstore && sd->buyingstore.slots > 0) {
+		const int pick = static_cast<int>(rnd() % sd->buyingstore.slots);
+		const auto& bi = sd->buyingstore.items[pick];
+		if (bi.nameid == 0 || bi.amount <= 0)
+			return false;
+		std::shared_ptr<item_data> id = item_db.find(bi.nameid);
+		if (!id || id->ename.empty())
+			return false;
+		if (ename_out != nullptr)
+			*ename_out = id->ename.c_str();
+		if (price_out != nullptr)
+			*price_out = static_cast<uint32>(bi.price);
+		return true;
+	}
+	if (sd == nullptr || sd->vend_num <= 0)
+		return false;
+	const int pick = static_cast<int>(rnd() % static_cast<uint32>(sd->vend_num));
+	const int16 cart_idx = sd->vending[pick].index;
+	if (cart_idx < 0 || cart_idx >= MAX_CART)
+		return false;
+	const t_itemid nameid = sd->cart.u.items_cart[cart_idx].nameid;
+	if (nameid == 0)
+		return false;
+	std::shared_ptr<item_data> id = item_db.find(nameid);
+	if (!id || id->ename.empty())
+		return false;
+	if (ename_out != nullptr)
+		*ename_out = id->ename.c_str();
+	if (price_out != nullptr)
+		*price_out = sd->vending[pick].value;
+	return true;
+}
+
 static void population_engine_format_chat_line(map_session_data* sd, const char* templ, char* out, size_t out_sz) {
 	if (!out || out_sz == 0)
 		return;
@@ -158,6 +232,21 @@ static void population_engine_format_chat_line(map_session_data* sd, const char*
 		population_engine_chat_replace_all(s, "{map}", std::string(mapn && mapn[0] ? mapn : "?"));
 		const char* jn = job_name(sd->status.class_);
 		population_engine_chat_replace_all(s, "{job}", std::string(jn && jn[0] ? jn : "?"));
+
+		// RAGNAROKMAC: {item}/{price} name a real item from the shell's own vend so a
+		// vendor callout tells the truth ("Poring Card, only 1M!"). Only resolved when
+		// the line asks for it; a non-vendor (or a vendor with no sellable slot) leaves
+		// `out` empty so the caller's blocked-line check skips it this tick.
+		if (s.find("{item}") != std::string::npos || s.find("{price}") != std::string::npos) {
+			const char* ename = nullptr;
+			uint32 price = 0;
+			if (!population_engine_pick_vend_stock(sd, &ename, &price))
+				return; // out already "\0"
+			char pricebuf[32];
+			population_engine_format_zeny_compact(price, pricebuf, sizeof(pricebuf));
+			population_engine_chat_replace_all(s, "{item}", std::string(ename));
+			population_engine_chat_replace_all(s, "{price}", std::string(pricebuf));
+		}
 	}
 	if (s.size() >= out_sz)
 		s.resize(out_sz - 1);
@@ -355,7 +444,13 @@ TIMER_FUNC(population_engine_chat_timer) {
 		// Context-aware pool selection: vendor shells call out, arena shells taunt, hunters talk hunt, else idle/profile.
 		const std::vector<std::string>* pool = nullptr;
 		const auto beh = static_cast<PopulationBehavior>(raw_sd->pop.behavior);
-		if (beh == PopulationBehavior::Vendor)
+		if (beh == PopulationBehavior::Vendor && raw_sd->pop.vendor_buying) {
+			// RAGNAROKMAC: buyers call out what they buy; without buyer_call
+			// lines they stay quiet rather than shout "Selling ...".
+			pool = population_chat_db().lines_for_category("buyer_call");
+			if (pool == nullptr || pool->empty())
+				continue;
+		} else if (beh == PopulationBehavior::Vendor)
 			pool = population_chat_db().lines_for_category("vendor_call");
 		else if (raw_sd->pop.arena_team > 0)
 			pool = population_chat_db().lines_for_category("pvp_taunt");
@@ -376,6 +471,27 @@ TIMER_FUNC(population_engine_chat_timer) {
 		if (now < next)
 			continue;
 
+		// RAGNAROKMAC: a mod vendor with Callouts waits its turn on the map, so a
+		// street of stalls takes turns instead of talking over one another.
+		const PopulationVendorEntry* mod_ve = nullptr;
+		int pace_lo = 0, pace_hi = 0;
+		if (beh == PopulationBehavior::Vendor && !raw_sd->pop.vendor_spawn_id.empty()) {
+			mod_ve = population_vendor_db().find(raw_sd->pop.vendor_key);
+			if (!pop_mod_vendor_callout_pace(raw_sd, mod_ve, pace_lo, pace_hi)) {
+				// Its mod switched callouts off; look again in a minute.
+				g_pop_chat_next_tick[raw_sd->id] = now + 60000;
+				continue;
+			}
+			if (mod_ve != nullptr && mod_ve->callout_map_gap_sec > 0) {
+				auto lit = g_pop_vendor_last_callout.find(raw_sd->m);
+				if (lit != g_pop_vendor_last_callout.end() &&
+				    DIFF_TICK(now, lit->second) < static_cast<t_tick>(mod_ve->callout_map_gap_sec) * 1000) {
+					g_pop_chat_next_tick[raw_sd->id] = now + 1000 + static_cast<t_tick>(rnd() % 3000);
+					continue;
+				}
+			}
+		}
+
 		const std::string& pick = (*pool)[rnd() % pool->size()];
 		char buf[CHAT_SIZE_MAX];
 		population_engine_format_chat_line(raw_sd, pick.c_str(), buf, sizeof(buf));
@@ -387,7 +503,12 @@ TIMER_FUNC(population_engine_chat_timer) {
 
 		const int32 base_cd = battle_config.population_engine_chat_cooldown_ms;
 		const int32 jit = battle_config.population_engine_chat_cooldown_jitter_ms;
-		const t_tick add = static_cast<t_tick>(base_cd + (jit > 0 ? static_cast<int32>(rnd() % (static_cast<uint32_t>(jit) + 1u)) : 0));
+		t_tick add = static_cast<t_tick>(base_cd + (jit > 0 ? static_cast<int32>(rnd() % (static_cast<uint32_t>(jit) + 1u)) : 0));
+		// RAGNAROKMAC: a mod vendor's own pace replaces the global cooldown.
+		if (pace_hi > 0)
+			add = static_cast<t_tick>(pace_lo + static_cast<int32>(rnd() % static_cast<uint32_t>(pace_hi - pace_lo + 1))) * 1000;
+		if (beh == PopulationBehavior::Vendor)
+			g_pop_vendor_last_callout[raw_sd->m] = now;
 		g_pop_chat_next_tick[raw_sd->id] = now + add;
 		spoken++;
 	}
@@ -468,6 +589,12 @@ static bool population_engine_deliver_chat_reply_locked(map_session_data* bot_sd
 
 static PopulationEngineConfig g_current_config;
 static int32 g_autosummon_timer = INVALID_TIMER;
+// RAGNAROKMAC: Pool-vendor rotation. Fires every POP_VENDOR_ROTATION_TICK_MS and
+// releases vendor shells whose per-shell vendor_rotation_at has passed; the
+// autosummon pass refills with a fresh pool pick + title. See the Pool branch in
+// population_engine_spawn_shell.
+static int32 g_vendor_rotation_timer = INVALID_TIMER;
+static constexpr int32 POP_VENDOR_ROTATION_TICK_MS = 60000; // 60s is plenty for an hours-scale rotation.
 /// 5M-slot ID pool; index in [1, POPULATION_ENGINE_INDEX_MAX) keeps account_id below POPULATION_ENGINE_ACCOUNT_ID_END.
 static constexpr uint32_t POPULATION_ENGINE_INDEX_MAX = POPULATION_ENGINE_ACCOUNT_ID_END - POPULATION_ENGINE_ACCOUNT_ID_BASE;
 static std::atomic<uint32_t> g_next_population_engine_index(1);
@@ -660,7 +787,10 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 	uint16_t head_bottom, uint32_t option, uint16_t cloth_color, uint16_t garment,
 	struct script_code* init_script, bool skip_arrow, const PopulationEngine* pop_cfg,
 	uint8_t map_category = 0,
-	PopulationDbSource db_source = PopulationDbSource::Main);
+	PopulationDbSource db_source = PopulationDbSource::Main,
+	const PopulationVendorEntry* mod_entry = nullptr,
+	const PopulationModSpawn* mod_spawn = nullptr,
+	int16_t mod_seat = -1);
 static std::string generate_bot_name(uint32_t index);
 static std::string generate_population_pc_name(uint32_t index, const PopulationEngine* cfg);
 static int16_t get_random_job_id();
@@ -747,7 +877,22 @@ static size_t population_engine_count_shells_on_map_for_profile(
 static size_t population_engine_count_vendors_on_map(int16_t map_id) {
     size_t count = 0;
     for (map_session_data* sd : g_population_engine_pcs) {
-        if (sd && sd->m == map_id && sd->state.vending)
+        // RAGNAROKMAC: mod vendor shells have their own counts; never let them
+        // use up the engine's own MaxVendors. (No mods -> no change.)
+        if (sd && sd->m == map_id && sd->state.vending && sd->pop.vendor_spawn_id.empty())
+            ++count;
+    }
+    return count;
+}
+
+/// RAGNAROKMAC: shells of one mod vendor spawn block on a map, whatever their
+/// state (a shell whose stall failed to open still holds its place, so the pass
+/// does not spawn replacements forever). `seat` >= 0 counts only that seat.
+static size_t population_engine_count_mod_shells(int16_t map_id, const std::string& spawn_id, int16_t seat = -1) {
+    size_t count = 0;
+    for (map_session_data* sd : g_population_engine_pcs) {
+        if (sd && sd->m == map_id && sd->pop.vendor_spawn_id == spawn_id &&
+            (seat < 0 || sd->pop.vendor_seat == seat))
             ++count;
     }
     return count;
@@ -1061,7 +1206,7 @@ std::vector<map_session_data*> population_engine_collect_stale_shells()
 				&& !pc_isdead(sd) && map_id2bl(sd->id) == sd) {
 				int16_t tx = owner->x, ty = owner->y;
 				map_search_freecell(owner, owner->m, &tx, &ty, 2, 2, 0);
-				if (pc_setpos(sd, owner->m, tx, ty, CLR_TELEPORT) == SETPOS_OK) {
+				if (pc_setpos(sd, map_id2index(owner->m), tx, ty, CLR_TELEPORT) == SETPOS_OK) {
 					pop_shell_finish_map_placement(sd);
 					pop_shell_broadcast_map_placement(sd);
 					ShowInfo("Population engine: companion %s followed its owner to another map.\n",
@@ -1230,12 +1375,18 @@ static size_t autosummon_fill_map(int16_t map_id, size_t want, uint16_t job_hint
 	const PopulationVendorPlacement *map_vp =
 		population_vendor_db().vendor_placement_for_map(std::string(mapdata->name));
 	std::vector<std::pair<int16, int16>> vendor_positions_here;
+	// RAGNAROKMAC: mod vendor shells stay in the spacing snapshot (base vendors
+	// must not stand on a mod stall) but not in the MaxVendors count, which is
+	// the engine's own budget. With no mod vendors both equal upstream.
+	size_t base_vendors_here = 0;
 	if (map_vp && (map_vp->min_spacing > 0 || map_vp->max_vendors > 0)) {
 		vendor_positions_here.reserve(g_population_engine_pcs.size());
 		for (auto* psd : g_population_engine_pcs) {
 			if (!psd || psd->m != map_id) continue;
 			if (!psd->state.vending) continue;
 			vendor_positions_here.emplace_back(psd->x, psd->y);
+			if (psd->pop.vendor_spawn_id.empty())
+				++base_vendors_here;
 		}
 	}
 
@@ -1298,7 +1449,7 @@ static size_t autosummon_fill_map(int16_t map_id, size_t want, uint16_t job_hint
 		// Enforce MaxVendors cap. vendor_positions_here was built before this loop
 		// and is updated after each successful vendor spawn below.
 		if (vp && vp->max_vendors > 0 &&
-		    static_cast<int>(vendor_positions_here.size()) >= vp->max_vendors)
+		    static_cast<int>(base_vendors_here) >= vp->max_vendors)
 			continue; // map full of vendors already
 
 		// Find a walkable spawn position.
@@ -1445,8 +1596,10 @@ static size_t autosummon_fill_map(int16_t map_id, size_t want, uint16_t job_hint
 			++spawned;
 			// Keep the pre-built snapshot current so subsequent slots in this batch
 			// see the just-spawned vendor when enforcing spacing and MaxVendors.
-			if (is_vendor_spawn && vp)
+			if (is_vendor_spawn && vp) {
 				vendor_positions_here.emplace_back(static_cast<int16>(x), static_cast<int16>(y));
+				++base_vendors_here;
+			}
 		} else {
 			g_population_engine_stats.errors++;
 		}
@@ -2070,10 +2223,653 @@ static bool pop_companion_follow_owner(map_session_data *sd, map_session_data *o
 	if (owner_distance > 4) {
 		population_shell_target_change(sd, 0);
 		unit_stop_attack(sd);
-		unit_walktobl(sd, owner, 3, 1);
+		// RAGNAROKMAC: full path search (flag 0). The easy path (flag 1) never walks round an
+		// obstacle, so with a wall or a tree in between the walk did not start at all and the
+		// companion stood still until the owner was far enough away to warp it.
+		unit_walktobl(sd, owner, 3, 0);
 		return false;
 	}
 	return true;
+}
+
+// ---- RAGNAROKMAC: mod vendors ------------------------------------------------
+//
+// A vendor entry with `Spawns:` belongs to a mod. Its shells are spawned here,
+// next to (never through) the engine's own VendorPlacement pass, so a mod can
+// put vendors on exact cells or in its own areas without changing where or how
+// many of the engine's vendors appear, and without touching another mod's. The
+// shell's look comes from the PlacementBound profile whose VendorKey equals the
+// entry's key; its stock comes from the entry itself.
+
+/// RAGNAROKMAC: a sign for a mod stall from its entry's pool, with {name} as
+/// the owner's name, never one another stall on the map already shows
+/// (another from the pool if free, else numbered). The vending path does the
+/// same inline; buying stores use this.
+static std::string pop_mod_pick_title(map_session_data* sd, const PopulationVendorEntry& e) {
+	auto resolve = [&](const std::string& t) {
+		std::string r = t;
+		population_engine_chat_replace_all(r, "{name}", std::string(sd->status.name));
+		if (r.size() >= MESSAGE_SIZE)
+			r.resize(MESSAGE_SIZE - 1);
+		return r;
+	};
+	auto in_use = [&](const std::string& t) {
+		for (map_session_data* o : g_population_engine_pcs)
+			if (o && o != sd && o->m == sd->m && (o->state.vending || o->state.buyingstore) && t == o->message)
+				return true;
+		return false;
+	};
+	std::vector<std::string> cands;
+	for (const std::string& t : e.title_pool)
+		cands.push_back(resolve(t));
+	if (cands.empty())
+		cands.push_back(resolve(e.title.empty() ? std::string("Buying") : e.title));
+	for (size_t i = cands.size(); i > 1; --i)
+		std::swap(cands[i - 1], cands[rnd() % i]);
+	for (const std::string& c : cands)
+		if (!in_use(c))
+			return c;
+	const std::string base = cands.front();
+	for (int n = 2; n < 100; ++n) {
+		const std::string suffix = " " + std::to_string(n);
+		std::string t = base.substr(0, std::min(base.size(), static_cast<size_t>(MESSAGE_SIZE - 1) - suffix.size())) + suffix;
+		if (!in_use(t))
+			return t;
+	}
+	return base;
+}
+
+/// A cell a mod vendor may take: walkable, vending allowed, nobody standing on
+/// it (players and shells are both BL_PC). An occupied seat stays empty until
+/// it is free again; it is never moved.
+static bool pop_mod_vendor_cell_free(int16_t m, int16_t x, int16_t y) {
+	struct map_data* md = map_getmapdata(m);
+	if (!md || x < 0 || y < 0 || x >= md->xs || y >= md->ys)
+		return false;
+	if (!map_getcell(m, x, y, CELL_CHKPASS) || map_getcell(m, x, y, CELL_CHKNOVENDING))
+		return false;
+	return map_count_oncell(m, x, y, BL_PC, 0) == 0;
+}
+
+/// RAGNAROKMAC: true when an NPC stands within min_npc_vendchat_distance of
+/// (x, y) -- the rule that keeps a player's own shop away from NPCs, which a
+/// shell never goes through. Hidden NPCs (disablenpc) do not count, as for a
+/// player. Used for Count + Areas only: a fixed seat is where its mod put it.
+static bool pop_mod_vendor_near_npc(int16_t m, int16_t x, int16_t y) {
+	const int16_t d = static_cast<int16_t>(battle_config.min_npc_vendchat_distance);
+	if (d <= 0)
+		return false;
+	return map_foreachinallarea(npc_isnear_sub, m,
+		static_cast<int16_t>(x - d), static_cast<int16_t>(y - d),
+		static_cast<int16_t>(x + d), static_cast<int16_t>(y + d), BL_NPC, 0) > 0;
+}
+
+/// Spawn one shell for a mod vendor block at (x, y). Mirrors the look-building in
+/// autosummon_fill_map, but with the vendor's own profile handed in directly.
+static bool pop_mod_vendor_spawn_one(int16_t m, const PopulationVendorEntry& entry,
+	const PopulationModSpawn& sp, const PopulationEngine& prof, int16_t x, int16_t y, int16_t seat)
+{
+	const uint16_t job_id = prof.sprite_job;
+	if (!pcdb_checkid(job_id))
+		return false;
+
+	char sex;
+	const char required_sex = get_job_required_sex(job_id);
+	if (required_sex != '\0')
+		sex = required_sex;
+	else if (prof.sex_override >= 0)
+		sex = prof.sex_override ? 'M' : 'F';
+	else
+		sex = (rnd() % 2) ? 'M' : 'F';
+
+	const uint8_t  hair_style  = MAX_HAIR_STYLE;
+	const uint16_t hair_color  = static_cast<uint16_t>(population_roll_closed_range(MIN_HAIR_COLOR, MAX_HAIR_COLOR));
+	const uint16_t cloth_color = static_cast<uint16_t>(population_roll_closed_range(MIN_CLOTH_COLOR, MAX_CLOTH_COLOR));
+	auto pick_pool = [](const std::vector<uint16_t>& p) -> uint16_t {
+		if (p.empty()) return 0;
+		return p.size() == 1 ? p[0] : p[rnd() % p.size()];
+	};
+
+	const uint32_t index = population_engine_allocate_index();
+	if (index == 0)
+		return false;
+
+	map_session_data* sd = population_engine_spawn_shell(
+		m, x, y, index, job_id, sex, hair_style, hair_color,
+		pick_pool(prof.weapon_pool), pick_pool(prof.shield_pool),
+		pick_pool(prof.head_top_pool), pick_pool(prof.head_mid_pool), pick_pool(prof.head_bottom_pool),
+		0 /*option*/, cloth_color, pick_pool(prof.garment_pool), prof.script, prof.skip_arrow,
+		&prof, 1 /*town: selects TownBehavior vendor*/, PopulationDbSource::Vendor,
+		&entry, &sp, seat);
+	if (!sd) {
+		g_population_engine_stats.errors++;
+		return false;
+	}
+	g_population_engine_pcs.push_back(sd);
+	g_population_engine_count++;
+	g_population_engine_stats.total_created++;
+	g_population_engine_stats.active_units++;
+	// A stall's first callout lands anywhere in its interval, so a street that
+	// spawns at once does not open with every stall shouting together. Always
+	// set, even if its profile has no chat pool: no entry means "speak now".
+	int pace_lo = 0, pace_hi = 0;
+	pop_mod_vendor_callout_pace(sd, &entry, pace_lo, pace_hi);
+	const int32 spread = pace_hi > 0 ? pace_hi
+		: (battle_config.population_engine_chat_cooldown_ms + battle_config.population_engine_chat_cooldown_jitter_ms) / 1000;
+	g_pop_chat_next_tick[sd->id] = gettick() + static_cast<t_tick>(rnd() % (static_cast<uint32_t>(std::max(spread, 1)) + 1u)) * 1000;
+	return true;
+}
+
+/// RAGNAROKMAC: what a mod's scripts set for its vendors (from its settings),
+/// per VendorKey prefix. -1 = not set, keep the YAML.
+struct PopModVendorSettings {
+	std::string prefix;
+	int total = -1;            ///< population_vendor_count
+	int rotation_min = -1;     ///< population_vendor_rotation (0 = never)
+	int callouts = -1;         ///< population_vendor_callouts: 0 off, 1 on
+	int callout_min_sec = -1;
+	int callout_max_sec = -1;
+	int respect_limit = -1;    ///< population_vendor_limit: 0 = spawn even when the population is full
+	int price_pct = -1;        ///< population_vendor_price: every listed price × this / 100
+};
+static std::vector<PopModVendorSettings> g_pop_mod_vendor_settings;
+/// Breaks ties when a total is smaller than the number of blocks, so which
+/// themes sit out changes with each server start rather than always the same.
+static uint32_t g_pop_mod_vendor_seed = 0;
+
+static PopModVendorSettings& pop_mod_vendor_settings_for_prefix(const char* prefix) {
+	const std::string p = prefix ? prefix : "";
+	for (auto& e : g_pop_mod_vendor_settings)
+		if (e.prefix == p)
+			return e;
+	g_pop_mod_vendor_settings.push_back(PopModVendorSettings{});
+	g_pop_mod_vendor_settings.back().prefix = p;
+	return g_pop_mod_vendor_settings.back();
+}
+
+/// The settings that apply to a VendorKey: the longest matching prefix.
+static const PopModVendorSettings* pop_mod_vendor_settings_for_key(const std::string& key) {
+	const PopModVendorSettings* best = nullptr;
+	for (const auto& e : g_pop_mod_vendor_settings)
+		if (key.compare(0, e.prefix.size(), e.prefix) == 0 && (!best || e.prefix.size() > best->prefix.size()))
+			best = &e;
+	return best;
+}
+
+void population_engine_set_mod_vendor_total(const char* prefix, int total) {
+	if (g_pop_mod_vendor_seed == 0)
+		g_pop_mod_vendor_seed = static_cast<uint32_t>(rnd()) | 1u;
+	PopModVendorSettings& e = pop_mod_vendor_settings_for_prefix(prefix);
+	e.total = total < 0 ? -1 : total;
+	ShowInfo("Population engine: mod vendors '%s*': %d in total.\n", e.prefix.c_str(), e.total);
+}
+
+void population_engine_set_mod_vendor_rotation(const char* prefix, int minutes) {
+	PopModVendorSettings& e = pop_mod_vendor_settings_for_prefix(prefix);
+	e.rotation_min = minutes < 0 ? -1 : std::min(minutes, 168 * 60);
+	ShowInfo("Population engine: mod vendors '%s*': rotate every %d min.\n", e.prefix.c_str(), e.rotation_min);
+}
+
+void population_engine_set_mod_vendor_callouts(const char* prefix, int on, int min_sec, int max_sec) {
+	PopModVendorSettings& e = pop_mod_vendor_settings_for_prefix(prefix);
+	e.callouts = on ? 1 : 0;
+	if (max_sec < min_sec) std::swap(min_sec, max_sec);
+	e.callout_min_sec = min_sec > 0 ? min_sec : -1;
+	e.callout_max_sec = max_sec > 0 ? max_sec : -1;
+	ShowInfo("Population engine: mod vendors '%s*': callouts %s, every %d-%d s.\n",
+		e.prefix.c_str(), on ? "on" : "off", e.callout_min_sec, e.callout_max_sec);
+}
+
+void population_engine_set_mod_vendor_limit(const char* prefix, int respect) {
+	PopModVendorSettings& e = pop_mod_vendor_settings_for_prefix(prefix);
+	e.respect_limit = respect ? 1 : 0;
+	ShowInfo("Population engine: mod vendors '%s*': %s the population limit.\n",
+		e.prefix.c_str(), respect ? "respect" : "ignore");
+}
+
+void population_engine_set_mod_vendor_price(const char* prefix, int pct) {
+	PopModVendorSettings& e = pop_mod_vendor_settings_for_prefix(prefix);
+	e.price_pct = pct > 0 ? std::min(pct, 100000) : -1;
+	ShowInfo("Population engine: mod vendors '%s*': prices at %d%%.\n", e.prefix.c_str(), pct > 0 ? e.price_pct : 100);
+}
+
+/// The price level a mod vendor's mod set, in percent (100 = as listed).
+static int pop_mod_vendor_price_pct(const PopulationVendorEntry* mod_entry) {
+	if (mod_entry == nullptr)
+		return 100;
+	const PopModVendorSettings* st = pop_mod_vendor_settings_for_key(mod_entry->key);
+	return st && st->price_pct > 0 ? st->price_pct : 100;
+}
+
+/// A mod vendor shell's callout pace: its settings, else its entry, else 0
+/// (the engine's global cooldown). Returns false when its callouts are off.
+static bool pop_mod_vendor_callout_pace(const map_session_data* sd, const PopulationVendorEntry* ve, int& lo, int& hi) {
+	lo = ve ? ve->callout_min_sec : 0;
+	hi = ve ? ve->callout_max_sec : 0;
+	if (const PopModVendorSettings* st = pop_mod_vendor_settings_for_key(sd->pop.vendor_key)) {
+		if (st->callouts == 0)
+			return false;
+		if (st->callout_max_sec > 0) {
+			lo = st->callout_min_sec > 0 ? st->callout_min_sec : st->callout_max_sec;
+			hi = st->callout_max_sec;
+		}
+	}
+	return true;
+}
+
+/// Per spawn block, the count a population_vendor_count total gives it: the
+/// total split by the blocks' YAML counts (largest remainder, so it adds up
+/// exactly), a seat block never above its seats.
+static std::unordered_map<std::string, size_t> pop_mod_vendor_overrides() {
+	std::unordered_map<std::string, size_t> out;
+	for (const auto& tot : g_pop_mod_vendor_settings) {
+		if (tot.total < 0)
+			continue;
+		std::vector<const PopulationModSpawn*> blocks;
+		for (const auto& kv : population_vendor_db().vendor_entries())
+			if (kv.first.compare(0, tot.prefix.size(), tot.prefix) == 0)
+				for (const PopulationModSpawn& sp : kv.second.spawns)
+					blocks.push_back(&sp);
+		std::sort(blocks.begin(), blocks.end(),
+			[](const PopulationModSpawn* a, const PopulationModSpawn* b) { return a->spawn_id < b->spawn_id; });
+		auto weight = [](const PopulationModSpawn* sp) -> size_t {
+			return sp->positions.empty() ? static_cast<size_t>(sp->count) : sp->positions.size();
+		};
+		size_t wsum = 0;
+		for (const auto* sp : blocks) wsum += weight(sp);
+		if (wsum == 0) continue;
+		const size_t total = static_cast<size_t>(tot.total);
+		std::vector<std::pair<size_t, size_t>> rem; // (remainder, index)
+		size_t given = 0;
+		for (size_t i = 0; i < blocks.size(); ++i) {
+			const size_t share = total * weight(blocks[i]);
+			out[blocks[i]->spawn_id] = share / wsum;
+			given += share / wsum;
+			rem.emplace_back(share % wsum, i);
+		}
+		std::vector<size_t> tie(blocks.size());
+		for (size_t i = 0; i < blocks.size(); ++i)
+			tie[i] = std::hash<std::string>()(blocks[i]->spawn_id) ^ (static_cast<size_t>(g_pop_mod_vendor_seed) * 2654435761u);
+		std::sort(rem.begin(), rem.end(),
+			[&](const std::pair<size_t, size_t>& a, const std::pair<size_t, size_t>& b) {
+				return a.first != b.first ? a.first > b.first : tie[a.second] < tie[b.second];
+			});
+		for (size_t r = 0; given < total && r < rem.size(); ++r, ++given)
+			++out[blocks[rem[r].second]->spawn_id];
+		for (const auto* sp : blocks)
+			if (!sp->positions.empty() && out[sp->spawn_id] > sp->positions.size())
+				out[sp->spawn_id] = sp->positions.size();
+	}
+	return out;
+}
+
+/// RAGNAROKMAC: the theme a market spot gets. Themes below their Min come
+/// first; otherwise a weighted pick, each theme's weight divided by (1 + the
+/// stalls of it already in this block) so the street stays varied, skipping
+/// themes at their Max. nullptr if no theme can be used.
+static const PopulationVendorEntry* pop_market_pick(const PopulationVendorEntry& market, int16 m,
+	const PopulationModSpawn& sp, std::unordered_set<std::string>& warned)
+{
+	std::unordered_map<std::string, int> have;
+	for (map_session_data* psd : g_population_engine_pcs)
+		if (psd && psd->m == m && psd->pop.vendor_spawn_id == sp.spawn_id)
+			++have[psd->pop.vendor_key];
+
+	struct Cand { const PopulationMarketTheme* t; const PopulationVendorEntry* e; };
+	std::vector<Cand> usable;
+	for (const PopulationMarketTheme& t : market.themes) {
+		const PopulationVendorEntry* e = population_vendor_db().find(t.key);
+		if (e == nullptr || e->is_market || population_vendor_pop_db().find_by_vendor_key(t.key) == nullptr) {
+			if (warned.insert(market.key + ">" + t.key).second)
+				ShowWarning("Population engine: market '%s' names theme '%s', which has no vendor entry "
+				            "or no PlacementBound profile; skipped.\n", market.key.c_str(), t.key.c_str());
+			continue;
+		}
+		if (t.max > 0 && have[t.key] >= t.max)
+			continue;
+		usable.push_back({ &t, e });
+	}
+	std::vector<Cand> need;
+	for (const Cand& c : usable)
+		if (have[c.t->key] < c.t->min)
+			need.push_back(c);
+	const std::vector<Cand>& from = need.empty() ? usable : need;
+	auto weight = [&](const Cand& c) {
+		return static_cast<double>(std::max(c.t->weight, need.empty() ? 0 : 1)) / (1 + have[c.t->key]);
+	};
+	double total = 0;
+	for (const Cand& c : from)
+		total += weight(c);
+	if (total <= 0)
+		return nullptr;
+	double r = (static_cast<double>(rnd() % 1000000) / 1000000.0) * total;
+	for (const Cand& c : from) {
+		r -= weight(c);
+		if (r <= 0)
+			return c.e;
+	}
+	return from.back().e;
+}
+
+/// RAGNAROKMAC: open a buying store for a mod buyer shell: up to
+/// MAX_BUYINGSTORE_SLOTS items drawn from its pool (only items rAthena lets a
+/// buying store take), each with its wanted amount and a price rolled in its
+/// range at the mod's price level, never below what an NPC pays (or a player
+/// would sell there instead). The shell gets one of each item (rAthena wants
+/// a buyer to own one), exactly the zeny it offers, and room to carry it all.
+static bool pop_shell_open_buyingstore(map_session_data* sd, const PopulationVendorEntry& e) {
+	if (sd == nullptr || e.pool.empty())
+		return false;
+	std::vector<const PopulationVendorStock*> cands;
+	for (const PopulationVendorStock& vs : e.pool) {
+		std::shared_ptr<item_data> id = item_db.find(vs.nameid);
+		if (id && id->flag.buyingstore && vs.price > 0)
+			cands.push_back(&vs);
+	}
+	if (cands.empty())
+		return false;
+	for (size_t i = cands.size(); i > 1; --i)
+		std::swap(cands[i - 1], cands[rnd() % i]);
+	int lo = e.pick_count_min > 0 ? e.pick_count_min : MAX_BUYINGSTORE_SLOTS;
+	int hi = e.pick_count_max > 0 ? e.pick_count_max : lo;
+	if (hi < lo) hi = lo;
+	int want = hi > lo ? lo + static_cast<int>(rnd() % (hi - lo + 1)) : lo;
+	want = std::max(1, std::min({ want, static_cast<int>(MAX_BUYINGSTORE_SLOTS), static_cast<int>(cands.size()) }));
+
+	const int pct = pop_mod_vendor_price_pct(&e);
+	std::vector<PACKET_CZ_REQ_OPEN_BUYING_STORE_sub> list;
+	int64_t budget = 0;
+	for (int i = 0; i < want; ++i) {
+		const PopulationVendorStock& vs = *cands[i];
+		std::shared_ptr<item_data> id = item_db.find(vs.nameid);
+		int64_t p = vs.price_max > vs.price ? vs.price + static_cast<int64_t>(rnd() % (vs.price_max - vs.price + 1)) : vs.price;
+		p = p * pct / 100;
+		if (p >= 10000)     p = p / 500 * 500;
+		else if (p >= 1000) p = p / 50 * 50;
+		else if (p >= 100)  p = p / 5 * 5;
+		if (p <= static_cast<int64_t>(id->value_sell)) p = id->value_sell + 1;
+		p = std::min<int64_t>(std::max<int64_t>(p, 1), 99990000);
+		// Wants between half and all of its listed amount.
+		const int amount = std::max(1, std::min<int>(9998, vs.amount / 2 + static_cast<int>(rnd() % (vs.amount / 2 + 1))));
+		PACKET_CZ_REQ_OPEN_BUYING_STORE_sub sub{};
+		sub.itemId = vs.nameid;
+		sub.amount = static_cast<uint16>(amount);
+		sub.price = static_cast<uint32>(p);
+		list.push_back(sub);
+		budget += p * amount;
+	}
+	budget = std::min<int64_t>(budget, MAX_ZENY);
+
+	// What rAthena asks of a buyer: one of each item, the zeny, and room.
+	for (const auto& sub : list) {
+		if (pc_search_inventory(sd, sub.itemId) >= 0)
+			continue;
+		struct item it = {};
+		it.nameid = sub.itemId;
+		it.identify = 1;
+		pc_additem(sd, &it, 1, LOG_TYPE_NONE);
+	}
+	sd->status.zeny = static_cast<int32>(budget);
+	sd->max_weight = INT32_MAX / 2;
+
+	if (buyingstore_setup(sd, static_cast<unsigned char>(list.size())) != 0)
+		return false;
+	const std::string title = pop_mod_pick_title(sd, e);
+	if (buyingstore_create(sd, static_cast<int32>(budget), 1, title.c_str(), list.data(), static_cast<uint32>(list.size()), nullptr) != 0) {
+		ShowWarning("Population engine: buyer '%s' (%s) could not open its buying store.\n", sd->status.name, e.key.c_str());
+		return false;
+	}
+	// Rotation, like a stall.
+	const PopModVendorSettings* st = pop_mod_vendor_settings_for_key(e.key);
+	const int rotation_sec = st && st->rotation_min >= 0 ? st->rotation_min * 60 : e.rotation_sec;
+	if (rotation_sec > 0) {
+		int jitter = std::min(e.rotation_jitter_sec, rotation_sec / 2);
+		const int offset = jitter > 0 ? static_cast<int>(rnd() % (jitter * 2 + 1)) - jitter : 0;
+		sd->pop.vendor_rotation_at = gettick() + static_cast<t_tick>(std::max(60, rotation_sec + offset)) * 1000;
+	}
+	return true;
+}
+
+/// RAGNAROKMAC: @vendorinfo. No argument: every mod stall on the GM's map.
+/// With one: a vendor theme's settings and stock, or a market's themes.
+/// A key may be given whole or by its last part ("byalan").
+void population_engine_vendorinfo(map_session_data* sd, const char* arg) {
+	if (sd == nullptr)
+		return;
+	const int fd = sd->fd;
+	char buf[CHAT_SIZE_MAX];
+	std::string q = arg ? arg : "";
+	while (!q.empty() && std::isspace(static_cast<unsigned char>(q.back()))) q.pop_back();
+	while (!q.empty() && std::isspace(static_cast<unsigned char>(q.front()))) q.erase(q.begin());
+
+	if (q.empty()) {
+		size_t n = 0;
+		const t_tick now = gettick();
+		for (map_session_data* psd : g_population_engine_pcs) {
+			if (!psd || psd->m != sd->m || psd->pop.vendor_spawn_id.empty())
+				continue;
+			char rot[48] = "";
+			if (psd->pop.vendor_rotation_at != 0)
+				safesnprintf(rot, sizeof(rot), ", rotates in %lldm",
+					static_cast<long long>(std::max<t_tick>(0, DIFF_TICK(psd->pop.vendor_rotation_at, now)) / 60000));
+			const bool open = psd->state.vending || psd->state.buyingstore;
+			safesnprintf(buf, sizeof(buf), "%s (%d,%d) %s: %s\"%s\", %d item(s)%s", psd->status.name, psd->x, psd->y,
+				psd->pop.vendor_key.c_str(), psd->state.buyingstore ? "buying " : "", open ? psd->message : "(closed)",
+				psd->state.buyingstore ? psd->buyingstore.slots : psd->vend_num, rot);
+			clif_displaymessage(fd, buf);
+			++n;
+		}
+		safesnprintf(buf, sizeof(buf), "%zu mod vendor stall(s) on this map. @vendorinfo <theme or market> for details.", n);
+		clif_displaymessage(fd, buf);
+		return;
+	}
+
+	const PopulationVendorEntry* e = population_vendor_db().find(q);
+	if (e == nullptr) {
+		const std::string tail = "/" + q;
+		for (const auto& kv : population_vendor_db().vendor_entries())
+			if (kv.first.size() >= tail.size() && kv.first.compare(kv.first.size() - tail.size(), tail.size(), tail) == 0) {
+				e = &kv.second;
+				break;
+			}
+	}
+	if (e == nullptr) {
+		safesnprintf(buf, sizeof(buf), "No vendor theme or market called '%s'.", q.c_str());
+		clif_displaymessage(fd, buf);
+		return;
+	}
+
+	if (e->is_market) {
+		safesnprintf(buf, sizeof(buf), "Market %s: %zu spawn block(s), %zu theme(s).", e->key.c_str(), e->spawns.size(), e->themes.size());
+		clif_displaymessage(fd, buf);
+		std::unordered_map<std::string, int> live;
+		for (map_session_data* psd : g_population_engine_pcs)
+			for (const PopulationModSpawn& sp : e->spawns)
+				if (psd && psd->pop.vendor_spawn_id == sp.spawn_id)
+					++live[psd->pop.vendor_key];
+		for (const PopulationMarketTheme& t : e->themes) {
+			safesnprintf(buf, sizeof(buf), "  %s: weight %d, min %d, max %d, %d up now", t.key.c_str(), t.weight, t.min, t.max, live[t.key]);
+			clif_displaymessage(fd, buf);
+		}
+		return;
+	}
+
+	const PopModVendorSettings* st = pop_mod_vendor_settings_for_key(e->key);
+	const int rotation_min = st && st->rotation_min >= 0 ? st->rotation_min : e->rotation_sec / 60;
+	safesnprintf(buf, sizeof(buf), "%s: %zu pool item(s), %d-%d per stall, rotates every %d min, prices at %d%%%s.",
+		e->key.c_str(), e->pool.size(), e->pick_count_min, e->pick_count_max, rotation_min,
+		st && st->price_pct > 0 ? st->price_pct : 100, e->undercut_chance > 0 ? ", undercuts" : "");
+	clif_displaymessage(fd, buf);
+	size_t shown = 0;
+	for (const PopulationVendorStock& vs : e->pool.empty() ? e->stock : e->pool) {
+		if (++shown > 60) {
+			clif_displaymessage(fd, "  ... (first 60 shown)");
+			break;
+		}
+		std::shared_ptr<item_data> id = item_db.find(vs.nameid);
+		std::string extra;
+		if (vs.refine_max > 0)
+			extra += vs.refine_max > vs.refine_min ? " +" + std::to_string(vs.refine_min) + "-" + std::to_string(vs.refine_max)
+			                                        : " +" + std::to_string(vs.refine_max);
+		if (vs.element != 0)
+			extra += std::string(" (element ") + std::to_string(vs.element) + (vs.stars ? ", " + std::to_string(vs.stars) + " star(s))" : ")");
+		if (!vs.cards.empty())
+			extra += " (" + std::to_string(vs.cards.size()) + " card(s))";
+		if (vs.price_max > 0)
+			safesnprintf(buf, sizeof(buf), "  %s%s x%d: %u-%uz", id ? id->ename.c_str() : "?", extra.c_str(), vs.amount, vs.price, vs.price_max);
+		else
+			safesnprintf(buf, sizeof(buf), "  %s%s x%d: %uz", id ? id->ename.c_str() : "?", extra.c_str(), vs.amount, vs.price);
+		clif_displaymessage(fd, buf);
+	}
+}
+
+/// Keep every mod vendor block on a live map at its count. Exact counts unless
+/// the block opts into the density slider; respects the global Limit and the
+/// per-tick budget like every other spawn.
+static void population_engine_mod_vendor_pass(size_t* pbudget, size_t max_global) {
+	if (!battle_config.population_engine_vending_enable)
+		return;
+	static std::unordered_set<std::string> warned_no_profile;
+	// Out of this tick's budget ends the pass; the population limit only stops
+	// the vendors whose mod respects it (the default), so check per entry.
+	bool respect = true;
+	auto budget_out = [&]() { return pbudget != nullptr && *pbudget == 0; };
+	auto limit_hit = [&]() { return respect && g_population_engine_count.load() >= max_global; };
+	auto spent = [&]() { if (pbudget != nullptr && *pbudget > 0) --*pbudget; };
+	const int density = battle_config.population_engine_density_pct;
+	auto scaled = [&](size_t n, bool opt_in) -> size_t {
+		if (!opt_in || density == 100 || n == 0) return n;
+		const size_t s = static_cast<size_t>((static_cast<int64_t>(n) * density) / 100);
+		return s < 1 ? 1 : s;
+	};
+
+	const auto overrides = pop_mod_vendor_overrides();
+	for (const auto& kv : population_vendor_db().vendor_entries()) {
+		const PopulationVendorEntry& entry = kv.second;
+		if (entry.spawns.empty())
+			continue;
+		{
+			const PopModVendorSettings* st = pop_mod_vendor_settings_for_key(entry.key);
+			respect = !(st && st->respect_limit == 0);
+		}
+		const PopulationEngine* prof = population_vendor_pop_db().find_by_vendor_key(entry.key);
+		if (prof == nullptr && !entry.is_market) {
+			if (warned_no_profile.insert(entry.key).second)
+				ShowWarning("Population engine: mod vendor '%s' has Spawns but no PlacementBound profile "
+				            "with that VendorKey in population_vendor_pop.yml; not spawned.\n", entry.key.c_str());
+			continue;
+		}
+		for (const PopulationModSpawn& sp : entry.spawns) {
+			const int16 m = map_mapname2mapid(sp.map.c_str());
+			if (m < 0)
+				continue;
+			// A vendor spawns as itself; a market spot rolls a theme and spawns
+			// as that, still counted as one of the market's spots.
+			auto spawn_here = [&](int16_t x, int16_t y, int16_t seat) -> bool {
+				if (!entry.is_market)
+					return pop_mod_vendor_spawn_one(m, entry, sp, *prof, x, y, seat);
+				const PopulationVendorEntry* theme = pop_market_pick(entry, m, sp, warned_no_profile);
+				if (theme == nullptr)
+					return false;
+				const PopulationEngine* tp = population_vendor_pop_db().find_by_vendor_key(theme->key);
+				return tp != nullptr && pop_mod_vendor_spawn_one(m, *theme, sp, *tp, x, y, seat);
+			};
+			auto ov = overrides.find(sp.spawn_id);
+			const size_t base = ov != overrides.end() ? ov->second
+				: (sp.positions.empty() ? static_cast<size_t>(sp.count) : sp.positions.size());
+			const size_t target = std::min(sp.positions.empty() ? SIZE_MAX : sp.positions.size(),
+				scaled(base, sp.scale_with_density));
+
+			// Lowered (a smaller total, or the density slider): release the extra
+			// shells. Seats past the target go first, then any surplus.
+			{
+				std::vector<map_session_data*> extra;
+				size_t kept = 0;
+				for (map_session_data* psd : g_population_engine_pcs) {
+					if (!psd || psd->m != m || psd->pop.vendor_spawn_id != sp.spawn_id) continue;
+					if ((psd->pop.vendor_seat >= 0 && static_cast<size_t>(psd->pop.vendor_seat) >= target) || kept >= target)
+						extra.push_back(psd);
+					else
+						++kept;
+				}
+				for (map_session_data* psd : extra)
+					population_engine_shell_release(psd);
+			}
+
+			if (budget_out()) return;
+			if (limit_hit()) goto next_entry;
+			if (!pop_map_is_live(m))
+				continue;
+
+			if (!sp.positions.empty()) {
+				// Fixed seats: one shell per seat. Scaling down fills the first N.
+				const size_t seats = target;
+				for (size_t i = 0; i < seats; ++i) {
+					if (budget_out()) return;
+					if (limit_hit()) goto next_entry;
+					const int16_t seat = static_cast<int16_t>(i);
+					if (population_engine_count_mod_shells(m, sp.spawn_id, seat) > 0)
+						continue;
+					const auto& pos = sp.positions[i];
+					if (!pop_mod_vendor_cell_free(m, pos.first, pos.second))
+						continue; // taken: leave empty until it is free
+					if (spawn_here(pos.first, pos.second, seat))
+						spent();
+				}
+				continue;
+			}
+
+			// Count + Areas: that many shells anywhere in the areas.
+			size_t cur = population_engine_count_mod_shells(m, sp.spawn_id);
+			if (cur >= target)
+				continue;
+			// MinSpacing is kept only between this block's own shells.
+			std::vector<std::pair<int16_t, int16_t>> mine;
+			if (sp.min_spacing > 0) {
+				for (map_session_data* psd : g_population_engine_pcs)
+					if (psd && psd->m == m && psd->pop.vendor_spawn_id == sp.spawn_id)
+						mine.emplace_back(psd->x, psd->y);
+			}
+			// Pick an area weighted by its cell count, so a long strip and a
+			// small plaza fill fairly.
+			uint64_t total_cells = 0;
+			for (const auto& a : sp.areas)
+				total_cells += static_cast<uint64_t>(a.x2 - a.x1 + 1) * static_cast<uint64_t>(a.y2 - a.y1 + 1);
+			if (total_cells == 0)
+				continue;
+			for (; cur < target; ++cur) {
+				if (budget_out()) return;
+				if (limit_hit()) goto next_entry;
+				bool placed = false;
+				for (int attempt = 0; attempt < 40 && !placed; ++attempt) {
+					uint64_t r = static_cast<uint64_t>(rnd()) % total_cells;
+					const PopulationModSpawnArea* a = &sp.areas.back();
+					for (const auto& cand : sp.areas) {
+						const uint64_t cells = static_cast<uint64_t>(cand.x2 - cand.x1 + 1) * static_cast<uint64_t>(cand.y2 - cand.y1 + 1);
+						if (r < cells) { a = &cand; break; }
+						r -= cells;
+					}
+					const int16_t x = static_cast<int16_t>(a->x1 + rnd() % (a->x2 - a->x1 + 1));
+					const int16_t y = static_cast<int16_t>(a->y1 + rnd() % (a->y2 - a->y1 + 1));
+					if (!pop_mod_vendor_cell_free(m, x, y) || pop_mod_vendor_near_npc(m, x, y))
+						continue;
+					bool too_close = false;
+					for (const auto& p : mine)
+						if (std::abs(p.first - x) <= sp.min_spacing && std::abs(p.second - y) <= sp.min_spacing) { too_close = true; break; }
+					if (too_close)
+						continue;
+					if (spawn_here(x, y, -1)) {
+						spent();
+						mine.emplace_back(x, y);
+						placed = true;
+					}
+				}
+				if (!placed)
+					break; // no free cell this tick; try again next pass
+			}
+		}
+	next_entry:;
+	}
 }
 
 TIMER_FUNC(population_engine_autosummon_timer)
@@ -2222,18 +3018,30 @@ TIMER_FUNC(population_engine_autosummon_timer)
 		//
 		// Applied to max_per_map too, or raising the density would quietly do
 		// nothing on any category that declares a cap.
+		//
+		// RAGNAROKMAC: and each area's own share of that (Settings -> Population,
+		// one slider each for towns, fields and dungeons): 0 leaves the area
+		// empty, 100 is all of what the density gives it.
 		const int32 dens = battle_config.population_engine_density_pct;
-		auto scaled = [dens](int32_t v) -> int32_t {
-			if (v <= 0 || dens == 100)
+		auto scaled = [dens](int32_t v, int32_t share) -> int32_t {
+			if (v <= 0)
 				return v;
-			const int64_t out = (static_cast<int64_t>(v) * dens) / 100;
+			if (share <= 0)
+				return 0;
+			const int64_t pct = (static_cast<int64_t>(dens) * share) / 100;
+			if (pct == 100)
+				return v;
+			const int64_t out = (static_cast<int64_t>(v) * pct) / 100;
 			// A category the YAML populated should never round away to nothing.
 			return static_cast<int32_t>(out < 1 ? 1 : out);
 		};
+		const int32 town = battle_config.population_engine_town_pct;
+		const int32 field = battle_config.population_engine_field_pct;
+		const int32 dungeon = battle_config.population_engine_dungeon_pct;
 
-		if (fill_category(se.towns,    scaled(se.towns_population),    scaled(se.towns_max_per_map),    1)) return 0;
-		if (fill_category(se.fields,   scaled(se.fields_population),   scaled(se.fields_max_per_map),   2)) return 0;
-		if (fill_category(se.dungeons, scaled(se.dungeons_population), scaled(se.dungeons_max_per_map), 3)) return 0;
+		if (fill_category(se.towns,    scaled(se.towns_population, town),       scaled(se.towns_max_per_map, town),       1)) return 0;
+		if (fill_category(se.fields,   scaled(se.fields_population, field),     scaled(se.fields_max_per_map, field),     2)) return 0;
+		if (fill_category(se.dungeons, scaled(se.dungeons_population, dungeon), scaled(se.dungeons_max_per_map, dungeon), 3)) return 0;
 	}
 
 	// VendorPlacement-driven pass: directly fill maps listed under VendorPlacement
@@ -2272,10 +3080,14 @@ TIMER_FUNC(population_engine_autosummon_timer)
 				const PopulationVendorPlacement &vp = kv.second;
 				int target = vp.max_vendors > 0 ? vp.max_vendors : 12; // sensible default
 				// RAGNAROKMAC: vendors are most of what makes a town feel busy,
-				// so they scale with the density dial like everyone else.
-				if (battle_config.population_engine_density_pct != 100) {
-					const int64_t t = (static_cast<int64_t>(target)
-						* battle_config.population_engine_density_pct) / 100;
+				// so they scale with the density dial like everyone else, and
+				// with the towns' own share: towns at 0 have no stalls either.
+				if (battle_config.population_engine_town_pct <= 0)
+					continue;
+				const int64_t vendor_pct = (static_cast<int64_t>(battle_config.population_engine_density_pct)
+					* battle_config.population_engine_town_pct) / 100;
+				if (vendor_pct != 100) {
+					const int64_t t = (static_cast<int64_t>(target) * vendor_pct) / 100;
 					target = static_cast<int>(t < 1 ? 1 : t);
 				}
 				const int16 mid  = map_mapname2mapid(vp.map.c_str());
@@ -2300,6 +3112,9 @@ TIMER_FUNC(population_engine_autosummon_timer)
 			}
 		}
 	}
+
+	// RAGNAROKMAC: mod vendors, after the engine's own vendors are served.
+	population_engine_mod_vendor_pass(pbudget, max_global);
 
 	return 0;
 }
@@ -3280,7 +4095,8 @@ void population_engine_companion_skill_list(uint32_t owner_account, const char* 
 /// name-clash check. Nothing in the table enforces it - the only unique key is
 /// shell_index - so a duplicate would leave two rows that every by-name command
 /// (summon, favorite, gear...) resolves to whichever MariaDB returns first.
-uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job_id, int quality, const char *name_hint)
+uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job_id, int quality, const char *name_hint,
+	char chosen_sex)
 {
 	if (!owner || !owner->state.active) return 0;
 	if (!job_db.exists(job_id)) return 0;
@@ -3302,7 +4118,16 @@ uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job
 	int16_t x = owner->x, y = owner->y;
 	map_search_freecell(owner, map_id, &x, &y, 3, 3, 0);
 
-	const uint8_t sex = static_cast<uint8_t>(rnd() % 2);
+	// spawn_shell takes the sex as 'M' or 'F'. This was rnd() % 2 - 0 or 1, never 'M' - so
+	// every hired companion came out female, a Bard drawn as a Dancer. Chosen the way an
+	// ambient spawn chooses: the job's own sex, then the profile's, else either.
+	// RAGNAROKMAC: a sex the player chose (@companion draft <job> m|f) comes after the
+	// job's own and before the profile's - a Bard is still male, whatever was asked.
+	char sex = get_job_required_sex(job_id);
+	if (sex == '\0' && (chosen_sex == 'M' || chosen_sex == 'F'))
+		sex = chosen_sex;
+	if (sex == '\0')
+		sex = prof->sex_override >= 0 ? (prof->sex_override ? 'M' : 'F') : ((rnd() % 2) ? 'M' : 'F');
 	const uint8_t hair = static_cast<uint8_t>(MIN_HAIR_STYLE + rnd() % (MAX_HAIR_STYLE - MIN_HAIR_STYLE + 1));
 	const uint16_t hair_color = static_cast<uint16_t>(rnd() % 8);
 	const uint16_t cloth_color = static_cast<uint16_t>(rnd() % 7);
@@ -3346,8 +4171,9 @@ uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job
 	if (shell->status.name[0] == '\0')
 		safestrncpy(shell->status.name, "Companion", NAME_LENGTH);
 
-	shell->status.max_hp = 1; shell->status.hp = 1;
-	shell->status.max_sp = 1; shell->status.sp = 1;
+	// No HP/SP here. spawn_shell set its placeholders before status_calc_pc and then filled
+	// SP; writing 1 afterwards left a hired companion believing it had 1 SP, so it cast
+	// nothing that costs SP - no heal, no buff - until a relog recalled it fresh.
 	(void)quality; // gear tier is expressed by the profile's GearSet pools
 
 	// Persist immediately: the row is the companion's identity from here on, and
@@ -3362,6 +4188,213 @@ uint32_t population_engine_companion_draft(map_session_data *owner, uint16_t job
 	ShowInfo("population_engine: drafted companion '%s' (job %u) for owner %u.\n",
 		shell->status.name, job_id, owner->status.account_id);
 	return index;
+}
+
+// ---------------------------------------------------------------------------
+// RAGNAROKMAC: hired companions (Settings -> Population -> Companions).
+//
+// population_engine_companion_hire:
+//   0  free choice: @companion draft offers any job, as before;
+//   1  hired from the Companions panel: only jobs on the player's own class
+//      tier, at the player's level, for a fee;
+//   2  hired from a Companion Recruiter NPC (npc/custom/population/recruiter.txt):
+//      the same rules, and @companion draft sends the player to one.
+// The fee is population_engine_companion_hire_zeny_per_level x the companion's
+// level, and/or population_engine_companion_hire_item x ..._item_amount.
+// Summoning a companion already saved stays free in every mode.
+// ---------------------------------------------------------------------------
+
+/// The class tier of a job: 1 (Novice and 1st), 2 (2nd and transcendent 2nd),
+/// 3 or 4. 0 for a job rAthena does not know.
+int population_engine_job_tier(uint16_t job_id)
+{
+	if (!job_db.exists(job_id))
+		return 0;
+	const uint64 mapid = pc_jobid2mapid(job_id);
+	if (mapid & JOBL_FOURTH) return 4;
+	if (mapid & JOBL_THIRD) return 3;
+	if (mapid & JOBL_2) return 2;
+	return 1;
+}
+
+/// The jobs the Summon tab and the recruiter offer, as @companion jobs names them.
+static const char *const kPopHireJobs[] = {
+	"Swordsman", "Mage", "Archer", "Acolyte", "Merchant", "Thief",
+	"Taekwon", "Gunslinger", "Ninja",
+	"Knight", "Priest", "Wizard", "Blacksmith", "Hunter", "Assassin",
+	"Crusader", "Monk", "Sage", "Rogue", "Alchemist", "Bard", "Dancer",
+	"LordKnight", "HighPriest", "HighWizard", "Whitesmith", "Sniper",
+	"AssassinCross", "Paladin", "Champion", "Professor", "Stalker",
+	"Creator", "Clown", "Gypsy", "StarGladiator", "SoulLinker",
+	"RuneKnight", "Warlock", "Ranger", "ArchBishop", "Mechanic",
+	"GuillotineCross", "RoyalGuard", "Sorcerer", "Minstrel", "Wanderer",
+	"Sura", "Genetic", "ShadowChaser",
+	"DragonKnight", "Meister", "ShadowCross", "ArchMage", "Cardinal",
+	"Windhawk", "ImperialGuard", "Biolo", "AbyssChaser", "ElementalMaster",
+	"Inquisitor", "Troubadour", "Trouvere", "SkyEmperor", "SoulAscetic",
+	"Shinkiro", "Shiranui", "NightWatch", "HyperNovice", "SpiritHandler",
+};
+
+/// The name @companion draft and the recruiter use for a hireable job
+/// ("LordKnight"), which job_name() spells for display ("Lord Knight").
+const char *population_engine_hire_job_name(uint16_t job_id)
+{
+	for (const char *name : kPopHireJobs)
+		if (population_engine_job_id_from_name(name) == job_id)
+			return name;
+	return job_name(job_id);
+}
+
+int population_engine_companion_hire_mode()
+{
+	return battle_config.population_engine_companion_hire;
+}
+
+/// How many of an item the owner carries, unequipped.
+static int pop_hire_item_count(const map_session_data *owner, t_itemid fee_item)
+{
+	int n = 0;
+	for (int i = 0; i < MAX_INVENTORY; ++i) {
+		const struct item &it = owner->inventory.u.items_inventory[i];
+		if (it.nameid == fee_item && it.equip == 0)
+			n += it.amount;
+	}
+	return n;
+}
+
+/// The jobs this owner may hire: their own tier, with a profile to draft from.
+std::vector<uint16_t> population_engine_companion_hire_jobs(map_session_data *owner)
+{
+	std::vector<uint16_t> out;
+	if (!owner)
+		return out;
+	const int tier = population_engine_job_tier(owner->status.class_);
+	for (const char *name : kPopHireJobs) {
+		const uint16_t job = population_engine_job_id_from_name(name);
+		if (job == 0 || population_engine_job_tier(job) != tier)
+			continue;
+		if (population_engine_db_for_shell(owner).find(job) == nullptr)
+			continue;
+		out.push_back(job);
+	}
+	return out;
+}
+
+/// What hiring costs this owner now: zeny for their level, and the item.
+int64_t population_engine_companion_hire_zeny(const map_session_data *owner)
+{
+	if (!owner)
+		return 0;
+	return static_cast<int64>(battle_config.population_engine_companion_hire_zeny_per_level)
+		* owner->status.base_level;
+}
+
+/// Whether this owner may hire `job_id` now. On false, `why` says why.
+static bool pop_hire_allowed(map_session_data *owner, uint16_t job_id, std::string &why)
+{
+	const int tier = population_engine_job_tier(owner->status.class_);
+	if (population_engine_job_tier(job_id) != tier) {
+		why = "You can only hire a companion of your own class tier.";
+		return false;
+	}
+	const int64 zeny = population_engine_companion_hire_zeny(owner);
+	if (zeny > 0 && owner->status.zeny < zeny) {
+		why = "You need " + std::to_string(zeny) + " zeny to hire a companion.";
+		return false;
+	}
+	const t_itemid fee_item = static_cast<t_itemid>(battle_config.population_engine_companion_hire_item);
+	const int amount = battle_config.population_engine_companion_hire_item_amount;
+	if (fee_item > 0 && amount > 0) {
+		if (!itemdb_exists(fee_item)) {
+			why = "The hiring fee names an item this server does not have.";
+			return false;
+		}
+		if (pop_hire_item_count(owner, fee_item) < amount) {
+			why = "You need " + std::to_string(amount) + " " + itemdb_name(fee_item) + " to hire a companion.";
+			return false;
+		}
+	}
+	return true;
+}
+
+/// Draft `job_id` for `owner` under the current hiring rules. `from_npc` is true
+/// when a recruiter asks. Returns the new shell's index, or 0 with `msg` saying
+/// why. On success `msg` says what was paid.
+uint32_t population_engine_companion_hire(map_session_data *owner, uint16_t job_id,
+	const char *name_hint, bool from_npc, std::string &msg, char sex)
+{
+	if (!owner)
+		return 0;
+	const int mode = population_engine_companion_hire_mode();
+	if (mode == 0) {
+		const uint32_t made = population_engine_companion_draft(owner, job_id, 1, name_hint, sex);
+		if (made == 0)
+			msg = "Could not draft that companion (see map-server console).";
+		return made;
+	}
+	if (mode == 2 && !from_npc) {
+		msg = "Companions are hired from a Companion Recruiter in town.";
+		return 0;
+	}
+	if (!pop_hire_allowed(owner, job_id, msg))
+		return 0;
+
+	g_pop_draft_level = static_cast<int16_t>(owner->status.base_level);
+	const uint32_t made = population_engine_companion_draft(owner, job_id, 1, name_hint, sex);
+	g_pop_draft_level = 0;
+	if (made == 0) {
+		msg = "Could not draft that companion (see map-server console).";
+		return 0;
+	}
+
+	// Paid only once the companion exists: a failed draft costs nothing.
+	std::string paid;
+	const int64 zeny = population_engine_companion_hire_zeny(owner);
+	if (zeny > 0) {
+		pc_payzeny(owner, static_cast<int32>(zeny), LOG_TYPE_NPC);
+		paid = std::to_string(zeny) + " zeny";
+	}
+	const t_itemid fee_item = static_cast<t_itemid>(battle_config.population_engine_companion_hire_item);
+	int left = battle_config.population_engine_companion_hire_item_amount;
+	if (fee_item > 0 && left > 0) {
+		const int amount = left;
+		for (int i = 0; i < MAX_INVENTORY && left > 0; ++i) {
+			const struct item &it = owner->inventory.u.items_inventory[i];
+			if (it.nameid != fee_item || it.equip != 0)
+				continue;
+			const int take = std::min<int>(left, it.amount);
+			pc_delitem(owner, i, take, 0, 0, LOG_TYPE_NPC);
+			left -= take;
+		}
+		paid += (paid.empty() ? "" : " and ") + std::to_string(amount) + " " + itemdb_name(fee_item);
+	}
+	msg = paid.empty() ? std::string("Hired.") : "Hired for " + paid + ".";
+	return made;
+}
+
+/// @companion terms: the hiring rules for this player, for the Companions
+/// panel. @CPTERMS|mode|tier|zeny|item id|item amount|item name|jobs (':'-joined)
+void population_engine_companion_terms(map_session_data *owner, int fd)
+{
+	if (!owner)
+		return;
+	std::string jobs;
+	for (uint16_t job : population_engine_companion_hire_jobs(owner)) {
+		if (!jobs.empty())
+			jobs += ':';
+		jobs += population_engine_hire_job_name(job);
+	}
+	const t_itemid fee_item = static_cast<t_itemid>(battle_config.population_engine_companion_hire_item);
+	const int amount = battle_config.population_engine_companion_hire_item_amount;
+	const bool has_item = fee_item > 0 && amount > 0 && itemdb_exists(fee_item);
+	std::string line = "@CPTERMS|" + std::to_string(population_engine_companion_hire_mode())
+		+ "|" + std::to_string(population_engine_job_tier(owner->status.class_))
+		+ "|" + std::to_string(population_engine_companion_hire_zeny(owner))
+		+ "|" + std::to_string(has_item ? fee_item : 0)
+		+ "|" + std::to_string(has_item ? amount : 0)
+		+ "|" + (has_item ? itemdb_name(fee_item) : "")
+		+ "|" + jobs;
+	clif_displaymessage(fd, line.c_str());
 }
 
 /// Global combat timer: proximity-driven (mirrors mob_ai_hard).
@@ -3489,7 +4522,12 @@ TIMER_FUNC(population_engine_global_combat_timer)
 			sd->pop.sticky_target_id = 0;
 			sd->pop.sticky_until = 0;
 			unit_stop_attack(sd);
-			if (unit_is_walking(sd) && !sd->pop.companion_formation_active)
+			// RAGNAROKMAC: a walk to the owner is the follow from pop_companion_follow_owner, not
+			// a chase to drop. Halting it once the companion was within 4 cells, with the owner
+			// still moving, made it stop, snap in place and set off again 400 ms later; the faster
+			// the companion (a mounted Lord Knight), the more often it caught up and stuttered.
+			if (unit_is_walking(sd) && !sd->pop.companion_formation_active &&
+				sd->ud.target_to != owner->id)
 				unit_stop_walking(sd, USW_FIXPOS);
 		}
 		if (sd->state.population_combat)
@@ -3670,12 +4708,61 @@ void population_engine_on_shell_kills_player(map_session_data *killer_sd, map_se
 	g_pop_chat_next_tick[killer_sd->id] = now + static_cast<t_tick>(cd > 0 ? cd : 5000);
 }
 
+// RAGNAROKMAC: Walk every live vendor shell and release those whose per-shell
+// vendor_rotation_at tick has passed. The autosummon timer then refills the
+// map on its next pass with new picks from the pool. We release at most
+// POP_VENDOR_ROTATION_MAX_PER_TICK per tick so a storm of simultaneous
+// expiries (e.g. right after a server restart that bulk-spawned a hundred
+// vendors) staggers naturally across minutes rather than crashing one tick
+// through a hundred teardowns.
+static constexpr size_t POP_VENDOR_ROTATION_MAX_PER_TICK = 8;
+
+TIMER_FUNC(population_engine_vendor_rotation_timer)
+{
+	const t_tick now = gettick();
+	size_t released = 0;
+	// g_population_engine_pcs mutates during release (shell removes itself),
+	// so collect pointers up front and release outside the walk.
+	std::vector<map_session_data*> due;
+	due.reserve(g_population_engine_pcs.size());
+	// RAGNAROKMAC: a mod vendor that has sold everything packs up, as a player
+	// would; the mod pass puts a fresh stall in its place. rAthena only closes
+	// an empty stall for autotraders, so it would otherwise sit there empty.
+	// Checked first and outside the per-tick cap, so a busy rotation can't keep
+	// an empty stall standing. Base vendors keep upstream's behaviour.
+	for (map_session_data *sd : g_population_engine_pcs)
+		if (sd && !sd->pop.vendor_spawn_id.empty() &&
+		    ((sd->state.vending && sd->vend_num <= 0) ||
+		     (sd->pop.vendor_buying && !sd->state.buyingstore))) // bought all it wanted, or out of zeny
+			due.push_back(sd);
+	const size_t cap = due.size() + POP_VENDOR_ROTATION_MAX_PER_TICK;
+	for (map_session_data *sd : g_population_engine_pcs) {
+		if (!sd) continue;
+		if (!sd->pop.vendor_spawn_id.empty() &&
+		    ((sd->state.vending && sd->vend_num <= 0) || (sd->pop.vendor_buying && !sd->state.buyingstore)))
+			continue; // already taken above
+		if (sd->pop.vendor_rotation_at == 0) continue; // not a rotating vendor
+		if (now < sd->pop.vendor_rotation_at) continue;
+		if (!sd->state.vending && !sd->state.buyingstore) continue; // already stopped vending (edge case: player interactions)
+		due.push_back(sd);
+		if (due.size() >= cap) break;
+	}
+	for (map_session_data *sd : due) {
+		population_engine_shell_release(sd);
+		++released;
+	}
+	if (released > 0)
+		ShowInfo("Population engine: rotated %zu vendor shell(s).\n", released);
+	return 0;
+}
+
 void do_init_population_engine() {
 	// Single-threaded engine: bot pathing uses unit_walktoxy / unit_walktobl.
 	add_timer_func_list(population_engine_autosummon_timer, "population_engine_autosummon_timer");
 	add_timer_func_list(population_engine_chat_timer, "population_engine_chat_timer");
 	add_timer_func_list(population_engine_global_combat_timer, "population_engine_global_combat_timer");
 	add_timer_func_list(population_engine_respawn_shell_timer, "population_engine_respawn_shell_timer");
+	add_timer_func_list(population_engine_vendor_rotation_timer, "population_engine_vendor_rotation_timer");
 	population_engine_path_register_timer_funcs();
 }
 
@@ -3751,6 +4838,20 @@ void do_init_population_engine_load_databases() {
 	}
 
 	population_engine_path_restart_wander_timer();
+
+	// RAGNAROKMAC: vendor rotation sweeper. One-minute cadence; sweeps live
+	// vendor shells against their per-shell vendor_rotation_at tick.
+	if (g_vendor_rotation_timer != INVALID_TIMER) {
+		const TimerData* td = get_timer(g_vendor_rotation_timer);
+		if (td && td->func == population_engine_vendor_rotation_timer)
+			delete_timer(g_vendor_rotation_timer, population_engine_vendor_rotation_timer);
+		g_vendor_rotation_timer = INVALID_TIMER;
+	}
+	g_vendor_rotation_timer = add_timer_interval(
+		gettick() + POP_VENDOR_ROTATION_TICK_MS,
+		population_engine_vendor_rotation_timer, 0, 0, POP_VENDOR_ROTATION_TICK_MS);
+	if (g_vendor_rotation_timer == INVALID_TIMER)
+		ShowError("Population engine: failed to register vendor rotation timer; Pool vendors will not rotate.\n");
 
 	if (g_population_combat_global_timer != INVALID_TIMER) {
 		const TimerData *td = get_timer(g_population_combat_global_timer);
@@ -3908,7 +5009,10 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 	uint16_t head_bottom, uint32_t option, uint16_t cloth_color, uint16_t garment,
 	struct script_code* init_script, bool skip_arrow, const PopulationEngine* pop_cfg,
 	uint8_t map_category,
-	PopulationDbSource db_source)
+	PopulationDbSource db_source,
+	const PopulationVendorEntry* mod_entry,
+	const PopulationModSpawn* mod_spawn,
+	int16_t mod_seat)
 {
 	PE_PERF_SCOPE("spawn_shell");
 	(void)skip_arrow; // Legacy GearSet Arrow toggle; unified ammo is managed at runtime.
@@ -4027,6 +5131,11 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 				rolled = static_cast<int16_t>(cap_value(mobs + 8,
 					static_cast<int>(pop_cfg->base_level_min), static_cast<int>(hi)));
 		}
+		// RAGNAROKMAC: a hired companion comes at its owner's level, within
+		// the band its profile allows (population_engine_companion_hire).
+		if (g_pop_draft_level > 0)
+			rolled = static_cast<int16_t>(cap_value(static_cast<int>(g_pop_draft_level),
+				static_cast<int>(pop_cfg->base_level_min), static_cast<int>(hi)));
 		sd->status.base_level = cap_value(rolled, 1, MAX_LEVEL);
 	} else {
 		// Upstream defaults an undeclared BaseLevel to 99, which is how a
@@ -4672,6 +5781,13 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
     sd->pop.spawn_x      = static_cast<int16_t>(x);
     sd->pop.spawn_y      = static_cast<int16_t>(y);
     sd->pop.spawn_map_id = map_id;
+    // RAGNAROKMAC: a mod vendor shell carries its spawn block (and seat) from the
+    // start, so the mod pass counts it even if its stall fails to open.
+    if (mod_entry != nullptr && mod_spawn != nullptr) {
+        sd->pop.vendor_key      = mod_entry->key;
+        sd->pop.vendor_spawn_id = mod_spawn->spawn_id;
+        sd->pop.vendor_seat     = mod_seat;
+    }
 
     // Resolve effective behavior: per-category override wins over the profile default.
     PopulationBehavior pe_beh = (pop_cfg != nullptr) ? pop_cfg->behavior : PopulationBehavior::Combat;
@@ -4733,36 +5849,214 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 		if (pop_cfg && !pop_cfg->vendor_message.empty())
 			clif_messagecolor(sd, color_table[COLOR_YELLOW], pop_cfg->vendor_message.c_str(), false, AREA_WOS);
 
+		// RAGNAROKMAC: a mod buyer opens a buying store instead of a stall.
+		if (battle_config.population_engine_vending_enable && mod_entry != nullptr && mod_entry->buying) {
+			sd->pop.vendor_buying = true;
+			pop_shell_open_buyingstore(sd, *mod_entry);
+		}
 		// Vending economy: stock cart and open a real vend.
-		if (battle_config.population_engine_vending_enable) {
+		else if (battle_config.population_engine_vending_enable) {
 			// Look up optional per-job vendor config from population_vendors.yml.
 			const PopulationVendorEntry *vendor_cfg = nullptr;
 			if (pop_cfg && !pop_cfg->vendor_key.empty())
 				vendor_cfg = population_vendor_db().find(pop_cfg->vendor_key);
+			// RAGNAROKMAC: a mod vendor sells what its own entry says, whatever the
+			// job or profile — several shells of one job can carry different stock.
+			if (mod_entry != nullptr)
+				vendor_cfg = mod_entry;
 
-			// Determine vend title (vendor_cfg title > VendorMessage > a random
-			// one of ours). RAGNAROKMAC: the fallback was the literal "Shop",
-			// which is what most stalls end up showing, because most jobs have
-			// no vendor entry naming a title.
+			// Determine vend title (TitleFromPool > vendor_cfg title > VendorMessage
+			// > a random one of ours). RAGNAROKMAC: the stock fallback was the
+			// literal "Shop", which is what most stalls end up showing because
+			// most jobs have no vendor entry naming a title. TitleFromPool was
+			// added so a single VendorKey can read as many different "players"
+			// each with their own shop sign.
 			const char *vend_title =
 				POP_SHOP_TITLES[rnd() % ARRAYLENGTH(POP_SHOP_TITLES)];
-			if (vendor_cfg && !vendor_cfg->title.empty())
+			if (vendor_cfg && !vendor_cfg->title_pool.empty())
+				vend_title = vendor_cfg->title_pool[rnd() % vendor_cfg->title_pool.size()].c_str();
+			else if (vendor_cfg && !vendor_cfg->title.empty())
 				vend_title = vendor_cfg->title.c_str();
 			else if (pop_cfg && !pop_cfg->vendor_message.empty())
 				vend_title = pop_cfg->vendor_message.c_str();
+			// RAGNAROKMAC: {name} in a title is the shell's own name, so a sign like
+			// "{name}'s Forge Goods" matches the player standing behind it. No
+			// shipped title uses it, so stock titles are untouched.
+			std::string vend_title_buf;
+			if (strstr(vend_title, "{name}") != nullptr) {
+				vend_title_buf = vend_title;
+				population_engine_chat_replace_all(vend_title_buf, "{name}", std::string(sd->status.name));
+				if (vend_title_buf.size() >= MESSAGE_SIZE)
+					vend_title_buf.resize(MESSAGE_SIZE - 1);
+				vend_title = vend_title_buf.c_str();
+			}
+			// RAGNAROKMAC: a mod vendor never shows a sign another stall on the map
+			// already shows: another title from its pool if one is free, else the
+			// same with a number ("ores n more 2"), as players do.
+			if (mod_entry != nullptr) {
+				auto in_use = [&](const std::string& t) {
+					for (map_session_data* o : g_population_engine_pcs)
+						if (o && o != sd && o->m == sd->m && o->state.vending && t == o->message)
+							return true;
+					return false;
+				};
+				auto resolve = [&](const std::string& t) {
+					std::string r = t;
+					population_engine_chat_replace_all(r, "{name}", std::string(sd->status.name));
+					if (r.size() >= MESSAGE_SIZE)
+						r.resize(MESSAGE_SIZE - 1);
+					return r;
+				};
+				std::string chosen = vend_title;
+				if (in_use(chosen)) {
+					std::vector<std::string> cands;
+					for (const std::string& t : mod_entry->title_pool)
+						cands.push_back(resolve(t));
+					for (size_t i = cands.size(); i > 1; --i)
+						std::swap(cands[i - 1], cands[rnd() % i]);
+					bool found = false;
+					for (const std::string& c : cands)
+						if (!in_use(c)) { chosen = c; found = true; break; }
+					if (!found) {
+						const std::string base = chosen;
+						for (int n = 2; n < 100; ++n) {
+							const std::string suffix = " " + std::to_string(n);
+							std::string t = base.substr(0, std::min(base.size(), static_cast<size_t>(MESSAGE_SIZE - 1) - suffix.size())) + suffix;
+							if (!in_use(t)) { chosen = t; break; }
+						}
+					}
+				}
+				vend_title_buf = chosen;
+				vend_title = vend_title_buf.c_str();
+			}
 
 			// Build the stock list to use.
 			// Priority: static vendor_cfg stock → dynamic (map mob drops) → built-in defaults.
-			struct TmpStock { t_itemid nameid; int16 amount; uint32_t price_override; };
+			// RAGNAROKMAC: src points at the YAML line (refine/element/cards); null for
+			// generated stock, which is always the plain item.
+			struct TmpStock { t_itemid nameid; int16 amount; uint32_t price_override; const PopulationVendorStock* src = nullptr; };
 			std::vector<TmpStock> stock;
 			const int max_slots = vendor_cfg ? vendor_cfg->max_slots : 12;
 
-			if (vendor_cfg && !vendor_cfg->dynamic && !vendor_cfg->stock.empty()) {
+			if (vendor_cfg && vendor_cfg->type == PopulationVendorType::Static && !vendor_cfg->stock.empty()) {
 				// Static vending: use exactly the YAML-defined stock.
 				for (const auto &vs : vendor_cfg->stock)
-					stock.push_back({ vs.nameid, vs.amount, vs.price });
+					stock.push_back({ vs.nameid, vs.amount,
+						static_cast<uint32_t>(std::min<int64_t>(static_cast<int64_t>(vs.price) * pop_mod_vendor_price_pct(mod_entry) / 100, MAX_ZENY)), &vs });
 
-			} else if (vendor_cfg && vendor_cfg->dynamic) {
+			} else if (vendor_cfg && vendor_cfg->type == PopulationVendorType::Pool && !vendor_cfg->pool.empty()) {
+				// RAGNAROKMAC: Pool vending. Pick pick_count distinct items from
+				// the pool at random. Overfeed by 2x so pc_cart_additem rejections
+				// (NoTrade / weight / equipment-slot conflicts) don't leave the
+				// vend below pick_count — same approach the dynamic branch uses.
+				const int pool_n = static_cast<int>(vendor_cfg->pool.size());
+				int lo = vendor_cfg->pick_count_min > 0 ? vendor_cfg->pick_count_min : max_slots;
+				int hi = vendor_cfg->pick_count_max > 0 ? vendor_cfg->pick_count_max : lo;
+				if (hi < lo) hi = lo;
+				int pick = hi > lo ? static_cast<int>(lo + (rnd() % (hi - lo + 1))) : lo;
+				if (pick < 1) pick = 1;
+				if (pick > max_slots) pick = max_slots;
+				const int want = std::min(pool_n, pick * 2);
+
+				// Fisher-Yates on an index vector; take the first `want` indices.
+				std::vector<int> idx(pool_n);
+				for (int i = 0; i < pool_n; ++i) idx[i] = i;
+				for (int i = pool_n - 1; i > 0; --i) {
+					const int j = static_cast<int>(rnd()) % (i + 1);
+					if (j != i) std::swap(idx[i], idx[j]);
+				}
+				// RAGNAROKMAC: per-shell price variation. Each item's listed price
+				// is rolled independently so two shells of the same vendor undercut
+				// one another like a real market, and a rare "fat-finger" lists one
+				// far too cheap (a dropped digit). A price of 0 means "use the item's
+				// buy price", resolved later in the cart loop, so leave it untouched.
+				const int jitter = vendor_cfg->price_jitter_pct;
+				const int mistake_one_in = vendor_cfg->price_mistake_one_in;
+				sd->pop.vendor_mistakes.clear();
+
+				// RAGNAROKMAC: undercutting. The cheapest ask per plain item among
+				// the other shell stalls on this map, built once per stall. Fat-
+				// finger listings are left out, so one typo does not set the price.
+				std::unordered_map<t_itemid, uint32_t> lowest;
+				if (vendor_cfg->undercut_chance > 0) {
+					for (map_session_data* osd : g_population_engine_pcs) {
+						if (!osd || osd == sd || osd->m != sd->m || !osd->state.vending) continue;
+						for (int vi = 0; vi < osd->vend_num; ++vi) {
+							const int16 ci = osd->vending[vi].index;
+							if (ci < 0 || ci >= MAX_CART) continue;
+							const struct item& ct = osd->cart.u.items_cart[ci];
+							if (ct.nameid == 0 || ct.refine != 0 || ct.card[0] != 0) continue;
+							if (std::find(osd->pop.vendor_mistakes.begin(), osd->pop.vendor_mistakes.end(), ct.nameid) != osd->pop.vendor_mistakes.end()) continue;
+							auto it = lowest.find(ct.nameid);
+							if (it == lowest.end() || osd->vending[vi].value < it->second)
+								lowest[ct.nameid] = osd->vending[vi].value;
+						}
+					}
+				}
+
+				// RAGNAROKMAC: the mod's price level (population_vendor_price).
+				const int price_pct = pop_mod_vendor_price_pct(mod_entry);
+				auto roll_price = [&](const PopulationVendorStock& vs) -> uint32_t {
+					if (vs.price == 0) return 0;
+					int64_t p, band_lo;
+					if (vs.price_max > 0) {
+						// Price: [min, max] — roll in the range.
+						band_lo = vs.price;
+						p = vs.price + static_cast<int64_t>(rnd() % (vs.price_max - vs.price + 1));
+					} else {
+						p = vs.price;
+						band_lo = jitter > 0 ? p * (100 - jitter) / 100 : p;
+						if (jitter > 0) {
+							const int factor = (100 - jitter) + static_cast<int>(rnd() % (2 * jitter + 1));
+							p = p * factor / 100;
+						}
+					}
+					if (price_pct != 100) {
+						p = p * price_pct / 100;
+						band_lo = band_lo * price_pct / 100;
+					}
+					const bool plain = vs.refine_max == 0 && vs.element == 0 && vs.stars == 0 && vs.cards.empty();
+					if (plain && vendor_cfg->undercut_chance > 0 &&
+					    static_cast<int>(rnd() % 100) < vendor_cfg->undercut_chance) {
+						auto it = lowest.find(vs.nameid);
+						if (it != lowest.end()) {
+							const int lo_s = vendor_cfg->undercut_step_min, hi_s = vendor_cfg->undercut_step_max;
+							const int step = lo_s + static_cast<int>(rnd() % static_cast<uint32_t>(hi_s - lo_s + 1));
+							const int64_t under = static_cast<int64_t>(it->second) * (100 - step) / 100;
+							if (under < p) p = under;
+						}
+					}
+					// Round to a tidy figure players would actually type.
+					if (p >= 10000)     p = p / 500 * 500;
+					else if (p >= 1000) p = p / 50 * 50;
+					else if (p >= 100)  p = p / 5 * 5;
+					// Never below its own range, and never so low that selling it on
+					// to an NPC turns a profit.
+					if (p < band_lo) p = band_lo;
+					if (std::shared_ptr<item_data> pid = item_db.find(vs.nameid))
+						if (p <= static_cast<int64_t>(pid->value_sell)) p = pid->value_sell + 1;
+					// Fat-finger: a very rare dropped digit, left un-rounded so it
+					// reads like a genuine mistake. The one price allowed under the
+					// NPC floor: that is the jackpot.
+					if (mistake_one_in > 0 && (rnd() % static_cast<uint32_t>(mistake_one_in)) == 0) {
+						p /= 10;
+						sd->pop.vendor_mistakes.push_back(vs.nameid);
+					}
+					if (p < 1) p = 1;
+					if (p > MAX_ZENY) p = MAX_ZENY;
+					return static_cast<uint32_t>(p);
+				};
+				for (int i = 0; i < want; ++i) {
+					const auto &vs = vendor_cfg->pool[idx[i]];
+					stock.push_back({ vs.nameid, vs.amount, roll_price(vs), &vs });
+				}
+
+				// Fallthrough to built-in defaults is undesirable for Pool: an
+				// empty pool is a config error, not a reason to serve potions.
+				if (stock.empty())
+					vendor_cfg = nullptr;
+
+			} else if (vendor_cfg && vendor_cfg->type == PopulationVendorType::Dynamic) {
 				// Dynamic vending: derive saleable items from mob drop tables across one or
 				// more *source* maps (NOT the spawn map — towns have empty moblist[]).
 				// Map selection priority:
@@ -4977,12 +6271,36 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 				tmp_item.nameid = vs.nameid;
 				tmp_item.amount = 1;
 				tmp_item.identify = 1;
+				// RAGNAROKMAC: refine, forged element or cards from the YAML line.
+				if (vs.src != nullptr && is_equip) {
+					const PopulationVendorStock& src = *vs.src;
+					if (src.refine_max > 0)
+						tmp_item.refine = static_cast<uint8>(src.refine_max > src.refine_min
+							? src.refine_min + rnd() % (src.refine_max - src.refine_min + 1)
+							: src.refine_min);
+					if (src.element != 0 || src.stars != 0) {
+						// Same layout as a Blacksmith's forge (skill_produce_mix), signed
+						// by this shell, so the client names it "<shell>'s Fire Stiletto".
+						tmp_item.card[0] = CARD0_FORGE;
+						tmp_item.card[1] = static_cast<t_itemid>(((src.stars * 5) << 8) + src.element);
+						tmp_item.card[2] = GetWord(sd->status.char_id, 0);
+						tmp_item.card[3] = GetWord(sd->status.char_id, 1);
+					} else {
+						for (size_t ci = 0; ci < src.cards.size() && ci < MAX_SLOTS; ++ci)
+							tmp_item.card[ci] = src.cards[ci];
+					}
+				}
 				if (pc_cart_additem(sd, &tmp_item, slot_amount, LOG_TYPE_NONE) != ADDITEM_SUCCESS)
 					continue;
 
+				// Find the slot holding exactly this item: two lines may share an
+				// item id with different refines or cards.
 				int cart_idx = -1;
 				for (int ci = 0; ci < MAX_CART; ci++) {
-					if (sd->cart.u.items_cart[ci].nameid == vs.nameid) {
+					const struct item& ct = sd->cart.u.items_cart[ci];
+					if (ct.nameid == tmp_item.nameid && ct.refine == tmp_item.refine &&
+					    ct.card[0] == tmp_item.card[0] && ct.card[1] == tmp_item.card[1] &&
+					    ct.card[2] == tmp_item.card[2] && ct.card[3] == tmp_item.card[3]) {
 						cart_idx = ci;
 						break;
 					}
@@ -5002,6 +6320,29 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 			if (vend_count > 0) {
 				sd->state.prevend = 1;
 				vending_openvending(*sd, vend_title, vend_data, vend_count, nullptr);
+
+				// RAGNAROKMAC: Pool vendors with RotationHours > 0 get a per-shell
+				// expiry. The vendor rotation timer walks shells periodically and
+				// releases those whose tick has passed; the autosummon pass then
+				// re-fills with a fresh pool pick + title + name. Jitter spreads
+				// the respawns in time so a Prontera full of ten vendors doesn't
+				// vanish and reappear in lockstep.
+				int rotation_sec = vendor_cfg ? vendor_cfg->rotation_sec : 0;
+				// RAGNAROKMAC: a mod vendor's rotation may come from its mod's settings.
+				if (mod_entry != nullptr)
+					if (const PopModVendorSettings* st = pop_mod_vendor_settings_for_key(mod_entry->key))
+						if (st->rotation_min >= 0)
+							rotation_sec = st->rotation_min * 60;
+				if (vendor_cfg && rotation_sec > 0) {
+					int jitter = vendor_cfg->rotation_jitter_sec;
+					if (jitter > rotation_sec / 2) jitter = rotation_sec / 2; // a short rotation keeps its jitter in proportion
+					int offset = 0;
+					if (jitter > 0)
+						offset = static_cast<int>(rnd() % (jitter * 2 + 1)) - jitter;
+					int lifetime = rotation_sec + offset;
+					if (lifetime < 60) lifetime = 60; // one-minute floor; a negative jitter must not kill newborn shells
+					sd->pop.vendor_rotation_at = gettick() + static_cast<t_tick>(lifetime) * 1000;
+				}
 			}
 		}
 	}
@@ -5079,6 +6420,7 @@ static void population_engine_persist_companion_sql(
 		" heal_at=IF(owner_account_id=VALUES(owner_account_id) AND owner_char_id IN (0, VALUES(owner_char_id)), heal_at, 75),"
 		" emergency_at=IF(owner_account_id=VALUES(owner_account_id) AND owner_char_id IN (0, VALUES(owner_char_id)), emergency_at, 35),"
 		" given_mask=IF(owner_account_id=VALUES(owner_account_id) AND owner_char_id IN (0, VALUES(owner_char_id)), given_mask, 0),"
+		" gear_detail=IF(owner_account_id=VALUES(owner_account_id) AND owner_char_id IN (0, VALUES(owner_char_id)), gear_detail, NULL),"
 		" owner_account_id=VALUES(owner_account_id), owner_char_id=VALUES(owner_char_id),"
 		" name=VALUES(name), job_id=VALUES(job_id),"
 		" sex=VALUES(sex), hair_style=VALUES(hair_style), hair_color=VALUES(hair_color),"
@@ -5217,13 +6559,39 @@ static bool pop_companion_hand_back(map_session_data *owner, map_session_data *s
 // equip every equip-flagged item immediately (the owner gave it to be worn).
 // Items without equip flags (consumables etc) are returned to the owner —
 // companions are gear carriers, not mules.
+void population_engine_companion_trade_snapshot(map_session_data *shell)
+{
+	if (!shell || !population_engine_is_population_pc(shell->id)) return;
+	auto &before = shell->pop.companion_trade_before;
+	before.assign(MAX_INVENTORY, {0, 0});
+	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
+		const struct item &slot = shell->inventory.u.items_inventory[i];
+		before[i] = {static_cast<uint32_t>(slot.nameid), static_cast<int32_t>(slot.amount)};
+	}
+}
+
 void population_engine_companion_equip_traded(map_session_data *owner, map_session_data *shell)
 {
 	if (!owner || !shell) return;
+	// RAGNAROKMAC: act only on what this trade brought in: a new item in a slot, or a stack that
+	// grew. A companion's bag also holds its own things - spare stacks of every arrow it stocks,
+	// and its own gear a traded piece pushed off - and treating those as traded equipped each
+	// spare stack as the player's and handed the last one to the player, thousands of arrows
+	// and the companion's Ballista onto a full bag and the floor. With no snapshot (trade.cpp
+	// without the hook), every unworn item counts, as before.
+	std::vector<std::pair<uint32_t, int32_t>> before;
+	before.swap(shell->pop.companion_trade_before);
+	auto traded = [&before, shell](int16 i) {
+		if (before.size() != static_cast<size_t>(MAX_INVENTORY))
+			return true;
+		const struct item &it = shell->inventory.u.items_inventory[i];
+		return static_cast<uint32_t>(it.nameid) != before[i].first || static_cast<int32_t>(it.amount) > before[i].second;
+	};
 	bool equipped_any = false;
 	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
 		struct item &slot = shell->inventory.u.items_inventory[i];
 		if (!slot.nameid || slot.equip) continue;
+		if (!traded(i)) continue;
 		struct item_data *id = itemdb_search(slot.nameid);
 		if (!id) continue;
 		if (id->equip) {
@@ -5264,12 +6632,76 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 // clears the equip bit, then pc_delitem removes the slot) and handed to the
 // owner via pc_additem. On inventory-full the piece is dropped at the
 // owner's feet instead of being lost.
+/// Every position something is worn in, given or own.
+static uint32_t pop_companion_worn_positions(const map_session_data *shell)
+{
+	uint32_t worn = 0;
+	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
+		const struct item &slot = shell->inventory.u.items_inventory[i];
+		if (slot.nameid && slot.equip)
+			worn |= slot.equip;
+	}
+	return worn;
+}
+
+/// RAGNAROKMAC: after given gear comes back, put the companion's own gear back on in the
+/// positions it left empty. Gear a player trades in pushes the companion's own piece off into
+/// its bag (a Minstrel's Ballista, for an instrument), and nothing put it back, so the
+/// companion fought on with the slot empty. The pushed-off piece goes back on first. The bag is
+/// not persisted, so after a restart it may be gone: a position still empty then gets a piece
+/// from the job's gear set, the same picks spawn and job advance use.
+static void pop_companion_reequip_own(map_session_data *shell, uint32_t freed)
+{
+	for (int16 i = 0; i < MAX_INVENTORY && freed != 0; ++i) {
+		const struct item &slot = shell->inventory.u.items_inventory[i];
+		if (!slot.nameid || slot.equip || slot.amount <= 0)
+			continue;
+		const std::shared_ptr<item_data> id = itemdb_exists(slot.nameid);
+		if (id == nullptr || !(id->equip & freed))
+			continue;
+		uint32 pos = id->equip;
+		if (pos == EQP_ACC)
+			pos = (freed & EQP_ACC_L) ? EQP_ACC_L : EQP_ACC_R;
+		if ((pos & pop_companion_worn_positions(shell)) || pc_isequip(shell, i) != ITEM_EQUIP_ACK_OK)
+			continue;
+		if (pc_equipitem(shell, i, pos, false))
+			freed &= ~shell->inventory.u.items_inventory[i].equip;
+	}
+	if (freed == 0)
+		return;
+	std::shared_ptr<PopulationEngine> equipment = population_engine_db_for_shell(shell).find(shell->status.class_);
+	if (!equipment)
+		return;
+	auto refill = [shell, &freed](const std::vector<uint16_t> &pool, uint32 slot_pos, const char *label, uint32 force_pos) {
+		if (!(freed & slot_pos) || pool.empty())
+			return;
+		const uint16_t nameid = pool[rnd() % pool.size()];
+		const std::shared_ptr<item_data> id = itemdb_exists(nameid);
+		const uint32 pos = force_pos != 0 ? force_pos : (id != nullptr ? id->equip : 0);
+		if (pos == 0 || (pos & pop_companion_worn_positions(shell)))
+			return;
+		population_engine_shell_equip_item(shell, nameid, shell->status.char_id, label, force_pos);
+		freed &= ~pop_companion_worn_positions(shell);
+	};
+	refill(equipment->weapon_pool,      EQP_HAND_R,   "weapon",   0);
+	refill(equipment->shield_pool,      EQP_HAND_L,   "shield",   0);
+	refill(equipment->armor_pool,       EQP_ARMOR,    "armor",    0);
+	refill(equipment->shoes_pool,       EQP_SHOES,    "shoes",    0);
+	refill(equipment->garment_pool,     EQP_GARMENT,  "garment",  0);
+	refill(equipment->head_top_pool,    EQP_HEAD_TOP, "head_top", 0);
+	refill(equipment->head_mid_pool,    EQP_HEAD_MID, "head_mid", 0);
+	refill(equipment->head_bottom_pool, EQP_HEAD_LOW, "head_low", 0);
+	refill(equipment->acc_l_pool,       EQP_ACC_L,    "acc_l",    EQP_ACC_L);
+	refill(equipment->acc_r_pool,       EQP_ACC_R,    "acc_r",    EQP_ACC_R);
+}
+
 int population_engine_companion_return_gear(map_session_data *owner, map_session_data *shell, uint32_t slot_mask)
 {
 	if (!owner || !shell) return -1;
 	if (!population_engine_is_population_pc(shell->id)) return -1;
 
 	int returned = 0, kept_own = 0;
+	uint32_t freed = 0;
 	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
 		struct item &slot = shell->inventory.u.items_inventory[i];
 		if (!slot.nameid || !slot.equip) continue; // equipped only
@@ -5284,10 +6716,14 @@ int population_engine_companion_return_gear(map_session_data *owner, map_session
 		}
 		// Unequip (flag 2 = ignore status-change blocks), then into the owner's bag or at
 		// their feet - see pop_companion_hand_back.
-		if (pop_companion_hand_back(owner, shell, i, LOG_TYPE_NPC))
+		const uint32_t worn = slot.equip;
+		if (pop_companion_hand_back(owner, shell, i, LOG_TYPE_NPC)) {
 			++returned;
+			freed |= worn;
+		}
 	}
 	if (returned > 0) {
+		pop_companion_reequip_own(shell, freed);
 		ShowInfo("population_engine: returned %d worn item(s) from companion %u to owner %u\n",
 			returned, shell->status.char_id, owner->status.account_id);
 		// Save both halves now. Left to the owner's autosave and the gear poll, a crash in
@@ -5299,6 +6735,140 @@ int population_engine_companion_return_gear(map_session_data *owner, map_session
 	if (returned == 0 && kept_own > 0 && owner->fd > 0)
 		clif_displaymessage(owner->fd, "Only gear you gave a companion comes back; what it is wearing is its own.");
 	return returned;
+}
+
+/// Every worn piece in full, for cp_companion_persistence.gear_detail (v11).
+///
+/// The *_nameid columns hold one number per slot, and that number is all recall had: a piece
+/// came back with no refine, no cards and no options, and the bare copy is what `@companion
+/// gear` then handed to the player - the cards were gone for good. The headgear columns are
+/// worse: they are written from status.head_*, which pc_set_costume_view fills with the
+/// item's LOOK, so a hat came back as whatever item has that look's number, or as nothing.
+///
+/// "v1" then one entry per worn piece, separated by ';': equip, nameid, refine, card0-3,
+/// enchantgrade, bound, unique_id, then id,value,param for each random option. `attribute`
+/// is not kept: it is rAthena's broken flag, and a broken piece is unequipped on the spot
+/// and cannot be put back on, so a worn one is always 0.
+static std::string pop_companion_gear_detail(const map_session_data *sd)
+{
+	std::string out = "v1";
+	char entry[512];
+	for (int16 i = 0; i < MAX_INVENTORY; ++i) {
+		const struct item &it = sd->inventory.u.items_inventory[i];
+		if (!it.nameid || !it.equip || it.amount <= 0)
+			continue;
+		int n = snprintf(entry, sizeof(entry), ";%u,%u,%d,%u,%u,%u,%u,%u,%d,%" PRIu64,
+			it.equip, (unsigned)it.nameid, (int)it.refine,
+			(unsigned)it.card[0], (unsigned)it.card[1], (unsigned)it.card[2], (unsigned)it.card[3],
+			(unsigned)it.enchantgrade, (int)it.bound, (uint64_t)it.unique_id);
+		for (int o = 0; o < MAX_ITEM_RDM_OPT && n > 0 && static_cast<size_t>(n) < sizeof(entry); ++o)
+			n += snprintf(entry + n, sizeof(entry) - n, ",%d,%d,%d",
+				(int)it.option[o].id, (int)it.option[o].value, (int)it.option[o].param);
+		if (n > 0 && static_cast<size_t>(n) < sizeof(entry))
+			out += entry;
+	}
+	return out;
+}
+
+/// One gear_detail entry back into an item, or false when it is not one this build wrote.
+static bool pop_companion_parse_gear_entry(const char *text, struct item &it)
+{
+	unsigned long long v[10 + 3 * MAX_ITEM_RDM_OPT];
+	size_t count = 0;
+	const char *p = text;
+	while (count < sizeof(v) / sizeof(v[0])) {
+		char *end = nullptr;
+		const bool negative = (*p == '-');
+		const unsigned long long n = strtoull(negative ? p + 1 : p, &end, 10);
+		if (end == (negative ? p + 1 : p))
+			return false;
+		v[count++] = negative ? static_cast<unsigned long long>(-static_cast<long long>(n)) : n;
+		p = end;
+		if (*p != ',')
+			break;
+		++p;
+	}
+	if (count != sizeof(v) / sizeof(v[0]) || (*p != '\0' && *p != ';'))
+		return false;
+	it = {};
+	it.equip = static_cast<uint32>(v[0]);
+	it.nameid = static_cast<t_itemid>(v[1]);
+	it.refine = static_cast<char>(v[2]);
+	for (int c = 0; c < MAX_SLOTS; ++c)
+		it.card[c] = static_cast<t_itemid>(v[3 + c]);
+	it.enchantgrade = static_cast<uint8>(v[7]);
+	it.bound = static_cast<char>(v[8]);
+	it.unique_id = static_cast<uint64>(v[9]);
+	for (int o = 0; o < MAX_ITEM_RDM_OPT; ++o) {
+		it.option[o].id = static_cast<int16>(v[10 + 3 * o]);
+		it.option[o].value = static_cast<int16>(v[11 + 3 * o]);
+		it.option[o].param = static_cast<char>(v[12 + 3 * o]);
+	}
+	it.amount = 1;
+	it.identify = 1;
+	return it.nameid != 0 && it.equip != 0 && itemdb_exists(it.nameid) != nullptr;
+}
+
+/// Put a recalled companion's gear back the way it was saved: refine, cards, options and the
+/// right item in every slot. Recall has already equipped what the *_nameid columns name; a
+/// piece that matches a saved entry takes its details, and a slot holding the wrong item (a
+/// hat recalled by its look number) or nothing has it replaced by the saved piece. Those
+/// wrong pieces were made by recall a moment ago from a bad number - they were never anyone's.
+/// A row with no detail (saved before v11) is left exactly as recall made it.
+static void pop_companion_restore_gear_detail(map_session_data *shell, const char *detail)
+{
+	if (shell == nullptr || detail == nullptr || strncmp(detail, "v1", 2) != 0)
+		return;
+	for (const char *p = strchr(detail, ';'); p != nullptr; p = strchr(p + 1, ';')) {
+		struct item saved;
+		if (!pop_companion_parse_gear_entry(p + 1, saved))
+			continue;
+		int16 match = -1;
+		for (int16 i = 0; i < MAX_INVENTORY && match < 0; ++i) {
+			const struct item &w = shell->inventory.u.items_inventory[i];
+			if (w.nameid == saved.nameid && w.equip == saved.equip && w.amount > 0)
+				match = i;
+		}
+		if (match >= 0) {
+			struct item &w = shell->inventory.u.items_inventory[match];
+			w.refine = saved.refine;
+			memcpy(w.card, saved.card, sizeof(w.card));
+			memcpy(w.option, saved.option, sizeof(w.option));
+			w.enchantgrade = saved.enchantgrade;
+			w.bound = saved.bound;
+			if (saved.unique_id != 0)
+				w.unique_id = saved.unique_id;
+			continue;
+		}
+		// Clear the slot: whatever recall put where the saved piece goes.
+		for (int16 i = 0; i < MAX_INVENTORY; ++i) {
+			const struct item &w = shell->inventory.u.items_inventory[i];
+			if (w.nameid && w.equip && (w.equip & saved.equip)) {
+				if (pc_unequipitem(shell, i, 2))
+					pc_delitem(shell, i, w.amount, 0, 1, LOG_TYPE_NONE);
+			}
+		}
+		shell->max_weight = 2000000; // as population_engine_shell_equip_item: status_calc resets it
+		struct item add = saved;
+		add.equip = 0;
+		if (pc_additem(shell, &add, 1, LOG_TYPE_NONE) != ADDITEM_SUCCESS) {
+			ShowWarning("population_engine: could not restore item %u on companion %u\n",
+				(unsigned)saved.nameid, shell->status.char_id);
+			continue;
+		}
+		for (int16 i = 0; i < MAX_INVENTORY; ++i) {
+			const struct item &w = shell->inventory.u.items_inventory[i];
+			if (w.nameid == saved.nameid && w.equip == 0 && w.amount > 0 && w.refine == saved.refine
+			    && memcmp(w.card, saved.card, sizeof(w.card)) == 0) {
+				// A piece the companion can no longer wear (its job or level changed since)
+				// stays in its inventory, outside the owner's custody of worn slots: say so.
+				if (!pc_equipitem(shell, i, saved.equip, false))
+					ShowWarning("population_engine: companion %u could not wear restored item %u (slot %u); it stays unworn\n",
+						shell->status.char_id, (unsigned)saved.nameid, (unsigned)saved.equip);
+				break;
+			}
+		}
+	}
 }
 
 // Goal 2: re-snapshot a summoned companion's current equipment + stats into its
@@ -5346,7 +6916,9 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 	// UPDATE only the mutable columns — identity (owner, index, name, job, sex,
 	// looks) never changes after recruit, and map_id tracks the owner anyway.
 	if (mmysql_handle == nullptr) return;
-	char q[1024];
+	// Sized for the full gear detail: about 120 bytes for each worn piece.
+	const std::string detail = pop_companion_gear_detail(sd);
+	std::vector<char> q(1536 + detail.size());
 
 	// The pet's own state is ours to keep - hom_id stays 0, so nothing stock can save it. Written
 	// ONLY while the pet exists: a companion whose pet is switched off, or that is not an
@@ -5360,7 +6932,7 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 			(long long)sd->hd->homunculus.exp);
 	}
 
-	snprintf(q, sizeof(q),
+	const int written = snprintf(q.data(), q.size(),
 		"UPDATE `cp_companion_persistence` SET weapon_nameid=%u, shield_nameid=%u,"
 		" head_top_nameid=%u, head_mid_nameid=%u, head_bottom_nameid=%u,"
 		" armor_nameid=%u, shoes_nameid=%u, acc_l_nameid=%u, acc_r_nameid=%u,"
@@ -5370,7 +6942,7 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		" shadow_shoes_nameid=%u, shadow_acc_l_nameid=%u, shadow_acc_r_nameid=%u,"
 		" base_level=%d, job_level=%d, job_id=%d, str_=%d, agi_=%d, vit_=%d, intl_=%d,"
 		" dex_=%d, luk_=%d, pow_=%d, sta_=%d, wis_=%d, spl_=%d, con_=%d, crt_=%d,"
-		" mode=%d, duty=%d, heal_at=%d, emergency_at=%d, given_mask=%u%s"
+		" mode=%d, duty=%d, heal_at=%d, emergency_at=%d, given_mask=%u, gear_detail='%s'%s"
 		" WHERE owner_account_id=%u AND owner_char_id=%u AND shell_index=%u",
 		weapon, shield, sd->status.head_top, sd->status.head_mid, sd->status.head_bottom,
 		armor, shoes, acc_l, acc_r,
@@ -5382,9 +6954,14 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		(int)sd->pop.companion_mode, (int)sd->pop.role,
 		(int)sd->pop.companion_heal_at, (int)sd->pop.companion_emergency_at,
 		pop_companion_given_worn(sd),
-		hom_frag,
+		detail.c_str(), hom_frag,
 		owner, sd->pop.companion_owner_char, index_);
-	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
+	if (written <= 0 || static_cast<size_t>(written) >= q.size()) {
+		ShowError("population_engine: gear re-snapshot for companion %u does not fit\n", index_);
+		return;
+	}
+	// Through "%s": the statement is data here, never a format.
+	if (Sql_Query(mmysql_handle, "%s", q.data()) != SQL_SUCCESS) {
 		Sql_ShowDebug(mmysql_handle);
 		ShowError("population_engine: gear re-snapshot for companion %u FAILED\n", index_);
 		return;
@@ -5779,6 +7356,8 @@ static void population_engine_shell_close_stall(map_session_data *sd)
 		return;
 	if (sd->state.vending)
 		vending_closevending(sd); // clears state.vending, vender_id, the board and vending_db
+	if (sd->state.buyingstore)
+		buyingstore_close(sd);
 	// The intent flag the spawn path sets before calling vending_openvending. openvending normally
 	// clears it itself, including on its early returns, so this is belt-and-braces for a shell that
 	// never got that far.
@@ -5988,7 +7567,7 @@ void population_engine_reassert_companions(int32_t party_id)
 /// RAGNAROKMAC (Phase 3): machine-readable companion list for the in-game panel.
 ///
 /// One line per companion, fixed field order, pipe-separated:
-///   @CP|name|job_name|base_level|active(0/1)|favorite(0/1)|level(current,0 if not summoned)|live_job_name
+///   @CP|name|job_name|base_level|active(0/1)|favorite(0/1)|level(current,0 if not summoned)|live_job_name|pet|duty
 ///
 /// The last field is the class the shell is ACTUALLY running (empty when not
 /// summoned). job_name above comes from the persisted row, which lags a job
@@ -6005,7 +7584,7 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 	if (mmysql_handle == nullptr) return;
 	char q[400];
 	snprintf(q, sizeof(q),
-		"SELECT name, job_id, active, favorite, base_level, hom_enabled, job_level FROM `cp_companion_persistence`"
+		"SELECT name, job_id, active, favorite, base_level, hom_enabled, duty, job_level FROM `cp_companion_persistence`"
 		" WHERE owner_account_id=%u AND owner_char_id=%u ORDER BY favorite DESC, name ASC",
 		owner_account, pop_online_char(owner_account));
 	if (Sql_Query(mmysql_handle, q) != SQL_SUCCESS) {
@@ -6025,9 +7604,11 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		Sql_GetData(mmysql_handle, 4, &data, nullptr); int base_lv = atoi(data);
 		Sql_GetData(mmysql_handle, 5, &data, nullptr);
 		int hom_enabled = (data != nullptr && data[0] != '\0') ? atoi(data) : -1;
-		// The persisted job level, for the rebirth readiness below (a summoned companion's own
-		// live value wins, and the live loop picks that up separately).
+		// Field 6 is the persisted duty (upstream) and 7 the job level this fork needs for
+		// rebirth readiness; both are read, and a summoned companion's live values win.
 		Sql_GetData(mmysql_handle, 6, &data, nullptr);
+		int duty = data != nullptr ? atoi(data) : 0;
+		Sql_GetData(mmysql_handle, 7, &data, nullptr);
 		int row_job_lv = (data != nullptr && data[0] != '\0') ? atoi(data) : 0;
 		// and a name is player-chosen, so scrub before sending.
 		for (char *c = namebuf; *c != '\0'; ++c) {
@@ -6060,6 +7641,8 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 			// normal case rather than an edge one.
 			live_job = job_name(sd->status.class_);
 			live_class = sd->status.class_;
+			// The duty it is acting on; the row only catches up on the next snapshot.
+			duty = sd->pop.role;
 			live_jl = sd->status.job_level;
 			break;
 		}
@@ -6089,9 +7672,12 @@ void population_engine_companion_list_raw(uint32_t owner_account, int fd)
 		}
 
 		char msg[NAME_LENGTH + 160];
-		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d|%s|%d|%d",
+		// The duty travels so the panel can show it (kept only in the panel's memory, its
+		// badge went blank on every restart or reload although the server still had it), and
+		// rebirth readiness after it so both appended fields keep their positions.
+		snprintf(msg, sizeof(msg), "@CP|%s|%s|%d|%d|%d|%d|%s|%d|%d|%d",
 			namebuf, job_name(job_id), base_lv, active, fav, live_lv,
-			live_job != nullptr ? live_job : "", hom, rebirth);
+			live_job != nullptr ? live_job : "", hom, duty, rebirth);
 		clif_displaymessage(fd, msg);
 		count++;
 	}
@@ -6113,7 +7699,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	uint32_t sh_acc_l, uint32_t sh_acc_r,
 	int pow_, int sta_, int wis_, int spl_, int con_, int crt_,
 	int mode_, int duty_, int heal_at_, int emergency_at_,
-	const char* skill_preset)
+	const char* skill_preset, const char* gear_detail)
 {
 	// Deterministic spawn cell next to the owner (small ring for an open spot).
 	int16_t x = 0, y = 0; bool placed = false;
@@ -6138,7 +7724,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 		pop_companion_set_owner(existing, owner);
 		pop_companion_register_local_party(existing, owner);
 		if (existing->m != owner->m) {
-			pc_setpos(existing, map_id, x, y, CLR_TELEPORT);
+			pc_setpos(existing, map_id2index(map_id), x, y, CLR_TELEPORT);
 			// pc_setpos removed the shell from the block grid (prev==nullptr);
 			// shells have no client LoadEndAck to re-add them, so finish the
 			// placement here or the stale sweep will reap them in <100 ms.
@@ -6152,7 +7738,7 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 			int16_t fx = existing->x, fy = existing->y;
 			if (!pop_companion_formation_cell(existing, owner, fx, fy)) { fx = existing->x; fy = existing->y; }
 			if (fx != existing->x || fy != existing->y) {
-				pc_setpos(existing, map_id, fx, fy, CLR_TELEPORT);
+				pc_setpos(existing, map_id2index(map_id), fx, fy, CLR_TELEPORT);
 				pop_shell_finish_map_placement(existing);
 				pop_shell_broadcast_map_placement(existing);
 			}
@@ -6244,6 +7830,8 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	if (sh_shoes)   population_engine_shell_equip_item(shell, sh_shoes, index_, "shadow_shoes", EQP_SHADOW_SHOES);
 	if (sh_acc_l)   population_engine_shell_equip_item(shell, sh_acc_l, index_, "shadow_acc_l", EQP_SHADOW_ACC_L);
 	if (sh_acc_r)   population_engine_shell_equip_item(shell, sh_acc_r, index_, "shadow_acc_r", EQP_SHADOW_ACC_R);
+	// Refine, cards, options and the right headgear, before the stats are worked out from them.
+	pop_companion_restore_gear_detail(shell, gear_detail);
 	status_calc_pc(shell, SCO_NONE);
 
 	// Mark as the owner's companion and align membership with the owner.
@@ -6264,7 +7852,9 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 
 	int16_t fx = x, fy = y;
 	if (!pop_companion_formation_cell(shell, owner, fx, fy)) { fx = x; fy = y; }
-	pc_setpos(shell, map_id, fx, fy, CLR_TELEPORT);
+	// pc_setpos takes a map INDEX; map_id is the map's id (owner->m). Passed as-is, the move
+	// failed or named another map.
+	pc_setpos(shell, map_id2index(map_id), fx, fy, CLR_TELEPORT);
 	// pc_setpos removes an on-grid shell from the block grid and only re-adds
 	// real players later via their client's LoadEndAck. Shells have no client:
 	// finish the placement explicitly, then broadcast the spawn + party dots.
@@ -6396,8 +7986,8 @@ int population_engine_recall_companions(map_session_data *owner, uint32_t only_i
 		" pow_, sta_, wis_, spl_, con_, crt_, mode, duty, heal_at, emergency_at,"
 		" costume_top_nameid, costume_mid_nameid, costume_low_nameid, costume_garment_nameid,"
 		" shadow_armor_nameid, shadow_weapon_nameid, shadow_shield_nameid,"
-		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid, skill_preset, given_mask"
-		" FROM `cp_companion_persistence` WHERE owner_account_id=%u AND owner_char_id=%u AND active=1%s",
+		" shadow_shoes_nameid, shadow_acc_l_nameid, shadow_acc_r_nameid, skill_preset, given_mask,"
+		" gear_detail FROM `cp_companion_persistence` WHERE owner_account_id=%u AND owner_char_id=%u AND active=1%s",
 		owner->status.account_id, owner->status.char_id, only_index != 0 ? " AND shell_index=" : "");
 	// The index is a number, so append it rather than parameterising the format.
 	if (only_index != 0) {
@@ -6490,15 +8080,21 @@ int population_engine_recall_companions(map_session_data *owner, uint32_t only_i
 			safestrncpy(presetbuf, data, sizeof(presetbuf));
 		const char* skill_preset = (data != nullptr) ? presetbuf : nullptr;
 		data = next(); const uint32_t given_mask = data != nullptr ? static_cast<uint32_t>(strtoul(data, nullptr, 10)) : 0;
+		// v11: every worn piece in full; NULL for a row saved before it existed.
+		data = next(); const std::string gear_detail = data != nullptr ? data : "";
 		if (index_ == 0 || job_id == 0) continue;
-		// DB stores sex as TINYINT (0=SEX_MALE, 1=SEX_FEMALE); the spawn path
-		// expects the 'M'/'F' letters.
-		population_engine_recall_one_companion(owner, map_id, index_, job_id, sexv == 1 ? 'F' : 'M',
+		// The column holds rAthena's e_sex, written from status.sex: 0 = SEX_FEMALE, 1 = SEX_MALE.
+		// Read the other way round, every companion came back as the other sex at its first
+		// recall and stayed that way. A job with a sex of its own (Bard, Dancer...) keeps it.
+		char sex_letter = get_job_required_sex(static_cast<uint16_t>(job_id));
+		if (sex_letter == '\0')
+			sex_letter = sexv == SEX_MALE ? 'M' : 'F';
+		population_engine_recall_one_companion(owner, map_id, index_, job_id, sex_letter,
 			hair_style, hair_color, cloth_color, garment, option_, weapon, shield, head_top,
 			head_mid, head_bottom, armor, shoes, acc_l, acc_r, base_level, job_level, str, agi, vit, intl, dex, luk,
 			namebuf, c_top, c_mid, c_low, c_garment, sh_armor, sh_weapon, sh_shield, sh_shoes, sh_acc_l, sh_acc_r,
 			pow_, sta_, wis_, spl_, con_, crt_, mode_, duty_, heal_at_, emergency_at_,
-			skill_preset);
+			skill_preset, gear_detail.empty() ? nullptr : gear_detail.c_str());
 		// Which of the re-equipped pieces the player gave: restored here rather than threaded
 		// through recall_one_companion, and narrowed to what the shell actually wears.
 		for (map_session_data *shell : g_population_engine_pcs) {
@@ -6739,6 +8335,10 @@ static char get_job_required_sex(uint16_t job_id) {
     
     // Gender-neutral jobs
     return '\0';
+}
+
+char population_engine_job_required_sex(uint16_t job_id) {
+    return get_job_required_sex(job_id);
 }
 
 /// Derive weapon/shield sprites from inventory (status.weapon is weapon_type, not a sprite id).
@@ -7310,6 +8910,13 @@ void population_engine_stop() {
             delete_timer(g_population_combat_global_timer, population_engine_global_combat_timer);
         g_population_combat_global_timer = INVALID_TIMER;
     }
+    // RAGNAROKMAC: Pool-vendor rotation timer.
+    if (g_vendor_rotation_timer != INVALID_TIMER) {
+        const TimerData* tdv = get_timer(g_vendor_rotation_timer);
+        if (tdv && tdv->func == population_engine_vendor_rotation_timer)
+            delete_timer(g_vendor_rotation_timer, population_engine_vendor_rotation_timer);
+        g_vendor_rotation_timer = INVALID_TIMER;
+    }
     population_engine_path_stop_wander_timer();
 
     if (!g_population_engine_running && g_population_engine_pcs.empty())
@@ -7321,6 +8928,7 @@ void population_engine_stop() {
     g_population_engine_stats = PopulationEngineStats();
     g_population_engine_running = false;
     g_pop_chat_next_tick.clear();
+    g_pop_vendor_last_callout.clear();
     population_engine_path_clear_all();
     g_chat_cursor = 0;
     for (map_session_data* sd : to_release)
@@ -7486,32 +9094,34 @@ void population_engine_on_party_chat(map_session_data *from_sd, const char *mess
 		requested_roles.insert(PopulationRoleType::Support);
 	if (population_companion_has_token(tokens, "attacker") || population_companion_has_token(tokens, "dd"))
 		requested_roles.insert(PopulationRoleType::Attacker);
-	if (requested_roles.size() != 1)
-		return;
-
-	const PopulationRoleType role = *requested_roles.begin();
-	for (map_session_data *bot : g_population_engine_pcs) {
-		if (!pop_is_companion(bot) || bot->status.party_id != from_sd->status.party_id)
-			continue;
-		std::string shell_name(bot->status.name);
-		std::transform(shell_name.begin(), shell_name.end(), shell_name.begin(),
-			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-		if (!population_companion_has_token(tokens, shell_name.c_str()))
-			continue;
-		bot->pop.role = static_cast<int8_t>(role);
-		population_companion_clear_target(bot);
-		population_engine_persist_companion_gear(bot); // duty survives restart
-		const char *role_name = role == PopulationRoleType::Tank ? "Tank"
-			: role == PopulationRoleType::Support ? "Support" : "Attacker";
-		char reply[CHAT_SIZE_MAX];
-		// Send this through the real party channel as the shell. The party-chat
-		// command hook only handles packets from real clients, so this reply cannot
-		// recursively issue another command.
-		safesnprintf(reply, sizeof(reply), "%s : Understood. My role is now %s.",
-			bot->status.name, role_name);
-		party_send_message(bot, reply, strlen(reply) + 1);
-		ShowInfo("Population engine: party leader %s set companion %s role to %s.\n",
-			from_sd->status.name, bot->status.name, role_name);
+	// A role needs exactly one role word, and only applies to the companion named in the
+	// message. Not an early return: the orders below must still be read from a message
+	// that sets no role, which is every "taunt" and "recall" the panel sends.
+	if (requested_roles.size() == 1) {
+		const PopulationRoleType role = *requested_roles.begin();
+		for (map_session_data *bot : g_population_engine_pcs) {
+			if (!pop_is_companion(bot) || bot->status.party_id != from_sd->status.party_id)
+				continue;
+			std::string shell_name(bot->status.name);
+			std::transform(shell_name.begin(), shell_name.end(), shell_name.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			if (!population_companion_has_token(tokens, shell_name.c_str()))
+				continue;
+			bot->pop.role = static_cast<int8_t>(role);
+			population_companion_clear_target(bot);
+			population_engine_persist_companion_gear(bot); // duty survives restart
+			const char *role_name = role == PopulationRoleType::Tank ? "Tank"
+				: role == PopulationRoleType::Support ? "Support" : "Attacker";
+			char reply[CHAT_SIZE_MAX];
+			// Send this through the real party channel as the shell. The party-chat
+			// command hook only handles packets from real clients, so this reply cannot
+			// recursively issue another command.
+			safesnprintf(reply, sizeof(reply), "%s : Understood. My role is now %s.",
+				bot->status.name, role_name);
+			party_send_message(bot, reply, strlen(reply) + 1);
+			ShowInfo("Population engine: party leader %s set companion %s role to %s.\n",
+				from_sd->status.name, bot->status.name, role_name);
+		}
 	}
 
 	// --- Orders ---
@@ -7556,7 +9166,7 @@ void population_engine_on_party_chat(map_session_data *from_sd, const char *mess
 			if (bot->m == from_sd->m && distance_bl(bot, from_sd) <= 3) continue;
 			int16_t tx = from_sd->x, ty = from_sd->y;
 			map_search_freecell(from_sd, from_sd->m, &tx, &ty, 2, 2, 0);
-			if (pc_setpos(bot, from_sd->m, tx, ty, CLR_TELEPORT) == SETPOS_OK) {
+			if (pc_setpos(bot, from_sd->mapindex, tx, ty, CLR_TELEPORT) == SETPOS_OK) {
 				pop_shell_finish_map_placement(bot);
 				pop_shell_broadcast_map_placement(bot);
 				moved++;

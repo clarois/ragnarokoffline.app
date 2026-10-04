@@ -414,3 +414,41 @@ test('pregame views copy the window state and check every action before the wind
     servers.select(1);
     assert.deepEqual(calls.splice(0), [['server', 1]]);
 });
+
+test('api.players.gmLook turns parts of the GM look off, checks what it is given and puts the look back on disposal', async () => {
+    const [, { createRuntime }] = await modules;
+    // The bridge as ExtensionBridge.mjs makes it, over the fork's Session.AdminLook.
+    const look = { sprite: true, name: true, chat: true };
+    const runtime = createRuntime();
+    runtime.configure({ gmLook: (parts = {}) => {
+        for (const key of ['sprite', 'name', 'chat']) if (typeof parts[key] === 'boolean') look[key] = parts[key];
+        return { ...look };
+    } });
+    const scope = runtime.scope('gm-class-look');
+    const { players } = scope.api;
+    assert.equal(players.gmLookSupported(), true);
+    assert.throws(() => players.gmLook({ sprite: 'no' }), TypeError);
+    assert.throws(() => players.gmLook(null), TypeError);
+    assert.deepEqual({ ...players.gmLook({ sprite: false, chat: false }) }, { sprite: false, name: true, chat: false });
+    assert.deepEqual(look, { sprite: false, name: true, chat: false });
+    scope.dispose();
+    await Promise.resolve();
+    assert.deepEqual(look, { sprite: true, name: true, chat: true }, 'turning the mod off puts the GM look back');
+    // A client without the switches: nothing to call.
+    const old = createRuntime().scope('gm-class-look').api.players;
+    assert.equal(old.gmLookSupported(), false);
+    assert.equal(old.gmLook({ sprite: false }), null);
+});
+
+test('gm-class-look draws GMs as their class and keeps the name and chat styles unless told not to', async () => {
+    const { parts, default: init } = await import('../mods/gm-class-look/client/index.js');
+    assert.deepEqual(parts({}), { sprite: false, name: true, chat: true });
+    assert.deepEqual(parts({ keep_gm_name: false, keep_gm_chat: false }), { sprite: false, name: false, chat: false });
+    const asked = [];
+    init({ keep_gm_chat: false }, { version: 1, players: { gmLookSupported: () => true, gmLook: p => asked.push(p) } });
+    assert.deepEqual(asked, [{ sprite: false, name: true, chat: false }]);
+    // An older app (no api.players) or client (no switches): nothing happens.
+    init({}, { version: 1 });
+    init({}, { version: 1, players: { gmLookSupported: () => false, gmLook: p => asked.push(p) } });
+    assert.equal(asked.length, 1);
+});

@@ -42,6 +42,15 @@ fn main() {
             fs::write(root.join("current"), volume).unwrap();
             fs::write(&running, "").unwrap();
         }
+        // load_dump streams a backup into the container's /tmp on stdin.
+        ["exec", "-i", "ragnarok-db", "sh", "-c", script] if script.contains("cat > '/tmp/") => {
+            let name = script.rsplit('/').next().unwrap().trim_end_matches('\'');
+            let tmp = root.join("container-tmp");
+            fs::create_dir_all(&tmp).unwrap();
+            let mut body = Vec::new();
+            io::stdin().read_to_end(&mut body).unwrap();
+            fs::write(tmp.join(name), body).unwrap();
+        }
         ["exec", "-i", "ragnarok-db", ..] => {
             let mut sql = String::new();
             io::stdin().read_to_string(&mut sql).unwrap();
@@ -51,7 +60,22 @@ fn main() {
         }
         ["exec", "ragnarok-db", "sh", "-c", script] => {
             let data = volumes.join(format!("{}.sql", current()));
-            if let Some((_, file)) = script.split_once("> /tmp/") {
+            if let Some((_, file)) = script.split_once("wc -c < '/tmp/") {
+                let name = file.trim().trim_end_matches('\'');
+                println!("{}", fs::metadata(root.join("container-tmp").join(name)).unwrap().len());
+            } else if let Some((_, file)) = script.split_once("< /tmp/") {
+                // The app's version stamp is a comment the real database skips,
+                // and what a migration appends is statements it runs: neither is
+                // part of the data this fake keeps.
+                let dump = fs::read_to_string(root.join("container-tmp").join(file.trim())).unwrap();
+                let added = dump.find("\n\n-- Added by Ragnarok Offline when restoring:").unwrap_or(dump.len());
+                let kept: String = dump[..added]
+                    .lines()
+                    .filter(|l| !l.starts_with("-- Ragnarok Offline backup: "))
+                    .map(|l| format!("{l}\n"))
+                    .collect();
+                fs::write(&data, kept).unwrap();
+            } else if let Some((_, file)) = script.split_once("> /tmp/") {
                 // The container's own /tmp: `docker cp` brings the dump out.
                 let tmp = root.join("container-tmp");
                 fs::create_dir_all(&tmp).unwrap();
@@ -65,6 +89,7 @@ fn main() {
             }
         }
         ["exec", "ragnarok-db", "rm", "-f", _] => {}
+        ["exec", "ragnarok-db", "rm", "-rf", _] => {}
         // Windows: the dump comes out, or the staged backups go in, by `cp`.
         ["cp", from, to] if from.starts_with("ragnarok-db:/tmp/") => {
             let name = from.rsplit('/').next().unwrap();

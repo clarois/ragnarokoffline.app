@@ -1,6 +1,6 @@
 {
   "name": "autologin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Ragnarok Offline",
   "description": "Opens the game on the character you played last, skipping the login and character-select screens. Escape → Exit logs you out for real; hold Shift at launch to skip it once. Off until you turn it on.",
   "default": "off",

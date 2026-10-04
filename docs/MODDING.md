@@ -13,7 +13,8 @@ rebuild, no compiler, no Docker.
 ├── data/        client assets: sprites, textures, map geometry, Lua
 ├── BGM/         music, merged over the client's own tracks
 ├── System/      client tables: itemInfo.lua and friends
-└── client/      a roBrowser plugin: styling, viewport, UI
+├── client/      a roBrowser plugin: styling, viewport, UI
+└── host/        a host route: JavaScript that answers requests on the host's computer
 ```
 
 The mods directory is:
@@ -89,6 +90,9 @@ patchwork. Any other value is refused by name; leave it out for everything
 else. See [UI skins](#ui-skins). (An app from before
 this key ignores it, so a skin still loads there, just without the others
 being switched off.)
+
+`"host"` declares a [host route](#host-routes): JavaScript of the mod's own
+that runs on the host's computer, and the addresses it may connect to.
 
 ### renewalFolder / prerenewalFolder — one mod for both eras
 
@@ -266,7 +270,7 @@ sets several, a preview — a mod can ship its own settings page:
 }
 ```
 
-The Mods tab then shows a **Settings…** button under the mod instead of drawing
+The mod's row in the Mods tab then shows a **Settings…** button instead of drawing
 the options itself, and the page opens in a window the mod owns. The options
 are still declared in `settings` — that is what the app validates, stores and
 hands to `init(parameters, api)` and `npc/when/` — the page only decides how
@@ -300,7 +304,7 @@ options in the Mods tab as before. See
 
 ## Installing a mod
 
-**Settings → Mods → Install a mod…** takes a folder, a `.zip` or a `.rar` and
+**Settings → Mods → Add mod from folder…** takes a folder, a `.zip` or a `.rar` and
 puts it in the right place. An archive must contain exactly one folder, named
 for the mod; anything with two top-level folders, a link, or a path that would
 escape the mods directory, is refused rather than unpacked.
@@ -314,14 +318,14 @@ on Arch and SteamOS) or unpack the archive and choose the folder.
 Or do it by hand: drop the folder in the mods directory yourself. Same result.
 
 A UI skin or a cursor pack in the official client's format is not a mod yet;
-**Install a UI skin…** makes it one. See [UI skins](#ui-skins).
+**Add UI skin…** makes it one. See [UI skins](#ui-skins).
 
 A mod adds scripts and tables to your server and can run JavaScript in the game
 window. Installing one is running somebody's code — install ones you trust.
 
 ## Turning mods off
 
-Settings → Mods lists what is installed with a checkbox each. Under the hood
+Settings → Mods → Installed lists what is installed with a switch each. Under the hood
 that is `state/mods/disabled.txt`, one name per line. Disable by naming it
 there rather than by moving the folder: a folder that moves loses its place in
 the merge order.
@@ -562,7 +566,7 @@ through a table, and a mod adds rows to those tables the same way:
 |---|---|---|
 | Headgear | `accname.lub` (+ `accessoryid.lub` for named ids) | `data/sprite/accessory/남/남_<name>.spr`, `여/여_<name>.spr` |
 | Garments | `spriterobename.lub` (+ `spriterobeid.lub`) | `data/sprite/robe/…` |
-| Weapons | `weapontable.lub` | `data/sprite/human/…` |
+| Weapons | `weapontable.lub` | one per class: see [A new weapon look](#a-new-weapon-look) |
 
 ```lua
 AccNameTable = {
@@ -575,6 +579,211 @@ Korean. They name the client's own sprite files byte for byte; a UTF-8 copy
 names a file that isn't there and the item is invisible on you. An ASCII
 name for your own art has no such problem. The sex folders and file prefix
 (`남`, `여`) have no ASCII alias yet.
+
+### Which id to use
+
+Every NPC and monster has a number, its **view id**, and the server and the
+client each check it against fixed ranges. An id outside them still loads, but
+the thing is invisible or drawn as something else:
+
+| What | Server accepts (rAthena) | Client draws it as | Use for your own |
+|---|---|---|---|
+| NPC | 46–~129, 401–999, 10001–19999 (`npcdb_checkid`, `src/map/npc.hpp`) | an NPC, from `data/sprite/npc/`, for 46–129, 401–999 and 10001–**19998** (`DB.isNPC`) | **19000–19998**: official NPCs stop around 13000 |
+| Monster | 1001–3999 and 20020–31999 (`mobdb_checkid`, `src/map/mob.cpp`) | a monster, from `data/sprite/몬스터/` (any id that is not a player, NPC, homunculus or mercenary) | **25000–31999**: official monsters stop around 22300 |
+| Player jobs | 0–44, 4001–4361 | a player | — |
+| Homunculus / mercenary | 6001–6052 | from `data/sprite/homun/`, the human folder | — |
+
+Two consequences worth knowing:
+
+- An NPC's sprite comes from `data/sprite/npc/` only if its id is an NPC id.
+  Give an NPC script a monster id (`25001,{`) and the server accepts it as a
+  monster's look, and the client draws it from the **monster** folder.
+- Ids 4000–20019 that aren't NPCs are rAthena's clone range; don't use them for
+  monsters.
+
+### A new NPC with its own sprite
+
+Three files in your mod, plus the art. The worked example is
+[`examples/mods/custom-npc-sprite`](../examples/mods/custom-npc-sprite): an NPC
+in Prontera drawn from a PNG.
+
+```
+my-mod/
+├── mod.json
+├── npc/guide.txt                    the NPC: where it stands, what it says
+├── System/jobname.lub               id 19500 → sprite name RO_GUIDE
+└── data/sprite/npc/ro_guide.spr     the pictures
+    data/sprite/npc/ro_guide.act     how to show them
+```
+
+**1. Pick an id** from the NPC column above: say `19500`.
+
+**2. Name its sprite** in `System/jobname.lub`, with only your rows:
+
+```lua
+JobNameTable = {
+	[19500] = "RO_GUIDE",
+}
+```
+
+The app adds your rows to the client's own table, so nothing else changes. The
+client lower-cases the name and loads `data/sprite/npc/ro_guide.spr` and
+`.act`. A numeric key is enough; you don't need `npcidentity.lub` for an NPC.
+To reuse a stock NPC's look under a new id instead, put its name here
+(`"4_F_KAFRA1"`) and skip the art.
+
+**3. Make the art**: `data/sprite/npc/ro_guide.spr` and `.act`. See the next
+section.
+
+**4. Place the NPC** in `npc/guide.txt`, with the id as its sprite:
+
+```
+prontera,156,197,4	script	Ro the Guide	19500,{
+	mes "[Ro the Guide]";
+	mes "Hello! I am drawn with a sprite of my own.";
+	close;
+}
+```
+
+Fields are separated by **tabs**. `4` is the direction it faces, in
+rAthena's numbering: 0 north, 2 west, 4 south (towards the player), 6 east.
+
+**5. Install and look.** Install the mod (Settings → Mods), restart the
+server, and walk there. If the name floats with no body, see "When it doesn't
+show" below.
+
+### Making the .spr and .act
+
+A Ragnarok sprite is two files with the same name:
+
+- **`.spr`**: the pictures. Each frame is a palette-indexed image of up to 256
+  colours. Colour 0 is the transparent background, magenta in the stock files.
+- **`.act`**: the animation. A list of actions, each one an animation for one
+  facing direction. NPCs use the first eight actions: standing, one per
+  direction (0 south, 1 south-west, … 7 south-east). Monsters also use walk,
+  attack, hurt and die, eight directions each.
+
+**From a PNG**, with no other tools, use `scripts/mksprite.py` in this
+repository (Python 3, no packages):
+
+```
+python3 scripts/mksprite.py guide.png --out my-mod/data/sprite/npc/ro_guide
+python3 scripts/mksprite.py frame1.png frame2.png frame3.png --delay 200 --out my-mod/data/sprite/npc/ro_guide
+python3 scripts/mksprite.py my_monster.png --monster --out my-mod/data/sprite/monster/my_monster
+```
+
+- Use a transparent background. Pixels under half opacity become the
+  background.
+- The bottom edge of the picture is where the NPC stands, and it is centred
+  on its cell.
+- Every direction shows the same picture; that suits most NPCs.
+- Several PNGs play as an animation, `--delay` milliseconds per frame, 150 by
+  default.
+- Up to 255 colours. Pixel art comes through exactly; a picture with more
+  colours is reduced, so flat colours look best.
+- The stock NPCs are about 40–60 px wide and 70–110 px tall. The example is
+  40×76.
+
+**With an editor**, for different art per direction or per action, use the
+community's **Act Editor** (Tokeiburu's, "ActEditor" on GitHub). It opens a
+`.spr` and `.act` pair, imports PNGs as frames, and edits each action and
+direction. The easy start is a file from `mksprite.py`, or a stock NPC's pair.
+Get a stock pair from your client's `data.grf` with **GRF Editor** (also by
+Tokeiburu): they're under `data/sprite/npc/`. Save under your own name; don't
+overwrite the stock file unless you mean to replace that NPC everywhere.
+
+### When it doesn't show
+
+| What you see | Why |
+|---|---|
+| The name, no body | The client didn't find the sprite. **Settings → Tools → Log viewer** names the file it asked for. Check the folder (`data/sprite/npc/`), and the name in lower case, matching `jobname.lub`. |
+| A different NPC or a Poring | The id isn't in the client's NPC range, so it was drawn as a monster, or the `jobname.lub` row is missing. |
+| Nothing at all, and `npc_parseview: Invalid NPC constant` in the map log | The sprite field isn't a number or a known constant. |
+| The old picture after you changed the art | The client caches sprites by file name. Restart the app; changing mods clears the cache, editing a file inside an installed mod may not. |
+
+### A new weapon look
+
+A weapon is not one picture. It is drawn as a layer over the character, frame
+for frame with the body's own attack, walk and sit animations. So each weapon
+look is **a sprite per class line and sex**, in that class's own folder:
+
+```
+data/sprite/인간족/로그/로그_여_단검.spr     Rogue, female, dagger
+data/sprite/인간족/기사/기사_남_검.spr       Knight, male, sword
+```
+
+Each class's sprite is shaped to that class's own motions. Three ways to give
+an item a look, from least work to most:
+
+**1. Look like a stock weapon.** No art: in the item's `System/itemInfo.lua`
+entry, set `ClassNum` to that weapon type's look. 1 is a dagger, 2 a sword, 4 a
+spear, 6 an axe, 8 a mace, 10 a rod, 11 a bow, and so on (the list is
+`WeaponType.js` in roBrowserLegacy). An official look's id works too: 31–102 in
+the client's `weapontable.lub`, e.g. Main Gauche, Lacma.
+
+**2. A recoloured stock weapon, for every class at once.** `scripts/mkweapon.py`
+takes one stock weapon type's sprites for every class from your running game,
+recolours them, and writes them into your mod with a new name. Only the
+colours change, so every class's animation stays right:
+
+```
+python3 scripts/mkweapon.py --type shortsword --name jade --look 5001 \
+    --hue 150 --saturation 1.3 --mod my-mod
+```
+
+- `--type`: the stock type to start from: `shortsword` (dagger), `sword`,
+  `twohandsword`, `spear`, `axe`, `mace`, `rod`, `bow`, `knukle`, `instrument`,
+  `whip`, `book`, `katar`, `gun_handgun`, … (`--help` lists them).
+- `--name`: your look's name, in ASCII. Files are `<class>_<sex>_<name>.spr`.
+- `--look`: the new look id, which items use as `ClassNum`. **Use 103 or
+  more**; 0–102 are official. This guide uses 5000–5999. It needs app 1.4.7 or
+  later, whose client draws a mod's looks above 102 (roBrowserLegacy#61).
+- `--hue` turns the colour wheel by that many degrees. `--saturation` and
+  `--lightness` scale those (1.0 = unchanged).
+
+It writes the sprites under `data/sprite/human/`, the app's ASCII name for
+`인간족`. One pair goes in per class and sex that has that weapon type: 52 for a
+dagger with the iRO data. It also writes `System/weapontable.lub`:
+
+```lua
+WeaponNameTable = {
+	[5001] = "_jade",          -- the sprite name: <class>_<sex>_jade.spr
+}
+Expansion_Weapon_IDs = {
+	[5001] = 1,                -- attacks like a dagger (WeaponType 1)
+}
+```
+
+Then the item. In `db/item_db.yml` leave **`View:` out**. Without it the
+server sends the item's own id, and the client reads `ClassNum` from
+`itemInfo`. With `View: 5001` the server sends 5001 itself, which the client
+reads as item 5001, a stock headgear:
+
+```lua
+-- System/itemInfo.lua
+[50101] = {
+	identifiedDisplayName = "Jade Dagger",
+	identifiedResourceName = "나이프",   -- icon and dropped picture: the Knife's
+	-- ...
+	ClassNum = 5001
+}
+```
+
+The sprites are recoloured copies of your client's own, so don't put them in a
+public mod repository. A mod for others can ship `weapontable.lub`, the item
+and the command line, and let each player run it. The worked example does
+this: [`examples/mods/custom-weapon-look`](../examples/mods/custom-weapon-look).
+
+**3. New art.** Same `weapontable.lub` and item as in 2, but you draw each
+class's sprite yourself. Start from the stock `.act` for that class and weapon
+type, so the frames line up. Open it in Act Editor and redraw the frames, one
+class at a time. A class you don't make a sprite for holds nothing: the weapon
+is invisible on that class.
+
+**Checking it:** `@item 50101`, equip it, and attack something. A dagger is
+small and only clearly visible mid-swing. If the character holds nothing, the
+Log viewer names the sprite the client asked for. Check the class folder, the
+sex (`남` male, `여` female) and `_<name>` against your `weapontable.lub`.
 
 ### Checking your work
 
@@ -648,6 +857,14 @@ What genuinely cannot be removed is a **monster spawn definition**. Those come
 from the stock spawn scripts and nothing unloads them, which is why the
 [randomizer](../examples/mods/randomizer) shuffles what each monster *is*
 rather than where it stands.
+
+How *many* monsters a map's stock spawns put out can be changed, though, from a
+script: the fork's `map_mob_count_rate` extension adds
+`setmapmobcountrate "<map>",<percent>`, which scales every spawn line on that
+map (lines of a single monster stay single). Switch the extension on in the
+mod's `db/extension_db.yml` and call it from `OnInit`. The
+[map-spawn-rate](../registry/mods/map-spawn-rate) mod does this for any map,
+picked in its settings window.
 
 See [`examples/mods/quest-npc`](../examples/mods/quest-npc).
 
@@ -1113,6 +1330,44 @@ with colour 0 transparent. Start from one of the job's existing colours.
 rebuilt from nothing every time the app starts — which is why files put there
 keep disappearing. A mod's `data/` is the place that lasts.
 
+### Signboards: icons over NPCs
+
+The backpack over a Kafra and the red potion over a tool dealer are rows of one
+table, `data/luafiles514/lua files/SignBoardList.lub`. A mod's copy of that file
+is **added to the stock one, not laid over it**: ship one holding only your
+signs, and every Kafra keeps its icon.
+
+```lua
+-- my-mod/data/luafiles514/lua files/SignBoardList.lub, plain text
+SignBoardList = {
+	{ "prontera", 160, 185, 0, 1, "information\\over_nmtrade.bmp" },
+	{ "geffen", 120, 66, 10, 3, "information\\over_nmtrade.bmp", "Buying Drops", "#0x00FFFFFF" },
+}
+```
+
+Each row is map, x, y, height, type, icon, and for a board a caption and a
+colour. Type 1 is an icon on its own, as over a Kafra; any other type (the
+stock table uses 3) is a board with the icon and the caption. The client
+ignores the colour. The icon is a path under `data/texture/유저인터페이스/`
+and can be any image there — the stock ones are `information\over_kafra.bmp`,
+`over_store.bmp` (the potion), `over_nmtrade.bmp` (a bag of zeny),
+`over_weaponshop.bmp`, `over_armorshops.bmp`, `over_inn.bmp`, `over_guide.bmp`
+and so on. Or ship your own image there and name it.
+
+- **A sign belongs to a cell, not to an NPC.** Use your NPC's own map and
+  coordinates. A sign on a cell the stock table already has replaces that one,
+  which is also how a mod changes a stock icon. The client ignores the height
+  as well, and puts every sign at the same distance above the ground.
+- **Mods load in order**, after the stock table, and the last sign on a cell
+  wins. The app copies each mod's table aside as
+  `SignBoardList-<mod>.lub` and lists them in the client's
+  `customSignBoardList`.
+- **Write it in ASCII.** The client reads captions in its own codepage, as it
+  does quest text.
+- **Only that one path is read.** A `SignBoardList.lub` in `System/`, or
+  anywhere else under `data/`, is copied like any other file and changes
+  nothing on screen, and the log says so.
+
 ### The client caches, hard
 
 There are two caches between your file and the screen, and they fail
@@ -1166,7 +1421,7 @@ there, the same names the official client uses, so the official client's skin
 format maps onto it almost one to one: a skin's root is that folder's root, and
 its `basic_interface/` is that folder's `basic_interface/`.
 
-**Settings → Mods → Install a UI skin…** does the conversion. Give it a skin
+**Settings → Mods → Add UI skin…** does the conversion. Give it a skin
 folder — the one you would put in the official client's `skin/` directory — or
 a `.zip` or `.rar` of one, and it builds a mod named `skin-<name>`, switches it on, and
 switches whichever skin was on off. It is client-side only, so there is no
@@ -1215,7 +1470,7 @@ What a skin cannot change:
 ### Cursor packs
 
 The mouse pointer is a sprite, `data/sprite/cursors.spr` and `cursors.act`,
-and a mod that ships those two replaces it. Give **Install a UI skin…** a
+and a mod that ships those two replaces it. Give **Add UI skin…** a
 folder or archive holding them — most travel as a `.rar`, which macOS and
 Windows open with their built-in `tar`, and Linux with `bsdtar` if it is
 installed; otherwise unpack it and choose the folder — and it builds a
@@ -1393,7 +1648,9 @@ it, so a mod's entry wins over the stock one — which is how a mod renames an
 existing item — and a later mod wins over an earlier one, as in `db/`.
 
 A table anywhere else — `System/LuaFiles514/`, `data/luafiles514/` — is not
-read by the client, and the log says so. Editing the copy under
+read by the client, and the log says so: **Settings → Tools → Log viewer**,
+under *App*, as a `link-assets warning` each time the app starts or a mod is
+switched on or off. Editing the copy under
 `state/assets/System/` does not last: that folder is rebuilt on every start.
 
 See [`examples/mods/custom-item`](../examples/mods/custom-item).
@@ -1479,7 +1736,7 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 
 | API | Contract |
 | --- | --- |
-| `api.on(event, listener, { replay: true })` | Returns an unsubscribe function; subscriptions also end at disposal. Events: `map:enter`, `map:leave`, `connection`, `ui:append`, `ui:remove`, `movement:clear`, `preferences:change`, `item:use` (`{ itemId }`, the item's id, sent when the client asks to use it -- before the server says whether it worked), and `exit` (`{ to, from }`, the player chose to leave -- [below](#leaving-the-game-and-remembered-logins--exit-and-apiaccount)). |
+| `api.on(event, listener, { replay: true })` | Returns an unsubscribe function; subscriptions also end at disposal. Events: `map:enter`, `map:leave`, `connection`, `ui:append`, `ui:remove`, `movement:clear`, `preferences:change`, `item:use` (`{ itemId }`, the item's id, sent when the client asks to use it -- before the server says whether it worked), `server:event` (`{ command, text }`, a mod's server script speaking first -- [below](#windows-and-server-requests)), and `exit` (`{ to, from }`, the player chose to leave -- [below](#leaving-the-game-and-remembered-logins--exit-and-apiaccount)). |
 | `api.snapshot()` | Frozen copy of map, connection, player position/HP/SP/name/`characterId`, selected target identity/name/HP, camera, packet version and movement counters. Server movement acknowledgements are read-only evidence. |
 | `api.components.current()` | Mounted `{ name, root, host }` descriptors. DOM references support styling; do not retain detached components after `ui:remove`. |
 | `api.preferences.get(key, fallback)` / `.set(key, value)` | JSON values isolated by plugin, browser and server origin. Storage failure is reported by `set`. Do not store secrets. |
@@ -1496,6 +1753,7 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 | `api.cleanup(fn)` | Register idempotent cleanup immediately after allocating a resource. The returned function can release it early. Runs on failure, scope replacement and page teardown. |
 | `api.screens.replace(screen, hook)` / `.stage(canvas)` / `.image(path)` | Draw the login screen, server list, character select or character creation yourself. See [below](#the-screens-before-the-game--apiscreens). |
 | `api.account.status()` / `.remember()` / `.resume()` / `.forget()` | A remembered login the page never holds, traded for a one-time login token. See [below](#leaving-the-game-and-remembered-logins--exit-and-apiaccount). |
+| `api.host.request(path, { method, body, timeout })` | Ask this mod's own [host route](#host-routes), on the host's computer, from the host's window or an invited friend's alike. Resolves `{ status, type, body, data }` for every answer (`data` is the parsed JSON, or `null`); rejects only when nothing answered. Absent in an older app. |
 
 ### Graphics passes
 
@@ -1620,8 +1878,8 @@ lamp glow, haze, tone mapping and more in a single pass.
 `api.ui.window` gives a plugin a window in the game's style: a title bar to
 drag it by, a close button, a corner to resize it, and a `body` element that is
 the plugin's to fill. It sits in its own shadow root, so a mod's CSS and the
-game's never meet. The game remembers where the player left it, and typing in
-it doesn't move the character or fire shortcuts.
+game's never meet. The game remembers where the player left it, and clicking
+or typing in it doesn't move the character or fire shortcuts.
 
 ```js
 const win = api.ui.window({ id: 'notes', title: 'Notes', width: 300, height: 200 });
@@ -1654,6 +1912,28 @@ A long answer can be split: `@@reply <n> 1/3 …`, `2/3 …`, `3/3 …`, and the
 parts are joined in order. A request that gets no answer rejects after its
 timeout (5 seconds by default). Only the server can send these lines, because
 anything a player says arrives with their name in front of it.
+
+The script can also speak first, without being asked — an NPC opening the
+mod's window when the player picks a menu option, for instance. It sends
+`@@event <command> <text>`; every plugin gets it as the client event
+`server:event`, and the line never shows in chat:
+
+```c
+	// in the NPC's dialogue
+	close2;
+	dispbottom "@@event mymod open";
+	end;
+```
+
+```js
+api.on('server:event', ({ command, text }) => {
+    if (command === 'mymod' && text === 'open') win.show();
+});
+```
+
+`<command>` takes the same form as a request's: lowercase letters, digits and
+`_`, starting with a letter. Use your mod's own, and check it, since every
+plugin hears every event.
 [`mods/ingame-database`](../mods/ingame-database) is a complete one: an item
 and monster lookup window.
 
@@ -1848,6 +2128,180 @@ all of its remembered logins. Where nothing answers, `status()` says
 older host, and any other server.
 
 See [`mods/autologin`](../mods/autologin), which uses all three.
+
+### How GMs are drawn — `api.players.gmLook`
+
+The client draws every account on its GM list (`adminList` in its config,
+which holds the built-in `ragnarok` account) in the GM suit, whatever its job,
+and styles its name and chat as a GM's. These are only looks; GM commands come
+from the server. A mod can turn each part off:
+
+```js
+if (api.players?.gmLookSupported?.()) {
+    api.players.gmLook({ sprite: false });              // drawn as their class
+    api.players.gmLook({ name: false, chat: false });   // and named and heard like anyone
+}
+```
+
+Leave a key out to keep it as it is. `gmLook` returns the look now in force
+(`{ sprite, name, chat }`). It applies to characters drawn from then on, so
+call it from `init`, and it is put back when the mod is turned off. An app
+before 1.4.5 has no `api.players`, and a client without the switches answers
+`gmLookSupported()` with `false` (`gmLook` then returns `null`). It reads `Session.AdminLook` in the
+roBrowser fork. See [`mods/gm-class-look`](../mods/gm-class-look).
+
+---
+
+## Host routes
+
+A host route is JavaScript of the mod's own that runs **on the host's
+computer** and answers HTTP requests from the game — from the host's own game
+window and from every friend invited through a sharing link. It is for what a
+friend's browser cannot do by itself: reach a program on the host's machine,
+such as a local AI model, and give everyone the same answer.
+
+It is somebody else's code running on the host's computer, so it runs in a
+box (below), it can connect only to the addresses its `mod.json` names, and it
+does **nothing until the host switches it on**.
+
+### mod.json
+
+```json
+{
+  "name": "host-local-ai",
+  "host": {
+    "entry": "host/index.js",
+    "connect": ["http://127.0.0.1:8080"]
+  }
+}
+```
+
+- **`entry`** — an ES module inside the mod's `host/` folder. Only `host/` is
+  served to the handler: it cannot read the rest of the mod, or anything else
+  on disk. `..`, absolute paths and links that lead out of `host/` are
+  refused.
+- **`connect`** — up to 8 origins the handler may `fetch`: `http://` or
+  `https://`, host and port, no path (`"http://127.0.0.1:8080"`, written the way
+  a browser writes it, so no trailing `/` and no `:80`). Leave it out, or `[]`,
+  for a handler that reaches nothing. The app's own ports — the asset server
+  (3338), login (6900), char (6121), map (5121), the agent API (7490) and the
+  sharing gateway (3339), or this copy's own if they were moved — are refused
+  on **any** host name, since a name can lead back to this machine.
+
+A mistake in `"host"` does not stop the rest of the mod from loading; its card
+in Settings says what is wrong, and the route stays off.
+
+### The handler
+
+```js
+// host/index.js
+export default async function handle(request, host) {
+    if (request.method === 'GET' && request.path === '/hello') {
+        return { body: { hello: request.from } };
+    }
+    return { status: 404, body: { error: 'Not found' } };
+}
+```
+
+`request`:
+
+| | |
+|---|---|
+| `method` | `GET`, `POST`, `PUT` or `DELETE` |
+| `path` | what follows the mod's name, starting with `/` (`/_friend/mod/host-local-ai/complete` → `/complete`) |
+| `query` | the query string without `?`, or `''` |
+| `headers` | `content-type` and `accept` only, when sent |
+| `body` | text, or `null`. JSON arrives as text: `JSON.parse(request.body)` |
+| `from` | `'host'` or `'friend'` |
+
+Return `{ status, type, body }`: `status` 200–599 (default 200); `body` a
+string, or an object sent as JSON; `type` the content type (default
+`application/json` for an object, `text/plain` for a string). Throwing, or
+returning anything else, answers 502 with a fixed message, and the details go
+to the host's app log only.
+
+`host` has `host.name`, `host.connect` and `host.log(...)`, which writes a
+line to the host's app log under the mod's name (at most 30 a minute). It has
+nothing else: no files, no Node, no Electron, no other mod.
+
+The module is loaded once and kept, so it can hold state between requests in
+module variables. It is started on the first request after the app starts,
+and again after it crashes, hangs, or the mod is updated or switched.
+
+### Asking it from the game
+
+```js
+const answer = await api.host.request('/complete', { method: 'POST', body: { prompt: 'Hi' } });
+if (answer.status === 200) console.log(answer.data.text);
+```
+
+`api.host.request` reaches only this plugin's own mod's route: the client
+binds the mod's name. On the host's window it goes to the app directly; on a
+friend's it is `fetch('/_friend/mod/<mod>/<path>')` on the sharing link. A mod
+that is off, not switched on as a host service, or has no route answers 404.
+
+All plugins share one page, so this is a convenience, not a wall between mods:
+a plugin can always `fetch` another mod's path on a friend's page itself.
+What *is* enforced is everything on the host's side.
+
+### The box, and the limits
+
+Each mod's handler runs in a hidden window of its own
+([`electron/mod-host/sandbox.js`](../electron/mod-host/sandbox.js)):
+
+- a sandboxed renderer with context isolation, no Node and no Electron APIs,
+  which cannot show itself, navigate, open windows, download, or be granted
+  any permission;
+- a session of its own, in memory only: no cookies, storage or cache shared
+  with the game, another mod, or the next start;
+- every request it makes is checked before it leaves: its own `host/` files,
+  and URLs whose origin is exactly one in `connect`. Anything else — another
+  host or port, WebSockets, `file:`, `data:` — is cancelled and logged, and
+  the page's Content-Security-Policy says the same again. Responses from the
+  `connect` origins are given CORS headers, so a local server that sends none
+  can still be read.
+
+The app enforces, outside the box:
+
+| | |
+|---|---|
+| request body | 200 KiB → 413 |
+| response body | 1 MiB → 502 |
+| time | 30 s per request → 504 |
+| at once | 4 requests per mod → 429 |
+| rate | 60 requests a minute per friend (and 60 for the host) → 429 |
+
+A friend's request carries no cookie, address or other header to the handler,
+and the answer carries back only its status, content type and body, under a
+Content-Security-Policy that stops it running script on the sharing link.
+`POST`, `PUT` and `DELETE` must come from the game's own page, with a JSON or
+plain-text body.
+
+### Switching it on
+
+**Settings → Mods** shows, in the open row of a mod that declares a host route, *"Runs a
+host service on this computer that friends you invite can use, and that may
+connect to: …"* with a switch. It is off for every mod until the host ticks it,
+and it takes effect at once, without Apply. The choice is stored, with the
+list it was made for, in `state/mod-host.json`; a mod update that changes
+`connect` switches it off again until the host has seen the new list. Removing
+the mod forgets it.
+
+### Who can reach it
+
+| | |
+|---|---|
+| the host, in the app | yes |
+| a friend, through a sharing link (Cloudflare) | yes, while sharing is on |
+| a player who joined over **LAN** | **no** |
+
+A LAN player loads the game straight from the host's asset server, not
+through the sharing gateway, and the asset server forwards only
+`/_friend/remember/` to the app (for remembered logins). `api.host.request`
+answers 404 there, the same as a mod with no route, so a mod should treat 404
+as "not available here". Inviting LAN players with a sharing link works.
+
+See [`examples/mods/host-local-ai`](../examples/mods/host-local-ai).
 
 ---
 

@@ -261,7 +261,12 @@ function fakeClient({ prefs = {}, account = {} } = {}) {
     for (let round = 0; round < 10; round++) {
       const due = timers.filter(timer => all || timer.ms === 0);
       if (!due.length) return;
-      for (const timer of due) { timers.splice(timers.indexOf(timer), 1); timer.fn(); }
+      for (const timer of due) {
+        // One timer can cancel another due in the same round.
+        const at = timers.indexOf(timer);
+        if (at < 0) continue;
+        timers.splice(at, 1); timer.fn();
+      }
     }
   };
   const login = { root: null, calls: [], login(user, pass) { this.calls.push([user, pass]); } };
@@ -315,6 +320,57 @@ test('a relaunch logs in with a fresh token and plays the remembered character w
   assert.equal(mod.stage, 'idle');
   await settle();
   assert.equal(c.calls.filter(([name]) => name === 'remember').length, 0, 'already remembered');
+});
+
+test('character select redrawn while logging in still plays the remembered character', async () => {
+  // What the client does on a relaunch: character select is shown, hidden and
+  // shown again before the list arrives. The first hide used to stop it.
+  const { createAutologin } = await import('../mods/autologin/client/index.js');
+  const c = fakeClient({ prefs: { state: { remembered: true, username: 'player_one', characterId: 150001, characterName: 'Hero' } } });
+  const mod = createAutologin(c.api, {}, c.env);
+  mod.begin();
+  c.hooks.login.show(c.login);
+  await settle();
+  c.hooks.login.hide();
+  c.hooks.charSelect.show(c.charSelect([]));
+  c.tick();
+  c.hooks.charSelect.hide();               // redrawn...
+  assert.equal(mod.stage, 'charSelect', 'a hide alone is not closing it');
+  const again = c.charSelect([]);
+  again.root = { replaceChildren() {} };   // ...as a new window
+  c.hooks.charSelect.show(again);
+  c.tick(true);                            // every wait runs out but the list's
+  assert.equal(mod.stage, 'idle', 'the list wait ran out: nothing arrived');
+  // The same again, with the list arriving after the redraw.
+  const d = fakeClient({ prefs: { state: { remembered: true, username: 'player_one', characterId: 150001, characterName: 'Hero' } } });
+  const next = createAutologin(d.api, {}, d.env);
+  next.begin();
+  d.hooks.login.show(d.login);
+  await settle();
+  d.hooks.charSelect.show(d.charSelect([]));
+  d.tick();
+  d.hooks.charSelect.hide();
+  d.hooks.charSelect.show(d.charSelect([]));
+  const full = d.charSelect([{ id: 150002, slot: 0, name: 'Alt' }, HERO]);
+  d.hooks.charSelect.update(full);
+  assert.deepEqual(full.played, [2]);
+  assert.equal(next.stage, 'playing');
+});
+
+test('closing character select while waiting hands it back once it stays closed', async () => {
+  const { createAutologin } = await import('../mods/autologin/client/index.js');
+  const c = fakeClient({ prefs: { state: { remembered: true, username: 'player_one', characterId: 150001, characterName: 'Hero' } } });
+  const mod = createAutologin(c.api, {}, c.env);
+  mod.begin();
+  c.hooks.login.show(c.login);
+  await settle();
+  c.hooks.charSelect.show(c.charSelect([]));
+  c.tick();
+  c.hooks.charSelect.hide();
+  assert.equal(mod.stage, 'charSelect');
+  c.tick(true);
+  assert.equal(mod.stage, 'idle');
+  assert.equal(c.hooks.charSelect, undefined, 'character select is the client’s again');
 });
 
 test('Escape -> Character select forgets the character; the next launch logs in and stops there', async () => {

@@ -25,7 +25,7 @@ REGISTRY = ROOT / "registry"
 MODS = REGISTRY / "mods"
 # Anything a mod legitimately ships. Deliberately a list rather than a
 # denylist: a new kind of file should be a deliberate decision, made here.
-ALLOWED = {".json", ".yml", ".yaml", ".txt", ".lua", ".lub", ".js", ".mjs",
+ALLOWED = {".json", ".yml", ".yaml", ".txt", ".csv", ".lua", ".lub", ".js", ".mjs",
            ".css", ".html", ".png", ".bmp", ".jpg", ".gif", ".spr", ".act",
            ".gat", ".gnd", ".rsw", ".rsm", ".wav", ".mp3", ".ttf", ".md"}
 # What an icon or a screenshot may be. The app decodes these itself, so the
