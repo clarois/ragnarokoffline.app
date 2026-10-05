@@ -92,6 +92,14 @@ The list vouches for the mod's repository, not for each release, so its author
 can publish a new version without review. That is what the dialog says, and
 why updating is your click and not the app's.
 
+A mod installed **from the mod list** itself (a reviewed folder in the app's
+repository) is checked too: its version in the installed `mod.json` against
+the version in the list. A newer one is listed in **Updates** with an
+**Update** button, which installs the reviewed copy straight away (it was
+reviewed when it went into the list), keeps your options and whether the mod is
+on, and waits for **Apply**. A newer version that needs a newer app is named but
+not offered.
+
 ## Install a mod
 
 **Add mod from folder…** takes a folder, a `.zip` or a `.rar`. The file's content decides which it is, not its name. A `.rar` needs `bsdtar`, which macOS and Windows have built in; on Linux, install `libarchive-tools` (or unpack it and choose the folder).

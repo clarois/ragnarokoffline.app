@@ -226,7 +226,7 @@ Body:
       - { SkillId: MG_LIGHTNINGBOLT, Level: 10, Rate: 10000, Condition: enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_FIREBOLT,      Level: 10, Rate: 10000 }
       - { SkillId: MG_COLDBOLT,      Level: 10, Rate: 8000  }
-      - { SkillId: MG_FROSTDIVER,    Level: 10, Rate: 8000  }
+      - { SkillId: MG_FROSTDIVER,    Level: 10, Rate: 8000, Condition: not_enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_SOULSTRIKE,    Level: 10, Rate: 7000  }
       - { SkillId: MG_FIREBALL,      Level: 10, Rate: 7000  }
       - { SkillId: MG_NAPALMBEAT,    Level: 10, Rate: 6000  }
@@ -409,7 +409,7 @@ Body:
   # JOB_WIZARD = 9
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SLOWPOISON }
+      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STUN }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_FREEZE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STONE }
@@ -633,7 +633,12 @@ Body:
             - self_sp_pct_lt30
             - enemy_distance_lt10
       # -- sphere-chain seeds (state machine priority) --
-      - { SkillId: MO_CALLSPIRITS,      Level: 5,  Target: self }
+      - SkillId: MO_CALLSPIRITS
+        Level: 5
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt5
       - { SkillId: MO_EXPLOSIONSPIRITS, Level: 5,  Target: self }
       - { SkillId: MO_STEELBODY,        Level: 5,  Rate: 5000, Target: self, Condition: hp_below, CondValue: 30 }
       - { SkillId: MO_BLADESTOP,        Level: 5,  Rate: 6000, Target: self, Condition: melee_attacked }
@@ -674,8 +679,6 @@ Body:
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 16
     Skills:
@@ -687,10 +690,10 @@ Body:
       - { SkillId: WZ_EARTHSPIKE,       Level: 5,  Rate: 7000  }
       - { SkillId: WZ_HEAVENDRIVE,      Level: 5,  Rate: 6000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_DISPELL,          Level: 5,  Rate: 8000  }
-      - { SkillId: SA_FLAMELAUNCHER,    Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_PROPERTYFIRE }
-      - { SkillId: SA_FROSTWEAPON,      Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_PROPERTYWATER }
-      - { SkillId: SA_LIGHTNINGLOADER,  Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_PROPERTYWIND }
-      - { SkillId: SA_SEISMICWEAPON,    Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_PROPERTYGROUND }
+      - { SkillId: SA_FLAMELAUNCHER,    Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_FIREWEAPON }
+      - { SkillId: SA_FROSTWEAPON,      Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_WATERWEAPON }
+      - { SkillId: SA_LIGHTNINGLOADER,  Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_WINDWEAPON }
+      - { SkillId: SA_SEISMICWEAPON,    Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_EARTHWEAPON }
       - { SkillId: SA_AUTOSPELL,        Level: 10, Rate: 7000, Target: self, Condition: self_status, CondValue: SC_AUTOSPELL }
       - { SkillId: MG_SIGHT,            Level: 1,  Rate: 10000, Target: self, Condition: enemy_hidden }
       - SkillId: MG_SAFETYWALL
@@ -711,12 +714,12 @@ Body:
       - { SkillId: MG_ENERGYCOAT, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ENERGYCOAT }
       - { SkillId: MG_FIREBALL, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_FIREWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000 }
+      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000, Condition: not_enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_NAPALMBEAT, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_SOULSTRIKE, Level: 10, Rate: 9000 }
       - { SkillId: MG_THUNDERSTORM, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_DELUGE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MAGICROD }
+      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: self_being_cast_on }
       - { SkillId: SA_VIOLENTGALE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_VOLCANO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
 
@@ -789,8 +792,8 @@ Body:
       - { SkillId: BA_ASSASSINCROSS,   Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: BA_POEMBRAGI,       Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: BA_APPLEIDUN,       Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
-      - { SkillId: BA_DISSONANCE,      Level: 5,  Rate: 5000, Target: self }
-      - { SkillId: BA_FROSTJOKER,      Level: 5,  Rate: 4000, Target: self }
+      - { SkillId: BA_DISSONANCE,      Level: 5,  Rate: 5000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
+      - { SkillId: BA_FROSTJOKER,      Level: 5,  Rate: 4000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       # -- damaged_gt: Charge Arrow kites melee attacker off the Bard --
       - { SkillId: AC_CHARGEARROW,     Level: 1,  Rate: 9000, Condition: damaged_gt, CondValue: 20, Cooldown: 3000 }
 
@@ -800,7 +803,7 @@ Body:
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
@@ -817,8 +820,8 @@ Body:
       - { SkillId: DC_DONTFORGETME,    Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: DC_FORTUNEKISS,     Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: DC_SERVICEFORYOU,   Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
-      - { SkillId: DC_UGLYDANCE,       Level: 5,  Rate: 5000, Target: self }
-      - { SkillId: DC_SCREAM,          Level: 5,  Rate: 4000, Target: self }
+      - { SkillId: DC_UGLYDANCE,       Level: 5,  Rate: 5000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
+      - { SkillId: DC_SCREAM,          Level: 5,  Rate: 4000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       # -- damaged_gt: Charge Arrow kites melee attacker off the Dancer --
       - { SkillId: AC_CHARGEARROW,     Level: 1,  Rate: 9000, Condition: damaged_gt, CondValue: 20, Cooldown: 3000 }
 
@@ -832,7 +835,7 @@ Body:
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
@@ -920,7 +923,7 @@ Body:
   # JOB_HIGH_WIZARD = 4010
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SLOWPOISON }
+      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STUN }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_FREEZE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STONE }
@@ -984,7 +987,7 @@ Body:
     Skills:
 
       - { SkillId: WS_CARTTERMINATION, Level: 10, Rate: 10000 }
-      - { SkillId: WS_MELTDOWN,       Level: 10, Rate: 6000  }
+      - { SkillId: WS_MELTDOWN,       Level: 10, Rate: 6000, Condition: not_self_status, CondValue: SC_MELTDOWN }
       - { SkillId: MC_MAMMONITE,       Level: 10, Rate: 7000  }
       - { SkillId: MC_CARTREVOLUTION,  Level: 1,  Rate: 6000, Condition: enemy_count_nearby, CondValue: 3 }
       - { SkillId: BS_ADRENALINE,      Level: 5,  Rate: 10000, Target: self, Condition: not_self_status, CondValue: SC_ADRENALINE }
@@ -1154,7 +1157,13 @@ Body:
             - self_sp_pct_lt60
             - enemy_distance_lt10
       #- { SkillId: MO_CALLSPIRITS,      Level: 5,  Rate: 10000, Target: self }
-      - { SkillId: CH_SOULCOLLECT,      Level: 1,  Rate: 10000, Target: self }
+      - SkillId: CH_SOULCOLLECT
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt5
       - { SkillId: MO_EXPLOSIONSPIRITS, Level: 5,  Rate: 10000, Target: self }
       - { SkillId: MO_STEELBODY,        Level: 5,  Rate: 5000, Target: self, Condition: hp_below, CondValue: 25 }
       - { SkillId: MO_BLADESTOP,        Level: 5,  Rate: 6000, Target: self, Condition: melee_attacked }
@@ -1195,8 +1204,6 @@ Body:
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
   - JobId: 4017
     Skills:
@@ -1226,8 +1233,8 @@ Body:
       - { SkillId: SA_DISPELL,         Level: 5,  Rate: 5000,  Cooldown: 3000 }
       - { SkillId: PF_SOULBURN,        Level: 5,  Rate: 5000,  Cooldown: 8000 }
       - { SkillId: PF_MINDBREAKER,     Level: 5,  Rate: 5000,  Cooldown: 10000, Condition: not_enemy_status, CondValue: SC_MINDBREAKER }
-      - { SkillId: SA_FLAMELAUNCHER,   Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_PROPERTYFIRE }
-      - { SkillId: SA_FROSTWEAPON,     Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_PROPERTYWATER }
+      - { SkillId: SA_FLAMELAUNCHER,   Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_FIREWEAPON }
+      - { SkillId: SA_FROSTWEAPON,     Level: 5,  Rate: 5000, Target: ally, Condition: not_ally_status, CondValue: SC_WATERWEAPON }
       # -- reactive Wall of Fog when meleed (separate from web combo) --
       - { SkillId: PF_FOGWALL,         Level: 1,  Rate: 5000,  Target: self, Condition: self_targeted,  CondValue: 5 }
       - { SkillId: MG_SIGHT,           Level: 1,  Rate: 10000, Target: self, Condition: enemy_hidden }
@@ -1255,7 +1262,7 @@ Body:
       - { SkillId: MG_THUNDERSTORM, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_DELUGE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_LIGHTNINGLOADER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_WINDWEAPON }
-      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MAGICROD }
+      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: self_being_cast_on }
       - { SkillId: SA_SEISMICWEAPON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_EARTHWEAPON }
       - { SkillId: SA_VIOLENTGALE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_VOLCANO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -1320,7 +1327,7 @@ Body:
   # JOB_CLOWN = 4020
       - { SkillId: AM_CP_HELM, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_CP_HELM }
       - { SkillId: AM_CP_SHIELD, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_CP_SHIELD }
-      - { SkillId: CR_SLIMPITCHER, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: CR_SLIMPITCHER, Level: 10, Rate: 7000, AroundRange: 2, Target: ally, Condition: ally_hp_below, CondValue: 60 }
       - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AM_BERSERKPITCHER, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
 
@@ -1336,8 +1343,8 @@ Body:
       - { SkillId: BA_ASSASSINCROSS,   Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: BA_POEMBRAGI,       Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: BA_APPLEIDUN,       Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
-      - { SkillId: BA_DISSONANCE,      Level: 5,  Rate: 5000, Target: self }
-      - { SkillId: BA_FROSTJOKER,      Level: 5,  Rate: 4000, Target: self }
+      - { SkillId: BA_DISSONANCE,      Level: 5,  Rate: 5000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
+      - { SkillId: BA_FROSTJOKER,      Level: 5,  Rate: 4000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       # -- damaged_gt: Charge Arrow kites melee attacker --
       - { SkillId: AC_CHARGEARROW,     Level: 1,  Rate: 9000, Condition: damaged_gt, CondValue: 20, Cooldown: 3000 }
 
@@ -1347,13 +1354,13 @@ Body:
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
       - { SkillId: BD_SIEGFRIED, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIEGFRIED }
       - { SkillId: CG_HERMODE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HERMODE }
-      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_MARIONETTE }
+      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_self_status, CondValue: SC_MARIONETTE }
 
   - JobId: 4021
     Skills:
@@ -1367,8 +1374,8 @@ Body:
       - { SkillId: DC_DONTFORGETME,    Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: DC_FORTUNEKISS,     Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
       - { SkillId: DC_SERVICEFORYOU,   Level: 10, Rate: 8000, Target: self, Cooldown: 30000 }
-      - { SkillId: DC_UGLYDANCE,       Level: 5,  Rate: 5000, Target: self }
-      - { SkillId: DC_SCREAM,          Level: 5,  Rate: 4000, Target: self }
+      - { SkillId: DC_UGLYDANCE,       Level: 5,  Rate: 5000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
+      - { SkillId: DC_SCREAM,          Level: 5,  Rate: 4000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       # -- damaged_gt: Charge Arrow kites melee attacker --
       - { SkillId: AC_CHARGEARROW,     Level: 1,  Rate: 9000, Condition: damaged_gt, CondValue: 20, Cooldown: 3000 }
 
@@ -1382,13 +1389,13 @@ Body:
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
       - { SkillId: BD_SIEGFRIED, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIEGFRIED }
       - { SkillId: CG_HERMODE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HERMODE }
-      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_MARIONETTE }
+      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_self_status, CondValue: SC_MARIONETTE }
 
   - JobId: 4054
     Skills:
@@ -1500,14 +1507,13 @@ Body:
       - { SkillId: MG_FIREBALL, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_FIREBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_FIREWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000 }
+      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000, Condition: not_enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_LIGHTNINGBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_NAPALMBEAT, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_SOULSTRIKE, Level: 10, Rate: 9000 }
       - { SkillId: MG_THUNDERSTORM, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: WL_RELEASE, Level: 2, Rate: 9000 }
       - { SkillId: WL_TELEKINESIS_INTENSE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TELEKINESIS_INTENSE }
-      - { SkillId: WL_WHITEIMPRISON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_WHITEIMPRISON }
       - { SkillId: WZ_EARTHSPIKE, Level: 5, Rate: 9000 }
       - { SkillId: WZ_FIREPILLAR, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: WZ_HEAVENDRIVE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -1691,8 +1697,8 @@ Body:
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
       - { SkillId: PR_IMPOSITIO, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_IMPOSITIO }
       - { SkillId: PR_KYRIE, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KYRIE }
-      - { SkillId: PR_SANCTUARY, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SLOWPOISON }
+      - { SkillId: PR_SANCTUARY, Level: 10, Rate: 7000, AroundRange: 2, Target: ally, Condition: ally_hp_below, CondValue: 60 }
+      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STUN }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_FREEZE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STONE }
@@ -1892,7 +1898,7 @@ Body:
       - { SkillId: AL_HEAL,            Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 60 }
       - { SkillId: CR_DEVOTION,        Level: 5,  Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_DEVOTION, Cooldown: 30000 }
       - { SkillId: PR_KYRIE,           Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KYRIE }
-      - { SkillId: LG_PIETY,           Level: 5,  Rate: 6000, Target: ally }
+      - { SkillId: LG_PIETY,           Level: 5,  Rate: 6000, Target: self, Condition: not_self_status, CondValue: SC_BENEDICTIO }
       - { SkillId: CR_AUTOGUARD,       Level: 10, Rate: 10000, Target: self, Condition: not_self_status, CondValue: SC_AUTOGUARD }
       - { SkillId: CR_REFLECTSHIELD,   Level: 10, Rate: 8000,  Target: self, Condition: not_self_status, CondValue: SC_REFLECTSHIELD }
       - SkillId: CR_DEFENDER
@@ -1913,7 +1919,15 @@ Body:
       - { SkillId: AL_PNEUMA,          Level: 1,  Target: self, Condition: range_attacked }
       - { SkillId: LG_INSPIRATION,     Level: 5,  Rate: 5000, Target: self, Condition: hp_below, CondValue: 25 }
       - { SkillId: LG_KINGS_GRACE,     Level: 5,  Rate: 5000, Target: self, Condition: hp_below, CondValue: 20 }
-      - { SkillId: CR_GRANDCROSS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BLIND }
+      - SkillId: CR_GRANDCROSS
+        Level: 10
+        Rate: 8000
+        Target: self
+        Condition:
+          AND:
+            - enemy_count_nearby_ge2
+            - self_hp_pct_ge60
+            - self_sp_pct_ge40
       - { SkillId: CR_HOLYCROSS, Level: 10, Rate: 9000 }
       - { SkillId: CR_PROVIDENCE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_PROVIDENCE }
       - { SkillId: CR_SHIELDBOOMERANG, Level: 5, Rate: 9000 }
@@ -1947,7 +1961,7 @@ Body:
       - { SkillId: AL_HEAL,            Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 60 }
       - { SkillId: CR_DEVOTION,        Level: 5,  Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_DEVOTION, Cooldown: 30000 }
       - { SkillId: PR_KYRIE,           Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KYRIE }
-      - { SkillId: LG_PIETY,           Level: 5,  Rate: 6000, Target: ally }
+      - { SkillId: LG_PIETY,           Level: 5,  Rate: 6000, Target: self, Condition: not_self_status, CondValue: SC_BENEDICTIO }
       - { SkillId: CR_AUTOGUARD,       Level: 10, Rate: 10000, Target: self, Condition: not_self_status, CondValue: SC_AUTOGUARD }
       - { SkillId: CR_REFLECTSHIELD,   Level: 10, Rate: 8000,  Target: self, Condition: not_self_status, CondValue: SC_REFLECTSHIELD }
       - SkillId: CR_DEFENDER
@@ -2003,7 +2017,7 @@ Body:
       - { SkillId: SA_LANDPROTECTOR,   Level: 5,  Rate: 8000, Target: self, Condition: cell_has_skill_unit }
       - { SkillId: MG_FIREBALL, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_FIREWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000 }
+      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000, Condition: not_enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_NAPALMBEAT, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_SIGHT, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGHT }
       - { SkillId: MG_SOULSTRIKE, Level: 10, Rate: 9000 }
@@ -2013,7 +2027,7 @@ Body:
       - { SkillId: SA_FLAMELAUNCHER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_FIREWEAPON }
       - { SkillId: SA_FROSTWEAPON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_WATERWEAPON }
       - { SkillId: SA_LIGHTNINGLOADER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_WINDWEAPON }
-      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MAGICROD }
+      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: self_being_cast_on }
       - { SkillId: SA_SEISMICWEAPON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_EARTHWEAPON }
       - { SkillId: SA_VIOLENTGALE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_VOLCANO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2088,13 +2102,13 @@ Body:
       - { SkillId: AC_CONCENTRATION, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CONCENTRATE }
       - { SkillId: AC_DOUBLE, Level: 10, Rate: 9000 }
       - { SkillId: AC_SHOWER, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: BA_FROSTJOKER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: BA_FROSTJOKER, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BA_MUSICALSTRIKE, Level: 5, Rate: 9000 }
       - { SkillId: BD_ADAPTATION, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ADAPTATION }
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
@@ -2118,6 +2132,7 @@ Body:
       - { SkillId: MI_RUSH_WINDMILL,    Level: 5,  Rate: 8000, Target: self }
       - { SkillId: MI_ECHOSONG,         Level: 5,  Rate: 8000, Target: self }
       - { SkillId: MI_HARMONIZE,        Level: 5,  Rate: 7000, Target: ally }
+      - { SkillId: CG_MARIONETTE,       Level: 1,  Rate: 8000, Target: ally, Condition: not_self_status, CondValue: SC_MARIONETTE }
       - { SkillId: BA_WHISTLE,          Level: 10, Rate: 7000, Target: self, Cooldown: 30000 }
       - { SkillId: BA_ASSASSINCROSS,    Level: 10, Rate: 7000, Target: self, Cooldown: 30000 }
       - { SkillId: BA_POEMBRAGI,        Level: 10, Rate: 7000, Target: self, Cooldown: 30000 }
@@ -2167,12 +2182,12 @@ Body:
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
       - { SkillId: BD_SIEGFRIED, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIEGFRIED }
-      - { SkillId: DC_SCREAM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STUN }
+      - { SkillId: DC_SCREAM, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: DC_THROWARROW, Level: 5, Rate: 9000 }
       - { SkillId: WM_GLOOMYDAY, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_GLOOMYDAY }
       - { SkillId: WM_MELODYOFSINK, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MELODYOFSINK }
@@ -2197,6 +2212,7 @@ Body:
       - { SkillId: DC_DONTFORGETME,     Level: 10, Rate: 7000, Target: self, Cooldown: 30000 }
       - { SkillId: DC_FORTUNEKISS,      Level: 10, Rate: 7000, Target: self, Cooldown: 30000 }
       - { SkillId: DC_SERVICEFORYOU,    Level: 10, Rate: 7000, Target: self, Cooldown: 30000 }
+      - { SkillId: CG_MARIONETTE,       Level: 1,  Rate: 8000, Target: ally, Condition: not_self_status, CondValue: SC_MARIONETTE }
       - { SkillId: WM_SONG_OF_MANA,    Level: 5,  Rate: 6000, Target: self, Condition: sp_below, CondValue: 40 }
       - { SkillId: WM_DANCE_WITH_WUG,  Level: 5,  Rate: 6000, Target: self }
       - { SkillId: WM_LERADS_DEW,      Level: 5,  Rate: 5000, Target: self, Condition: ally_hp_below, CondValue: 60 }
@@ -2223,8 +2239,20 @@ Body:
       - { SkillId: SR_FLASHCOMBO,       Level: 5,  Rate: 7000  }
       - { SkillId: SR_HOWLINGOFLION,    Level: 5,  Rate: 5000  }
       - { SkillId: SR_CRESCENTELBOW,    Level: 5,  Rate: 5000, Target: self, Condition: melee_attacked }
-      - { SkillId: MO_CALLSPIRITS,      Level: 5,  Rate: 10000, Target: self }
-      - { SkillId: CH_SOULCOLLECT,      Level: 1,  Rate: 10000, Target: self }
+      - SkillId: MO_CALLSPIRITS
+        Level: 5
+        Rate: 10000
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt5
+      - SkillId: CH_SOULCOLLECT
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt5
       - { SkillId: MO_EXPLOSIONSPIRITS, Level: 5,  Rate: 10000, Target: self }
       - { SkillId: MO_EXTREMITYFIST,    Level: 10, Rate: 10000, Condition: sp_above, CondValue: 80 }
       - { SkillId: SR_RAISINGDRAGON,    Level: 10, Rate: 10000, Target: self, Condition: not_self_status, CondValue: SC_RAISINGDRAGON }
@@ -2243,7 +2271,7 @@ Body:
       - { SkillId: AL_PNEUMA, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AL_RUWACH, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUWACH }
       - { SkillId: MO_BALKYOUNG, Level: 1, Rate: 9000 }
-      - { SkillId: MO_BLADESTOP, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BLADESTOP_WAIT }
+      - { SkillId: MO_BLADESTOP, Level: 5, Rate: 8000, Target: self, Condition: melee_attacked }
       - { SkillId: MO_BODYRELOCATION, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MO_FINGEROFFENSIVE, Level: 5, Rate: 9000 }
       - { SkillId: MO_INVESTIGATE, Level: 5, Rate: 9000 }
@@ -2254,12 +2282,14 @@ Body:
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_CONFUSION }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BITESCAR }
-      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
-      - { SkillId: SR_POWERVELOCITY, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: SR_POWERVELOCITY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: MO_ABSORBSPIRITS
+        Level: 1
+        Rate: 6000
+        Cooldown: 4000
+        Condition:
+          AND:
+            - self_sp_pct_lt30
+            - enemy_distance_lt10
 
   - JobId: 4077
     Skills:
@@ -2277,8 +2307,20 @@ Body:
       - { SkillId: SR_FLASHCOMBO,       Level: 5,  Rate: 7000  }
       - { SkillId: SR_HOWLINGOFLION,    Level: 5,  Rate: 5000  }
       - { SkillId: SR_CRESCENTELBOW,    Level: 5,  Rate: 5000, Target: self, Condition: melee_attacked }
-      - { SkillId: MO_CALLSPIRITS,      Level: 5,  Rate: 10000, Target: self }
-      - { SkillId: CH_SOULCOLLECT,      Level: 1,  Rate: 10000, Target: self }
+      - SkillId: MO_CALLSPIRITS
+        Level: 5
+        Rate: 10000
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt5
+      - SkillId: CH_SOULCOLLECT
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt5
       - { SkillId: MO_EXPLOSIONSPIRITS, Level: 5,  Rate: 10000, Target: self }
       - { SkillId: MO_EXTREMITYFIST,    Level: 10, Rate: 10000, Condition: sp_above, CondValue: 80 }
       - { SkillId: SR_RAISINGDRAGON,    Level: 10, Rate: 10000, Target: self, Condition: not_self_status, CondValue: SC_RAISINGDRAGON }
@@ -2356,8 +2398,7 @@ Body:
   - JobId: 4072
     Skills:
 
-      - { SkillId: SC_REPRODUCE,       Level: 10, Rate: 10000 }
-      - { SkillId: SC_FATALMENACE,     Level: 10, Rate: 10000, Condition: self_status, CondValue: SC_INVISIBILITY }
+      - { SkillId: SC_REPRODUCE,       Level: 10, Rate: 10000, Condition: not_self_status, CondValue: SC__REPRODUCE }
       - { SkillId: SC_FATALMENACE,     Level: 10, Rate: 10000 }
       - { SkillId: SC_TRIANGLESHOT,    Level: 10, Rate: 8000  }
       - { SkillId: SC_FEINTBOMB,       Level: 10, Rate: 6000  }
@@ -2393,8 +2434,7 @@ Body:
   - JobId: 4079
     Skills:
 
-      - { SkillId: SC_REPRODUCE,       Level: 10, Rate: 10000 }
-      - { SkillId: SC_FATALMENACE,     Level: 10, Rate: 10000, Condition: self_status, CondValue: SC_INVISIBILITY }
+      - { SkillId: SC_REPRODUCE,       Level: 10, Rate: 10000, Condition: not_self_status, CondValue: SC__REPRODUCE }
       - { SkillId: SC_FATALMENACE,     Level: 10, Rate: 10000 }
       - { SkillId: SC_TRIANGLESHOT,    Level: 10, Rate: 8000  }
       - { SkillId: SC_FEINTBOMB,       Level: 10, Rate: 6000  }
@@ -2422,7 +2462,7 @@ Body:
 
   - JobId: 4252
     Skills:
-      - { SkillId: DK_SERVANTWEAPON, Level: 10, Rate: 10000 }
+      - { SkillId: DK_SERVANTWEAPON, Level: 10, Rate: 10000, Condition: not_self_status, CondValue: SC_SERVANTWEAPON }
       - { SkillId: DK_CHARGINGPIERCE, Level: 10, Rate: 7000, Condition: distance_above, CondValue: 3 }
       - { SkillId: DK_HACKANDSLASHER, Level: 10, Rate: 9000 }
       - { SkillId: DK_DRAGONIC_BREATH, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2449,10 +2489,10 @@ Body:
       - { SkillId: LK_PARRYING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_PARRYING }
       - { SkillId: LK_SPIRALPIERCE, Level: 5, Rate: 9000 }
       - { SkillId: LK_TENSIONRELAX, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TENSIONRELAX }
-      - { SkillId: RK_DEATHBOUND, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DEATHBOUND }
+      - { SkillId: RK_DEATHBOUND, Level: 10, Rate: 8000, Target: self, Condition: melee_attacked }
       - { SkillId: RK_DRAGONBREATH, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: RK_DRAGONBREATH_WATER, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: RK_DRAGONHOWLING, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FEAR }
+      - { SkillId: RK_DRAGONHOWLING, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 3 }
       - { SkillId: RK_ENCHANTBLADE, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ENCHANTBLADE }
       - { SkillId: RK_HUNDREDSPEAR, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: RK_PHANTOMTHRUST, Level: 5, Rate: 9000 }
@@ -2490,11 +2530,11 @@ Body:
 
   - JobId: 4254
     Skills:
-      - { SkillId: SHC_SHADOW_EXCEED, Level: 10, Rate: 9000 }
+      - { SkillId: SHC_SHADOW_EXCEED, Level: 10, Rate: 9000, Condition: not_self_status, CondValue: SC_SHADOW_EXCEED }
       - { SkillId: SHC_SAVAGE_IMPACT, Level: 10, Rate: 9000 }
       - { SkillId: SHC_ETERNAL_SLASH, Level: 10, Rate: 8000 }
       - { SkillId: SHC_DANCING_KNIFE, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: SHC_POTENT_VENOM, Level: 10, Rate: 10000 }
+      - { SkillId: SHC_POTENT_VENOM, Level: 10, Rate: 10000, Condition: not_self_status, CondValue: SC_POTENT_VENOM }
       - { SkillId: ASC_BREAKER, Level: 10, Rate: 9000 }
       - { SkillId: ASC_EDP, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_EDP }
       - { SkillId: AS_CLOAKING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CLOAKING }
@@ -2521,7 +2561,14 @@ Body:
       - { SkillId: SHC_FATAL_SHADOW_CROW, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SHC_IMPACT_CRATER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WEAPONBLOCK_ON }
       - { SkillId: SHC_SHADOW_STAB, Level: 5, Rate: 9000 }
-      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: TF_DETOXIFY
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          OR:
+            - self_poison
+            - self_dpoison
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
       - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
@@ -2562,7 +2609,7 @@ Body:
       - { SkillId: MG_FIREBALL, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_FIREBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_FIREWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000 }
+      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000, Condition: not_enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_LIGHTNINGBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_NAPALMBEAT, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_SAFETYWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2582,7 +2629,6 @@ Body:
       - { SkillId: WL_STASIS, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STASIS }
       - { SkillId: WL_TELEKINESIS_INTENSE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_TELEKINESIS_INTENSE }
       - { SkillId: WL_TETRAVORTEX, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: WL_WHITEIMPRISON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_WHITEIMPRISON }
       - { SkillId: WZ_EARTHSPIKE, Level: 5, Rate: 9000 }
       - { SkillId: WZ_FIREPILLAR, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: WZ_FROSTNOVA, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_FREEZE }
@@ -2622,7 +2668,16 @@ Body:
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: AL_CURE
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          OR:
+            - self_silence
+            - self_blind
+            - self_confusion
+            - self_bitescar
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HOLYLIGHT, Level: 1, Rate: 9000 }
@@ -2646,8 +2701,8 @@ Body:
       - { SkillId: PR_KYRIE, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KYRIE }
       - { SkillId: PR_MAGNIFICAT, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MAGNIFICAT }
       - { SkillId: PR_MAGNUS, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: PR_SANCTUARY, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_SLOWPOISON }
+      - { SkillId: PR_SANCTUARY, Level: 10, Rate: 7000, AroundRange: 2, Target: ally, Condition: ally_hp_below, CondValue: 60 }
+      - { SkillId: PR_SLOWPOISON, Level: 4, Rate: 8000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STUN }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_FREEZE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STONE }
@@ -2713,18 +2768,35 @@ Body:
 
   - JobId: 4258
     Skills:
-      - { SkillId: IG_ATTACK_STANCE, Level: 10, Rate: 10000 }
+      - { SkillId: IG_ATTACK_STANCE, Level: 10, Rate: 10000, Condition: not_self_status, CondValue: SC_ATTACK_STANCE }
       - { SkillId: IG_GRAND_JUDGEMENT, Level: 10, Rate: 9000 }
-      - { SkillId: IG_REBOUND_SHIELD, Level: 10, Rate: 8000 }
+      - { SkillId: IG_REBOUND_SHIELD, Level: 10, Rate: 8000, Condition: not_self_status, CondValue: SC_REBOUND_S }
       - { SkillId: IG_HOLY_SHIELD, Level: 10, Rate: 7000, Condition: melee_attacked, CondValue: 1 }
 
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: AL_CURE
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          OR:
+            - self_silence
+            - self_blind
+            - self_confusion
+            - self_bitescar
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: CR_AUTOGUARD, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_AUTOGUARD }
       - { SkillId: CR_DEFENDER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DEFENDER }
       - { SkillId: CR_DEVOTION, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_DEVOTION }
-      - { SkillId: CR_GRANDCROSS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BLIND }
+      - SkillId: CR_GRANDCROSS
+        Level: 10
+        Rate: 8000
+        Target: self
+        Condition:
+          AND:
+            - enemy_count_nearby_ge2
+            - self_hp_pct_ge60
+            - self_sp_pct_ge40
       - { SkillId: CR_HOLYCROSS, Level: 10, Rate: 9000 }
       - { SkillId: CR_PROVIDENCE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_PROVIDENCE }
       - { SkillId: CR_REFLECTSHIELD, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_REFLECTSHIELD }
@@ -2749,9 +2821,9 @@ Body:
       - { SkillId: LG_FORCEOFVANGUARD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FORCEOFVANGUARD }
       - { SkillId: LG_HESPERUSLIT, Level: 5, Rate: 9000 }
       - { SkillId: LG_INSPIRATION, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INSPIRATION }
-      - { SkillId: LG_KINGS_GRACE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_KINGS_GRACE }
-      - { SkillId: LG_MOONSLASHER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_OVERBRANDREADY }
-      - { SkillId: LG_PIETY, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BENEDICTIO }
+      - { SkillId: LG_KINGS_GRACE, Level: 5, Rate: 8000, Target: self, Condition: hp_below, CondValue: 20 }
+      - { SkillId: LG_MOONSLASHER, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: LG_PIETY, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BENEDICTIO }
       - { SkillId: LG_PINPOINTATTACK, Level: 5, Rate: 9000 }
       - { SkillId: LG_PRESTIGE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_PRESTIGE }
       - { SkillId: LG_RAGEBURST, Level: 1, Rate: 9000 }
@@ -2801,14 +2873,14 @@ Body:
       - { SkillId: CR_ACIDDEMONSTRATION, Level: 10, Rate: 9000 }
       - { SkillId: CR_FULLPROTECTION, Level: 5, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: CR_FULLPROTECTION, Level: 5, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
-      - { SkillId: CR_SLIMPITCHER, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: CR_SLIMPITCHER, Level: 10, Rate: 7000, AroundRange: 2, Target: ally, Condition: ally_hp_below, CondValue: 60 }
 
   - JobId: 4260
     Skills:
       - { SkillId: ABC_ABYSS_DAGGER, Level: 10, Rate: 9000 }
-      - { SkillId: ABC_ABYSS_SLAYER, Level: 10, Rate: 8000 }
+      - { SkillId: ABC_ABYSS_SLAYER, Level: 10, Rate: 8000, Condition: not_self_status, CondValue: SC_ABYSS_SLAYER }
       - { SkillId: ABC_UNLUCKY_RUSH, Level: 10, Rate: 7000 }
-      - { SkillId: ABC_FROM_THE_ABYSS, Level: 10, Rate: 8000 }
+      - { SkillId: ABC_FROM_THE_ABYSS, Level: 10, Rate: 8000, Condition: not_self_status, CondValue: SC_ABYSSFORCEWEAPON }
       - { SkillId: ABC_ABYSS_FLAME, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: ABC_ABYSS_SQUARE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: ABC_ABYSS_STRIKE, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2824,11 +2896,18 @@ Body:
       - { SkillId: RG_FLAGGRAFFITI, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: RG_GRAFFITI, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: RG_INTIMIDATE, Level: 5, Rate: 9000 }
-      - { SkillId: RG_RAID, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RAID }
+      - { SkillId: RG_RAID, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: ST_CHASEWALK, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CHASEWALK }
       - { SkillId: ST_PRESERVE, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_PRESERVE }
       - { SkillId: ST_REJECTSWORD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_REJECTSWORD }
-      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: TF_DETOXIFY
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          OR:
+            - self_poison
+            - self_dpoison
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
       - { SkillId: TF_DETOXIFY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_POISON }
@@ -2856,7 +2935,7 @@ Body:
       - { SkillId: MG_FIREBALL, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_FIREBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_FIREWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000 }
+      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000, Condition: not_enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_LIGHTNINGBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_NAPALMBEAT, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_SAFETYWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2869,7 +2948,7 @@ Body:
       - { SkillId: SA_FROSTWEAPON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_WATERWEAPON }
       - { SkillId: SA_LANDPROTECTOR, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_LIGHTNINGLOADER, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_WINDWEAPON }
-      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MAGICROD }
+      - { SkillId: SA_MAGICROD, Level: 5, Rate: 8000, Target: self, Condition: self_being_cast_on }
       - { SkillId: SA_SEISMICWEAPON, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_EARTHWEAPON }
       - { SkillId: SA_VIOLENTGALE, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SA_VOLCANO, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -2902,7 +2981,16 @@ Body:
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: AL_CURE
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          OR:
+            - self_silence
+            - self_blind
+            - self_confusion
+            - self_bitescar
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_HOLYLIGHT, Level: 1, Rate: 9000 }
@@ -2925,21 +3013,25 @@ Body:
       - { SkillId: IQ_THIRD_EXOR_FLAME, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_THIRD_EXOR_FLAME }
       - { SkillId: IQ_THIRD_FLAME_BOMB, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: IQ_THIRD_PUNISH, Level: 5, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: MO_ABSORBSPIRITS
+        Level: 1
+        Rate: 6000
+        Cooldown: 4000
+        Condition:
+          AND:
+            - self_sp_pct_lt30
+            - enemy_distance_lt10
       - { SkillId: MO_BALKYOUNG, Level: 1, Rate: 9000 }
-      - { SkillId: MO_BLADESTOP, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BLADESTOP_WAIT }
+      - { SkillId: MO_BLADESTOP, Level: 5, Rate: 8000, Target: self, Condition: melee_attacked }
       - { SkillId: MO_BODYRELOCATION, Level: 1, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MO_EXTREMITYFIST, Level: 5, Rate: 9000 }
       - { SkillId: MO_FINGEROFFENSIVE, Level: 5, Rate: 9000 }
       - { SkillId: MO_INVESTIGATE, Level: 5, Rate: 9000 }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: MO_KITRANSLATION, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: MO_STEELBODY, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STEELBODY }
-      - { SkillId: SR_CRESCENTELBOW, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CRESCENTELBOW }
-      - { SkillId: SR_CURSEDCIRCLE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_CURSEDCIRCLE_TARGET }
+      - { SkillId: SR_CRESCENTELBOW, Level: 5, Rate: 8000, Target: self, Condition: melee_attacked }
+      - { SkillId: SR_CURSEDCIRCLE, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SR_DRAGONCOMBO, Level: 10, Rate: 9000 }
-      - { SkillId: SR_EARTHSHAKER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STUN }
+      - { SkillId: SR_EARTHSHAKER, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SR_GATEOFHELL, Level: 10, Rate: 9000 }
       - { SkillId: SR_GENTLETOUCH_CHANGE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_GT_CHANGE }
       - { SkillId: SR_GENTLETOUCH_CURE, Level: 5, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
@@ -2948,10 +3040,16 @@ Body:
       - { SkillId: SR_GENTLETOUCH_QUIET, Level: 5, Rate: 9000 }
       - { SkillId: SR_GENTLETOUCH_REVITALIZE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_GT_REVITALIZE }
       - { SkillId: SR_KNUCKLEARROW, Level: 10, Rate: 9000 }
-      - { SkillId: SR_LIGHTNINGWALK, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_LIGHTNINGWALK }
-      - { SkillId: SR_POWERVELOCITY, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: SR_POWERVELOCITY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - { SkillId: SR_LIGHTNINGWALK, Level: 5, Rate: 8000, Target: self, Condition: range_attacked }
       - { SkillId: SR_RAISINGDRAGON, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RAISINGDRAGON }
+      # Spirit spheres for the Gentle Touches, Steel Body and Root, which cost them.
+      - SkillId: MO_CALLSPIRITS
+        Level: 5
+        Rate: 10000
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt5
       - { SkillId: SR_RIDEINLIGHTNING, Level: 5, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SILENCE }
       - { SkillId: AL_CURE, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_BLIND }
@@ -2970,7 +3068,7 @@ Body:
       - { SkillId: AC_SHOWER, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: BA_APPLEIDUN, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_APPLEIDUN }
       - { SkillId: BA_ASSASSINCROSS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ASSNCROS }
-      - { SkillId: BA_FROSTJOKER, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FREEZE }
+      - { SkillId: BA_FROSTJOKER, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BA_MUSICALSTRIKE, Level: 5, Rate: 9000 }
       - { SkillId: BA_POEMBRAGI, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_POEMBRAGI }
       - { SkillId: BA_WHISTLE, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_WHISTLE }
@@ -2978,14 +3076,14 @@ Body:
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
       - { SkillId: BD_SIEGFRIED, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIEGFRIED }
       - { SkillId: CG_ARROWVULCAN, Level: 10, Rate: 9000 }
       - { SkillId: CG_HERMODE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HERMODE }
-      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_MARIONETTE }
+      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_self_status, CondValue: SC_MARIONETTE }
       - { SkillId: MI_ECHOSONG, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ECHOSONG }
       - { SkillId: MI_HARMONIZE, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_HARMONIZE }
       - { SkillId: MI_RUSH_WINDMILL, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RUSHWINDMILL }
@@ -3028,18 +3126,18 @@ Body:
       - { SkillId: BD_DRUMBATTLEFIELD, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DRUMBATTLE }
       - { SkillId: BD_ETERNALCHAOS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ETERNALCHAOS }
       - { SkillId: BD_INTOABYSS, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_INTOABYSS }
-      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SLEEP }
+      - { SkillId: BD_LULLABY, Level: 1, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: BD_RICHMANKIM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RICHMANKIM }
       - { SkillId: BD_RINGNIBELUNGEN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NIBELUNGEN }
       - { SkillId: BD_ROKISWEIL, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ROKISWEIL }
       - { SkillId: BD_SIEGFRIED, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIEGFRIED }
       - { SkillId: CG_ARROWVULCAN, Level: 10, Rate: 9000 }
       - { SkillId: CG_HERMODE, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HERMODE }
-      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_MARIONETTE }
+      - { SkillId: CG_MARIONETTE, Level: 1, Rate: 8000, Target: ally, Condition: not_self_status, CondValue: SC_MARIONETTE }
       - { SkillId: DC_DONTFORGETME, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DONTFORGETME }
       - { SkillId: DC_FORTUNEKISS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FORTUNE }
       - { SkillId: DC_HUMMING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HUMMING }
-      - { SkillId: DC_SCREAM, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STUN }
+      - { SkillId: DC_SCREAM, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: DC_SERVICEFORYOU, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SERVICE4U }
       - { SkillId: DC_THROWARROW, Level: 5, Rate: 9000 }
       - { SkillId: TR_AIN_RHAPSODY, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_AIN_RHAPSODY }
@@ -3081,7 +3179,7 @@ Body:
       - { SkillId: SJ_BOOKOFDIMENSION, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_DIMENSION }
       - { SkillId: SJ_FALLINGSTAR, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_FALLINGSTAR }
       - { SkillId: SJ_FLASHKICK, Level: 7, Rate: 9000 }
-      - { SkillId: SJ_FULLMOONKICK, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BLIND }
+      - { SkillId: SJ_FULLMOONKICK, Level: 10, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 1 }
       - { SkillId: SJ_LIGHTOFMOON, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_LIGHTOFMOON }
       - { SkillId: SJ_LIGHTOFSTAR, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_LIGHTOFSTAR }
       - { SkillId: SJ_LIGHTOFSUN, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_LIGHTOFSUN }
@@ -3089,7 +3187,7 @@ Body:
       - { SkillId: SJ_NEWMOONKICK, Level: 7, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_NEWMOON }
       - { SkillId: SJ_NOVAEXPLOSING, Level: 5, Rate: 9000 }
       - { SkillId: SJ_PROMINENCEKICK, Level: 7, Rate: 9000 }
-      - { SkillId: SJ_STAREMPEROR, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SILENCE }
+      - { SkillId: SJ_STAREMPEROR, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SJ_STARSTANCE, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_STARSTANCE }
       - { SkillId: SJ_SUNSTANCE, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SUNSTANCE }
       - { SkillId: SJ_UNIVERSESTANCE, Level: 3, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_UNIVERSESTANCE }
@@ -3191,7 +3289,7 @@ Body:
       - { SkillId: SS_KUNAIKAITEN, Level: 10, Rate: 8000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SS_KAGEGARI, Level: 10, Rate: 8000 }
       - { SkillId: SS_SHINKIROU, Level: 1, Rate: 10000 }
-      - { SkillId: KG_KAGEHUMI, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_KAGEHUMI }
+      - { SkillId: KG_KAGEHUMI, Level: 5, Rate: 8000, Target: self, Condition: enemy_hidden }
       - { SkillId: KG_KAGEMUSYA, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_KAGEMUSYA }
       - { SkillId: SS_ANTENPOU, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_NIGHTMARE }
       - { SkillId: SS_FUUMAKOUCHIKU, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
@@ -3266,7 +3364,15 @@ Body:
       - { SkillId: NW_THE_VIGILANTE_AT_NIGHT, Level: 10, Rate: 9000 }
       - { SkillId: NW_GRENADE_FRAGMENT, Level: 10, Rate: 8000 }
       - { SkillId: NW_BASIC_GRENADE, Level: 10, Rate: 8000 }
-      - { SkillId: NW_INTENSIVE_AIM, Level: 10, Rate: 10000 }
+      - { SkillId: NW_INTENSIVE_AIM, Level: 10, Rate: 10000, Condition: not_self_status, CondValue: SC_INTENSIVE_AIM }
+      # Flip the Coin makes the coins Adjustment, Madness Canceller and the rest cost.
+      - SkillId: GS_GLITTERING
+        Level: 5
+        Rate: 10000
+        Target: self
+        Condition:
+          AND:
+            - self_spheres_lt10
       - { SkillId: GS_ADJUSTMENT, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ADJUSTMENT }
       - { SkillId: GS_BULLSEYE, Level: 1, Rate: 9000 }
       - { SkillId: GS_DISARM, Level: 5, Rate: 9000 }
@@ -3306,7 +3412,16 @@ Body:
       - { SkillId: AL_ANGELUS, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ANGELUS }
       - { SkillId: AL_BLESSING, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_BLESSING }
       - { SkillId: AL_CRUCIS, Level: 10, Rate: 6000, Condition: not_enemy_status, CondValue: SC_SIGNUMCRUCIS }
-      - { SkillId: AL_CURE, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: AL_CURE
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          OR:
+            - self_silence
+            - self_blind
+            - self_confusion
+            - self_bitescar
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
       - { SkillId: AL_HEAL, Level: 10, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
       - { SkillId: AL_INCAGI, Level: 10, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_INCREASEAGI }
@@ -3320,7 +3435,7 @@ Body:
       - { SkillId: CR_SHIELDBOOMERANG, Level: 5, Rate: 9000 }
       - { SkillId: CR_SHIELDCHARGE, Level: 5, Rate: 9000 }
       - { SkillId: HN_BREAKINGLIMIT, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_BREAKINGLIMIT }
-      - { SkillId: HN_GROUND_GRAVITATION, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_GROUNDGRAVITY }
+      - { SkillId: HN_GROUND_GRAVITATION, Level: 10, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: HN_MEGA_SONIC_BLOW, Level: 10, Rate: 9000 }
       - { SkillId: HN_NAPALM_VULCAN_STRIKE, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: HN_OVERCOMING_CRISIS, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_OVERCOMING_CRISIS }
@@ -3333,30 +3448,43 @@ Body:
       - { SkillId: MG_FIREBALL, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_FIREBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_FIREWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000 }
+      - { SkillId: MG_FROSTDIVER, Level: 10, Rate: 9000, Condition: not_enemy_status, CondValue: SC_FREEZE }
       - { SkillId: MG_LIGHTNINGBOLT, Level: 10, Rate: 9000 }
       - { SkillId: MG_NAPALMBEAT, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_SAFETYWALL, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: MG_SIGHT, Level: 1, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_SIGHT }
       - { SkillId: MG_SOULSTRIKE, Level: 10, Rate: 9000 }
       - { SkillId: MG_THUNDERSTORM, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: ally, Condition: ally_hp_below, CondValue: 70 }
-      - { SkillId: MO_ABSORBSPIRITS, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: MO_ABSORBSPIRITS
+        Level: 1
+        Rate: 6000
+        Cooldown: 4000
+        Condition:
+          AND:
+            - self_sp_pct_lt30
+            - enemy_distance_lt10
       - { SkillId: PR_ASPERSIO, Level: 5, Rate: 8000, Target: ally, Condition: not_ally_status, CondValue: SC_ASPERSIO }
       - { SkillId: PR_GLORIA, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_GLORIA }
       - { SkillId: PR_IMPOSITIO, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_IMPOSITIO }
       - { SkillId: PR_MAGNIFICAT, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_MAGNIFICAT }
-      - { SkillId: PR_SANCTUARY, Level: 10, Rate: 7000, AroundRange: 2, Condition: enemy_count_nearby, CondValue: 2 }
+      - { SkillId: PR_SANCTUARY, Level: 10, Rate: 7000, AroundRange: 2, Target: ally, Condition: ally_hp_below, CondValue: 60 }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STUN }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_FREEZE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_STONE }
       - { SkillId: PR_STRECOVERY, Level: 1, Rate: 7000, Target: ally, Condition: ally_status, CondValue: SC_SLEEP }
       - { SkillId: RG_BACKSTAP, Level: 10, Rate: 9000 }
-      - { SkillId: RG_RAID, Level: 5, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_RAID }
+      - { SkillId: RG_RAID, Level: 5, Rate: 8000, Target: self, Condition: enemy_count_nearby, CondValue: 2 }
       - { SkillId: SM_BASH, Level: 10, Rate: 9000 }
       - { SkillId: SM_ENDURE, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_ENDURE }
       - { SkillId: SM_MAGNUM, Level: 10, Rate: 7000, Condition: enemy_count_nearby, CondValue: 2 }
-      - { SkillId: TF_DETOXIFY, Level: 1, Rate: 10000, Target: self, Condition: hp_below, CondValue: 50 }
+      - SkillId: TF_DETOXIFY
+        Level: 1
+        Rate: 10000
+        Target: self
+        Condition:
+          OR:
+            - self_poison
+            - self_dpoison
       - { SkillId: TF_HIDING, Level: 10, Rate: 8000, Target: self, Condition: not_self_status, CondValue: SC_HIDING }
       - { SkillId: TF_POISON, Level: 10, Rate: 9000 }
       - { SkillId: WZ_EARTHSPIKE, Level: 5, Rate: 9000 }

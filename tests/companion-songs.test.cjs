@@ -26,7 +26,8 @@ function fn(name) {
 test('a buff that would end an earlier row\'s own running buff is not cast', () => {
 	const body = fn('static bool pop_buff_would_end_own(');
 	assert.match(body, /status_db\.getEndOnStart\(sc_id\)/);
-	assert.match(body, /if \(&own == &bs\)\s*break;/, 'only rows listed before this one outrank it');
+	assert.match(body, /if \(&own == &bs\) \{\s*earlier = false;/, 'only rows listed before this one outrank it');
+	assert.match(body, /if \(earlier && std::find\(ends\.begin\(\), ends\.end\(\), own_sc\) != ends\.end\(\) && held_own\(own\)\)/);
 	assert.match(body, /scc->hasSCE\(own_sc\)/);
 	assert.match(body, /sd->pop\.active_buffs/, 'only buffs this shell cast itself count');
 	assert.match(body, /ab\.expires_at > now/);
@@ -42,7 +43,7 @@ test('a buff may end a running buff that its own skill requires', () => {
 	assert.match(body, /skill->require\.status/);
 	const exempt = body.search(/std::find\(required\.begin\(\), required\.end\(\), own_sc\) != required\.end\(\)\)\s*continue;/);
 	assert.ok(exempt >= 0, 'a required status must not count as one the buff would end');
-	assert.ok(exempt < body.indexOf('sd->pop.active_buffs'), 'the exemption runs before the active_buffs check');
+	assert.ok(exempt < body.indexOf('held_own(own)'), 'the exemption runs before either direction is checked');
 });
 
 test('the Inquisitor keeps its faith chain in order', () => {

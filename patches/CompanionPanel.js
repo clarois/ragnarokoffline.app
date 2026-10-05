@@ -215,7 +215,7 @@ function rosterBody(text) {
  */
 /**
  * Parse one @CPSK line (see population_engine_companion_skill_list):
- *   @CPSK|<id>|<name>|<selected 0/1>|<max level>
+ *   @CPSK|<id>|<name>|<selected 0/1>|<max level>|<exclusive 0/1>
  *   @CPSKEND|<count>|<job>|<chosen 0/1>|<summoned 0/1>
  *
  * @param {string} text
@@ -259,7 +259,10 @@ function parseSkillLine(text) {
 		id: parseInt(p[1], 10) || 0,
 		name: p[2],
 		selected: p[3] === '1',
-		level: parseInt(p[4], 10) || 0
+		level: parseInt(p[4], 10) || 0,
+		// Ends another listed skill's status (a song, a dance, a stance). Absent from an older
+		// server, which then shows no such group.
+		exclusive: p[5] === '1'
 	});
 	return true;
 }
@@ -808,15 +811,26 @@ function _skillPickerOverlay() {
 		const list = document.createElement('div');
 		list.className = 'skill-list';
 		let lastGroup = '';
-		_skills.forEach(s => {
+		// Skills that end each other go first, in the server's order, which is the order the
+		// companion prefers them in: ticking several means the first one that is ready plays.
+		const ordered = _skills.filter(s => s.exclusive).concat(_skills.filter(s => !s.exclusive));
+		ordered.forEach(s => {
 			// The engine does not send a target, so group by name prefix family:
 			// this is display only and never decides behaviour.
-			const group = _skillGroupOf(s.name);
+			const group = s.exclusive ? EXCLUSIVE_GROUP : _skillGroupOf(s.name);
 			if (group !== lastGroup) {
 				lastGroup = group;
 				const h = document.createElement('h4');
 				h.textContent = group;
 				list.append(h);
+				if (s.exclusive) {
+					const note = document.createElement('div');
+					note.className = 'hint skill-note';
+					note.textContent = 'Only one of these can run at a time. Tick the one you want. '
+						+ 'If several are ticked, the one higher in this list plays, '
+						+ 'and the others fill in while it is unavailable.';
+					list.append(note);
+				}
 			}
 			const row = document.createElement('label');
 			row.className = 'skill-row' + (s.selected ? ' on' : '');
@@ -891,6 +905,9 @@ function _toggleSkillDescription(id) {
 	SkillDescription.append();
 	SkillDescription.setSkill(id);
 }
+
+/// Heading for the skills that end each other (the @CPSK exclusive flag).
+const EXCLUSIVE_GROUP = 'Songs, dances & stances: one at a time';
 
 /// Display bucket for a skill, from its Aegis name prefix. Presentation only.
 function _skillGroupOf(name) {

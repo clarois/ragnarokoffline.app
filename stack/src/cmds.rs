@@ -1325,6 +1325,30 @@ fn companion_table_sql() -> String {
     format!("{COMPANION_SCHEMA}\nALTER TABLE `cp_companion_persistence` {};\n", added.join(", "))
 }
 
+/// rAthena's web server: guild emblems, reached by the client only through
+/// the asset server (WEB_SERVER_TARGET). Not one of `SERVERS`: those decide
+/// whether a launch failed, and a world without emblems still plays.
+const WEB_SERVER: &str = "ragnarok-web";
+
+/// The web server keeps emblems here (rAthena sql-files/web.sql). main.sql
+/// does not create it, and the app never imported web.sql; its other tables
+/// (user, character and merchant configs) answer requests this client never
+/// makes, so only this one is created.
+const GUILD_EMBLEMS_TABLE: &str = "CREATE TABLE IF NOT EXISTS `guild_emblems` (
+  `world_name` varchar(32) NOT NULL,
+  `guild_id` int(11) unsigned NOT NULL,
+  `file_type` varchar(255) NOT NULL,
+  `file_data` blob,
+  `version` int(11) unsigned NOT NULL default '0',
+  PRIMARY KEY (`world_name`, `guild_id`)
+) ENGINE=MyISAM";
+
+fn ensure_guild_emblems_table(dk: &Docker) -> Result<(), String> {
+    dk.private_sql(GUILD_EMBLEMS_TABLE)
+        .map(|_| ())
+        .map_err(|e| format!("preparing the guild emblem table: {e}"))
+}
+
 fn ensure_companion_table(dk: &Docker) -> Result<(), String> {
     dk.private_sql(&companion_table_sql())
         .map(|_| ())
@@ -1473,7 +1497,7 @@ fn run_server(cfg: &Config, dk: &Docker, name: &str, port: u16, binary: &str, la
 
 fn stop_game_services(cfg: &Config, dk: &Docker) -> Result<(), String> {
     crate::crashes::capture_all(cfg, dk);
-    for service in ["ragnarok-map", "ragnarok-char", "ragnarok-login"] {
+    for service in [WEB_SERVER, "ragnarok-map", "ragnarok-char", "ragnarok-login"] {
         if dk.is_running(service) && (dk.output(["stop", "-t", "30", service]).is_err() || dk.is_running(service)) {
             return Err(format!("Could not stop {service} cleanly; database credentials were not changed."));
         }
@@ -1670,7 +1694,7 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
         // kills their chance to save when run_server later removes them.
         // Stop MariaDB cleanly too; rm -f would make every era switch a crash
         // recovery (including MyISAM tables such as loginlog).
-        for service in ["ragnarok-map", "ragnarok-char", "ragnarok-login", DB_CONTAINER] {
+        for service in [WEB_SERVER, "ragnarok-map", "ragnarok-char", "ragnarok-login", DB_CONTAINER] {
             if dk.is_running(service)
                 && (dk.output(["stop", "-t", "30", service]).is_err() || dk.is_running(service))
             {
@@ -1743,6 +1767,7 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
     // can read it. An error stops the start: a map server without this table logs a
     // failed query on every recall and snapshot, and nothing on screen says why.
     ensure_companion_table(dk)?;
+    ensure_guild_emblems_table(dk)?;
 
     // Every client arrives through the WebSocket proxy, so every connection has
     // the same source address; rAthena's per-IP flood protection trips on sight
@@ -1750,6 +1775,7 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
     // client sits on the char socket parsing its databases, which can exceed
     // the default 60s stall_time on a modern client.
     write_conf(&conf, "packet_conf.txt", "stall_time: 300\nenable_ip_rules: no\n")?;
+    write_conf(&conf, "web_conf.txt", &cfg.ports.web_conf())?;
     write_conf(&conf, "inter_conf.txt", concat!(
         "login_server_ip: ragnarok-db\n", "ipban_db_ip: ragnarok-db\n",
         "char_server_ip: ragnarok-db\n", "map_server_ip: ragnarok-db\n",
@@ -1893,6 +1919,11 @@ pub fn up(cfg: &Config, dk: &Docker, lan: bool, ram_mib: Option<u32>) -> Result<
     run_server(cfg, dk, "ragnarok-login", ports.login, &format!("/rathena/login-server{ver}"), lan)?;
     run_server(cfg, dk, "ragnarok-char", ports.char, &format!("/rathena/char-server{era}{ver}"), lan)?;
     run_server(cfg, dk, "ragnarok-map", ports.map, &format!("/rathena/map-server{era}{ver}"), lan)?;
+    // Loopback even when hosting: players reach it through the asset server,
+    // which forwards only the two emblem paths. Its build is era-independent.
+    if let Err(e) = run_server(cfg, dk, WEB_SERVER, ports.web, &format!("/rathena/web-server{ver}"), false) {
+        eprintln!("warning: guild emblems are unavailable: {e}");
+    }
     phase(cfg, "Loading maps and NPCs…");
     wait_for_maps(dk)?;
     // After the map server has read its tables and before anyone is told the
@@ -1926,6 +1957,7 @@ pub fn down(cfg: &Config, dk: &Docker) -> Result<(), String> {
     for c in SERVERS {
         dk.remove_container(c);
     }
+    dk.remove_container(WEB_SERVER);
     if dk.is_running(DB_CONTAINER) && (dk.output(["stop", "-t", "30", DB_CONTAINER]).is_err() || dk.is_running(DB_CONTAINER)) {
         return Err("Could not stop the database cleanly; the VM was left running to protect the save.".into());
     }
@@ -2837,7 +2869,7 @@ mod tests {
     /// added.
     #[test]
     fn the_endpoint_names_the_configured_ports() {
-        let moved = crate::ports::Ports { asset: 13338, login: 16900, char: 16121, map: 15121, agent: 17490 };
+        let moved = crate::ports::Ports { asset: 13338, login: 16900, char: 16121, map: 15121, web: 18888, agent: 17490 };
         assert_eq!(
             super::endpoint_json("127.0.0.1", &moved),
             "{\"host\":\"127.0.0.1\",\"login\":16900,\"char\":16121,\"map\":15121,\"asset\":13338}\n"

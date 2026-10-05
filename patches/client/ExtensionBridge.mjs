@@ -7,6 +7,8 @@ import * as Gltf from './GltfModels.mjs';
 import * as Windows from './PluginWindows.mjs';
 import { install as installSignIn } from './SignIn.mjs';
 import * as Pregame from './PregameScreens.mjs';
+import * as WindowScale from './WindowScale.mjs';
+import * as MenuButtons from './MenuButtons.mjs';
 import { createAccount } from './RememberLogin.mjs';
 import { createHostRoutes } from './HostRoutes.mjs';
 import ExitHooks from 'UI/ExitHooks.js';
@@ -399,6 +401,12 @@ export function init() {
         replaceScreen: Pregame.replace,
         createStage: Pregame.createStage,
         screenImage: Pregame.image,
+        // api.ui.scale: windows drawn larger or smaller (WindowScale.mjs).
+        // Needs a client pinned with the fork's UI/UIScale.js.
+        uiScale: WindowScale.supported() ? WindowScale : undefined,
+        // api.ui.menuButton: a button in the option menu (MenuButtons.mjs).
+        // Needs a client pinned with the fork's UI/MenuHooks.js.
+        addMenuButton: MenuButtons.supported() ? MenuButtons.add : undefined,
         // api.players.gmLook: which parts of the GM look an admin gets. Absent
         // on a client without the fork's Session.AdminLook.
         gmLook: Session.AdminLook ? (parts = {}) => {

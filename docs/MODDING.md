@@ -175,7 +175,25 @@ Mods**, right below the mod's checkbox:
 app has to render them without knowing what the mod means by them. Anything
 richer is the mod's own UI problem. A number takes optional `min` and `max`, a
 string an optional `max_length` (200 at most); `key` is up to 40 letters,
-digits or underscores, and a mod may declare at most twenty.
+digits or underscores.
+
+**A mod may declare at most 20 settings.** The app refuses a `mod.json` with
+more ("a mod may declare at most 20 settings"), and a
+[settings page](#settingspage--a-settings-window-of-your-own) does not lift
+the limit: it shows the same declared settings. If you need more, in order of
+preference:
+
+- **Split the mod.** Options that turn separate features on and off usually
+  mean separate mods, each with its own few settings. A mod that needs another
+  says so with `requires.mods`, and a mod that only bundles others can list
+  them there too.
+- **Use fewer, broader settings.** One `number` setting can choose between
+  presets ("Market pace: 1 slow, 2 normal, 3 busy"), and one `string`
+  setting can hold a short list your scripts split (up to 200 characters).
+- **For options only the client uses**, keep them in
+  [`api.preferences`](#client-api-1) from your client code. They have no
+  count limit, but they're per player and per browser, the server never sees
+  them, and the Mods tab doesn't show them.
 
 The values arrive as the **first argument to your client entry point**, the one
 you were already given:
@@ -288,6 +306,10 @@ await window.modSettings.apply();                        // restart the server, 
 
 `set` takes any subset of your settings and keeps the rest as they are; a key
 you did not declare, or a value of the wrong type, is refused with the reason.
+
+So a settings page can't hold more options than `settings` declares, and the
+[20-setting limit](#settings--options-the-app-renders-for-you) applies to it as
+well. A page changes how the options look, not how many there are.
 `apply` resolves once the server is back up.
 
 The window is deliberately small in what it can do. The page is served from
@@ -867,6 +889,91 @@ mod's `db/extension_db.yml` and call it from `OnInit`. The
 picked in its settings window.
 
 See [`examples/mods/quest-npc`](../examples/mods/quest-npc).
+
+### Knowing what players did: rAthena's logs
+
+A script can react to some things as they happen: `OnPCLoginEvent`,
+`OnPCKillEvent`, `OnNPCKillEvent`, `OnPCDieEvent` and the other event labels
+in `vendor/rathena/doc/script_commands.txt`. Most item movements have
+no event, including someone buying from a vending stall, selling into a buying
+store or trading. rAthena **writes all of those to log tables** in the same
+database, and a script can read them with `query_logsql`.
+
+The stock `conf/log_athena.conf` is what every install runs, and mods cannot
+change it (`conf/` is an [allowlist](#conf--a-few-server-settings)). So you
+can rely on these tables, and not on the others:
+
+| Table | Logged by default? | Holds |
+|---|---|---|
+| `picklog` | **yes, every item, every type** | one row per item gained or lost: `char_id`, `type`, `nameid`, `amount`, `refine`, cards, `map`, `time` |
+| `cashlog` | yes | cash point changes |
+| `atcommandlog` | yes, for groups with `log_commands` | `@` commands |
+| `npclog` | yes | what scripts write with `logmes` |
+| `loginlog` | yes, by the login server | logins and failed logins |
+| `zenylog`, `chatlog`, `mvplog`, `branchlog` | **no**, so they stay empty | |
+
+`picklog.type` is one letter. These are the useful ones, and the full list is
+at the top of `vendor/rathena/conf/log_athena.conf`:
+
+| | |
+|---|---|
+| `V` | vending: the stall owner and the buyer each get a row |
+| `B` | buying store: both sides again |
+| `T` | trade window |
+| `S` | NPC shop buy/sell |
+| `N` | a script gave or took it (quests, `getitem`, `delitem`) |
+| `P` / `M` / `L` | picked up or dropped by a player / dropped by a monster / looted by a monster |
+| `C` | used up (potions, ammunition, skill catalysts) |
+| `R` / `G` / `E` | storage, guild storage, mail |
+
+`amount` is signed. It is positive for the side that gained the item and
+negative for the side that lost it. So a vending sale is a `V` row with
+`-3` on the stall owner and `+3` on the buyer. For `M` and `L` rows,
+`char_id` holds the monster's id instead.
+
+**Read it on a timer and remember where you got to.** `query_logsql` blocks
+the map server while it runs. `picklog` grows with every potion drunk, and only
+`id` and `type` are indexed. The pattern that works is to keep the last `id`
+you handled in a `$` variable. When the variable is unset, start from the
+current maximum rather than the server's whole history. Then read in limited
+batches:
+
+```
+// my-mod/npc/watch-trades.txt
+-	script	MyModTrades	-1,{
+OnInit:
+	if ($mymod_lastlog <= 0) {
+		query_logsql("SELECT COALESCE(MAX(id), 0) FROM picklog", .@max);
+		$mymod_lastlog = .@max;
+	}
+	initnpctimer;
+	end;
+
+OnTimer60000:
+	.@n = query_logsql("SELECT id, char_id, nameid, amount FROM picklog WHERE id > " + $mymod_lastlog + " AND type = 'V' ORDER BY id LIMIT 500", .@id, .@char, .@item, .@amount);
+	for (.@i = 0; .@i < .@n; .@i++) {
+		$mymod_lastlog = .@id[.@i];
+		if (.@amount[.@i] > 0)
+			debugmes "char " + .@char[.@i] + " bought " + .@amount[.@i] + " x " + getitemname(.@item[.@i]);
+	}
+	initnpctimer;
+	end;
+}
+```
+
+The AI characters' trades are logged too, and their `char_id` has no row in
+`char`. To count only real players, `LEFT JOIN` the `char` table on `char_id`
+and skip the rows that found no match.
+[prontera-vendors](../registry/mods/prontera-vendors)'s dynamic market
+(`npc/prontera-vendors-market.txt`) works this way, and is a full example.
+
+Use `query_logsql` for these tables and `query_sql` for the rest. Both reach
+the same database here, but rAthena lets the logs live elsewhere, and the two
+commands are how a script says which it means.
+
+To see what the rows actually look like before writing the query, open
+**Settings → Tools → Database** and pick `picklog`. Then do the thing in game
+and sort by `id`, descending. See [DATABASE.md](DATABASE.md#the-database-tool).
 
 ## lua/ — changing how a skill or item works
 
@@ -1647,6 +1754,12 @@ last mod first**. The client takes each item from the first table that defines
 it, so a mod's entry wins over the stock one — which is how a mod renames an
 existing item — and a later mod wins over an earlier one, as in `db/`.
 
+With the English translation on, the base table is the translation's, and the
+player's client's own item table comes **after** it, as
+`System/itemInfo_client.lub` (or `.lua`): it names only what the translation
+does not, such as iRO's own costumes. An item in neither shows as
+"Unknown Item"; ship it in your mod's table.
+
 A table anywhere else — `System/LuaFiles514/`, `data/luafiles514/` — is not
 read by the client, and the log says so: **Settings → Tools → Log viewer**,
 under *App*, as a `link-assets warning` each time the app starts or a mod is
@@ -1748,6 +1861,8 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 | `api.server.command(text)` | Sends an `@` or `#` command as if the player had typed it in chat, so the server allows exactly what the player's group allows. Anything else is refused; returns whether it was sent. |
 | `api.graphics.registerPass({ name, fragment, uniforms, enabled })` | A full-screen GLSL pass over each frame, after bloom and before anti-aliasing. Returns a function that removes it; it also goes when the plugin does. See [Graphics passes](#graphics-passes). |
 | `api.ui.window({ id, title, width, height, resizable })` | A window of the plugin's own; fill its `body`. `show`, `hide`, `toggle`, `isOpen`, `setTitle`, `onClose`. See [Windows and server requests](#windows-and-server-requests). |
+| `api.ui.scale.windows()` / `.get(window)` / `.set(window, factor)` / `.global()` / `.setGlobal(factor)` / `.supported()` | Draw the client's own windows larger or smaller: a global factor times each window's own, 0.5 to 3. Put back when the plugin goes; the plugin remembers the player's choice. See [below](#window-sizes--apiuiscale). Absent in an older app. |
+| `api.ui.menuButton({ background, hover, down, title, onClick })` | A button of the mod's own in the option menu (Escape), drawn from pictures the mod ships like the menu's own. Returns a function that takes it out; it also goes with the plugin. See [below](#a-button-in-the-option-menu--apiuimenubutton). Absent in an older app. |
 | `api.items.search(text, limit)` / `.get(id)` / `.icon(id)` | Items from the client's own tables, mods' included: `{ id, name, description, slots }`, and an icon URL for an `<img>`. |
 | `api.server.request(command, text, { timeout })` | Ask the mod's server script for something; resolves with its answer. See [Windows and server requests](#windows-and-server-requests). |
 | `api.cleanup(fn)` | Register idempotent cleanup immediately after allocating a resource. The returned function can release it early. Runs on failure, scope replacement and page teardown. |
@@ -2149,6 +2264,71 @@ call it from `init`, and it is put back when the mod is turned off. An app
 before 1.4.5 has no `api.players`, and a client without the switches answers
 `gmLookSupported()` with `false` (`gmLook` then returns `null`). It reads `Session.AdminLook` in the
 roBrowser fork. See [`mods/gm-class-look`](../mods/gm-class-look).
+
+### Window sizes — `api.ui.scale`
+
+Browser zoom (Ctrl +) makes every window larger at once and leaves the 3D view
+as it is. `api.ui.scale` goes further, one window at a time: a hotbar large
+enough to read from the couch, a chat that takes less room.
+
+```js
+if (api.ui?.scale?.supported()) {
+    const scale = api.ui.scale;
+    scale.setGlobal(api.preferences.get('all', 1));          // every window
+    scale.set('ShortCut', api.preferences.get('ShortCut', 1)); // times this one
+}
+```
+
+A window is drawn at the global factor times its own, and both are kept
+between 0.5 and 3; `set` and `setGlobal` return the factor in force (the
+client clamps), or `null` on a client that cannot scale. Setting a window to 1
+gives it the global factor back.
+
+Only the windows `windows()` names can be scaled: the hotbar (`ShortCut`,
+`ShortCuts`), the chat (`ChatBox`), `Inventory`, the status icons
+(`StatusIcons`), the HP/SP window (`BasicInfo`), `MiniMap`, the gamepad
+hotbar along the bottom (`JoystickUI`) and other windows
+the client has checked to keep dragging, resizing and scrolling at another
+size. A name it doesn't list is a `TypeError`, and so is a value that is not a
+number. A version of a window is scaled by its public name (the client's
+`InventoryV3` is `Inventory`), and every whisper window by `WhisperBox`.
+
+The client remembers nothing. Everything starts at 1, so a mod keeps the
+player's choice itself, in `api.preferences`, and sets it again in `init`,
+before the windows open. Turning the mod off puts back what it changed. The
+list and the drawing are `UI/UIScale.js` in the roBrowser fork.
+[`mods/ui-scale`](../mods/ui-scale) is a complete one: a window of sliders,
+opened from a button in the option menu.
+
+### A button in the option menu — `api.ui.menuButton`
+
+The option menu, the window Escape opens (and the basic info window's Option
+button), can carry a button of the mod's own. It comes after the menu's
+settings buttons and before Exit, and hides with them on the death menu.
+
+The menu's buttons are pictures with the label painted in, so a mod's is
+too: three of them in the client's interface folder, at rest, under the
+pointer and pressed, 221 x 20 like the menu's `esc_06a.bmp`. Ship them in the
+mod's `data/texture/ui/`:
+
+```js
+api.ui.menuButton({
+    background: 'esc_mymod_a.bmp',
+    hover: 'esc_mymod_b.bmp',
+    down: 'esc_mymod_c.bmp',
+    title: 'My Mod',               // tooltip and screen readers
+    onClick: () => win.toggle(),
+});
+```
+
+A picture is a plain relative name in that folder (`..`, a URL or anything
+but `.bmp`, `.tga`, `.png` or `.jpg` is a `TypeError`). `hover` and `down`
+are optional. Pressing the button leaves the menu open, as the settings
+buttons do. It returns a function that takes the button out, and the button
+also goes with the mod. A client without the menu hook has nowhere to put it,
+and the call does nothing. It is `UI/MenuHooks.js` in the roBrowser fork.
+[`mods/ui-scale/tools/make-menu-button.py`](../mods/ui-scale/tools/make-menu-button.py)
+letters a button of your own from the menu's Settings button.
 
 ---
 

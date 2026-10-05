@@ -35,7 +35,7 @@ test('the picker passes over a skill the held weapon cannot use', () => {
 	assert.ok(fn, 'pop_skill_weapon_ok exists');
 	assert.match(fn[1], /if \(!battle_config\.population_engine_skill_weapon_check\)\n\t\treturn true;/);
 	assert.match(fn[1], /weapon == 0 \|\| pc_check_weapontype\(sd, weapon\)/);
-	const gate = /static inline bool pop_skill_cond_satisfied\([^)]*\) \{\n\tif \(!pop_skill_weapon_ok\(sd, sk\.skill_id\)\)\n\t\treturn false;/;
+	const gate = /static inline bool pop_skill_cond_satisfied\([^)]*\) \{\n\tif \(!pop_skill_weapon_ok\(sd, sk\.skill_id\)( \|\| [^)]*\))?\)\n\t\treturn false;/;
 	assert.match(combat, gate, 'every row goes through the weapon check first');
 });
 

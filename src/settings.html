@@ -751,7 +751,7 @@
   <div id="mods-updates-panel" role="tabpanel" aria-labelledby="modstab-updates" hidden>
   <div class="panel">
     <div class="findbar">
-      <span class="note" id="mods-checked" style="flex:1 1 auto; margin:0">Only mods installed from GitHub get updates.</span>
+      <span class="note" id="mods-checked" style="flex:1 1 auto; margin:0">Mods from the mod list and from GitHub.</span>
       <button id="mods-updates" class="ghost">Check for updates</button>
     </div>
     <div id="mods-update-list" class="note">Looking…</div>
@@ -1827,7 +1827,7 @@ function letterTile(name) {
 // The update line inside an open row: waiting, failed, or up to date.
 function updateLine(m) {
   const u = modUpdates[m.name];
-  if (!m.source || !u) return null;
+  if (!u) return null;
   const line = el('div', 'mline');
   if (u.error) {
     line.classList.add('dim');
@@ -1838,10 +1838,13 @@ function updateLine(m) {
   } else if (u.update) {
     line.classList.add('warn');
     line.textContent = `Update available (${u.installed} → ${u.latest})`;
-    const button = el('button', '', 'Update…');
+    const button = el('button', '', updateLabel(u));
     button.type = 'button';
     button.onclick = () => installMod({ name: m.name }, button);
     line.append(button);
+  } else if (u.needsApp) {
+    line.classList.add('dim');
+    line.textContent = `Version ${u.latest} is in the mod list, but it ${u.needsApp}.`;
   } else {
     line.classList.add('dim');
     line.textContent = 'Up to date.';
@@ -2078,8 +2081,9 @@ function renderModList() {
     box.append(el('div', 'mgroup', `${title} · ${mods.length}`));
     for (const m of mods) box.append(modRow(m, kindBoxes, pendingNames));
   }
-  // Options of a mod that is gone now are not a change to apply.
-  for (const name of Object.keys(modSettings)) if (!isInstalled(name)) delete modSettings[name];
+  // Options without a box on screen now -- the mod is gone, or an update gave
+  // it a settings page -- are not a change to apply.
+  modSettings = ModsState.keptOptions(modSettings, modSettingsBaseline);
   paintUpdates();
   paintModsStatus();
 }
@@ -2116,9 +2120,11 @@ function paintUpdates() {
   const box = $('mods-update-list');
   box.innerHTML = '';
   box.className = '';
-  const fromGitHub = modsListed.filter(m => m.source);
+  // Every installed mod the check answered for: from GitHub, or from the
+  // mod list itself.
+  const checked = modsListed.filter(m => modUpdates[m.name]);
   if (modsCheckedAt) {
-    $('mods-checked').textContent = `Only mods installed from GitHub get updates. Last checked ${modsCheckedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`;
+    $('mods-checked').textContent = `Mods from the mod list and from GitHub. Last checked ${modsCheckedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`;
   }
   const waiting = modsListed.filter(m => modUpdate(m.name));
   for (const m of waiting) {
@@ -2128,9 +2134,9 @@ function paintUpdates() {
     text.style.minWidth = '0';
     const head = el('div', 'mhead');
     head.append(el('span', 'mname', m.name), el('span', 'pill upd', `${u.installed} → ${u.latest}`));
-    text.append(head, el('div', 'mone', m.source ? `from github.com/${m.source.repo}` : ''));
+    text.append(head, el('div', 'mone', m.source ? `from github.com/${m.source.repo}` : 'from the mod list'));
     const acts = el('div', 'acts');
-    const button = el('button', '', 'Update…');
+    const button = el('button', '', updateLabel(u));
     button.type = 'button';
     button.onclick = () => installMod({ name: m.name }, button);
     acts.append(button);
@@ -2138,43 +2144,56 @@ function paintUpdates() {
     row.append(letterTile(m.name), text, acts);
     box.append(row);
   }
-  const failed = fromGitHub.filter(m => modUpdates[m.name] && modUpdates[m.name].error);
+  const failed = checked.filter(m => modUpdates[m.name].error);
   for (const m of failed) box.append(el('div', 'mline dim', `${m.name}: could not check for updates — ${modUpdates[m.name].error}`));
+  for (const m of checked.filter(m => modUpdates[m.name].needsApp)) {
+    const u = modUpdates[m.name];
+    box.append(el('div', 'mline dim', `${m.name}: version ${u.latest} ${u.needsApp}.`));
+  }
   if (!waiting.length) {
-    box.prepend(el('p', 'note', !fromGitHub.length ? 'No mods installed from GitHub.'
-      : checkingUpdates ? 'Checking…' : modsCheckedAt ? 'Every mod from GitHub is up to date.' : 'Not checked yet.'));
+    box.prepend(el('p', 'note', checkingUpdates ? 'Checking…'
+      : !modsCheckedAt ? 'Not checked yet.'
+      : checked.length ? 'Every mod is up to date.' : 'None of your mods comes from the mod list or GitHub.'));
   }
 }
+
+// A release from GitHub is shown and confirmed before it replaces anything
+// (the dots say so); a mod from the list installs straight away.
+const updateLabel = u => (u && u.registry ? 'Update' : 'Update…');
 
 async function checkModUpdates(fresh = false) {
   if (checkingUpdates) return checkingUpdates;
   checkingUpdates = (async () => {
-    try {
-      const results = await invoke('check_mod_updates', { fresh });
-      modUpdates = {};
-      for (const u of results) modUpdates[u.name] = u;
-      modsCheckedAt = new Date();
-      // A mod with an update moves to "Needs attention", and Find Mods
-      // labels it "Update…".
-      if (modsAnswered) renderModList(); else paintUpdates();
-      if (catalogue) paintCatalogue();
-      const waiting = results.filter(u => u.update).length;
-      return results.length
-        ? (waiting ? `${waiting} mod update${waiting === 1 ? '' : 's'} available.` : 'Mods from GitHub are up to date.')
-        : 'No mods installed from GitHub.';
-    } finally {
-      checkingUpdates = null;
-    }
+    let results;
+    // Done before anything is drawn, so the list never shows "Checking…"
+    // next to the time of a check that has finished.
+    try { results = await invoke('check_mod_updates', { fresh }); }
+    finally { checkingUpdates = null; }
+    modUpdates = {};
+    for (const u of results) modUpdates[u.name] = u;
+    modsCheckedAt = new Date();
+    // A mod with an update moves to "Needs attention", and Find Mods
+    // labels it "Update".
+    if (modsAnswered) renderModList(); else paintUpdates();
+    if (catalogue) paintCatalogue();
   })();
+  paintUpdates();
   return checkingUpdates;
 }
 
 // A real refresh: the mod list itself again (a mod added since this window
 // opened shows up), then every installed mod's latest release.
-$('mods-updates').onclick = () => withButton('mods-updates', 'Checking…', 'Check for updates', async () => {
-  await loadCatalogue({ fresh: true });
-  return checkModUpdates(true);
-});
+// The list says what came of it, so nothing goes to the log line under the
+// bar except a failure.
+$('mods-updates').onclick = async () => {
+  const button = $('mods-updates');
+  button.disabled = true; button.textContent = 'Checking…';
+  try {
+    await loadCatalogue({ fresh: true });
+    await checkModUpdates(true);
+  } catch (e) { log('error: ' + e); }
+  button.disabled = false; button.textContent = 'Check for updates';
+};
 
 // Tabs. Every panel stays in the DOM and is only hidden, so nothing here has
 // to care which section an element lives in -- the rest of this file still
@@ -2564,10 +2583,9 @@ function detailFor(mod) {
 
 function installLabel(mod) {
   const installed = isInstalled(mod.name);
-  if (mod.source) {
-    const u = modUpdates[mod.name];
-    return u && u.update ? 'Update…' : installed ? 'Reinstall…' : 'Install…';
-  }
+  const u = modUpdates[mod.name];
+  if (u && u.update) return updateLabel(u);
+  if (mod.source) return installed ? 'Reinstall…' : 'Install…';
   return installed ? 'Reinstall' : 'Install';
 }
 

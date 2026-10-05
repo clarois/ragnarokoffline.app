@@ -700,6 +700,8 @@ async function assetsStart() {
 			ENABLE_STATIC_SERVE: 'true', ENABLE_WSPROXY: 'true',
 			ROBROWSER_PATH: path.resolve(root, 'vendor/roBrowserLegacy/dist/Web'),
 			WS_ALLOWED_TARGETS: proxyTargets(client).sort().join(','),
+			// rAthena's web server keeps guild emblems; the client asks this origin for them.
+			WEB_SERVER_TARGET: `127.0.0.1:${gamePorts().web}`,
 			DATA_OVERRIDE_PATH: path.resolve(translationRoot(), 'data'),
 			ENABLE_COMPRESSION: process.env.ENABLE_COMPRESSION || 'true',
 			CACHE_MAX_FILES: process.env.CACHE_MAX_FILES || '5000',
@@ -869,6 +871,21 @@ async function stopLocalHostForJoin() {
 // a client that would have worked.
 function clientComplete(p) {
 	return !!p.data_grf && fs.existsSync(p.data_grf);
+}
+
+// Rebuild the overlay after a mod changed, and bring the asset server back.
+// linkClient starts with assetServer.prepare(), which stops the server, and
+// nothing else starts it again: removing a mod or changing its options left
+// the game page without assets until the next Apply or restart.
+async function relinkForMods() {
+	if (!clientComplete(getClientPaths())) return;
+	const hadAssets = assetServer.running;
+	try {
+		await linkClient(getClientPaths());
+	} finally {
+		// Even after a failed rebuild: serving what is there beats serving nothing.
+		if (hadAssets) await assetsStart();
+	}
 }
 
 function linkClient(paths) {
@@ -2115,11 +2132,25 @@ const handlers = {
 		let names = [];
 		try { names = fs.readdirSync(modsDir, { withFileTypes: true }).filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => e.name); }
 		catch { return []; }
-		const installed = names.map(name => ({ name, dir: path.join(modsDir, name) }))
-			.filter(mod => source.readRecord(mod.dir));
-		if (!installed.length) return [];
-		const listing = await registry.list({ url: process.env.RAGNAROK_MOD_INDEX || registry.DEFAULT_INDEX });
-		return source.checkUpdates(installed, listing, sourceOptions({ fresh: !!fresh }));
+		const mods = names.map(name => ({ name, dir: path.join(modsDir, name) }));
+		// From their author's repository: the latest release, looked up.
+		const fromSource = mods.filter(mod => source.readRecord(mod.dir));
+		// Everything else in the mods folder that the mod list also carries
+		// as a reviewed folder: its version there, compared with the one in
+		// the installed mod.json. Without this, a mod installed from the list
+		// never heard of a newer version of itself.
+		const fromList = mods.filter(mod => !source.readRecord(mod.dir)).map(mod => {
+			let version = '';
+			try { version = String(JSON.parse(fs.readFileSync(path.join(mod.dir, 'mod.json'), 'utf8')).version || '').slice(0, 40); } catch { /* no version */ }
+			return { name: mod.name, version };
+		});
+		if (!fromSource.length && !fromList.length) return [];
+		const url = new URL(process.env.RAGNAROK_MOD_INDEX || registry.DEFAULT_INDEX);
+		// A check the player asked for reads today's list, as Find Mods does.
+		if (fresh) url.searchParams.set('t', String(Date.now()));
+		const listing = await registry.list({ url: url.toString() });
+		const listed = source.registryUpdates(fromList, listing, { appVersion: app.getVersion() });
+		return [...listed, ...await source.checkUpdates(fromSource, listing, sourceOptions({ fresh: !!fresh }))];
 	},
 	// A release page, opened in the player's browser. Only ever a GitHub
 	// release URL: the address came from GitHub's API, by way of the page.
@@ -2238,7 +2269,7 @@ const handlers = {
 	// asset overlay here rather than leaving the game showing stale options.
 	set_mod_settings: async ({ name, values }) => {
 		await runStack(['mod-settings', String(name), JSON.stringify(values ?? {})]);
-		if (clientComplete(getClientPaths())) await linkClient(getClientPaths());
+		await relinkForMods();
 		return { applied: true };
 	},
 	// A mod's own settings page, in a window of its own. What that window can
@@ -2311,7 +2342,7 @@ const handlers = {
 		}
 		// Client-side files the mod shipped leave the game with the next
 		// overlay, the same way changed options reach it.
-		if (clientComplete(getClientPaths())) await linkClient(getClientPaths());
+		await relinkForMods();
 		const wasOn = row && row[0] === 'on';
 		return `Removed ${name} (moved to the trash).${wasOn ? ' Apply to restart the server without it.' : ''}`;
 	},

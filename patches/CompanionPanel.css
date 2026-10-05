@@ -401,6 +401,11 @@
 
 #CompanionPanel .skill-row.on { background: #f7fbf0; }
 
+#CompanionPanel .skill-list .skill-note {
+	margin: 0 0 3px;
+	white-space: normal;
+}
+
 #CompanionPanel .skill-row input {
 	flex: none;
 	margin: 0;
