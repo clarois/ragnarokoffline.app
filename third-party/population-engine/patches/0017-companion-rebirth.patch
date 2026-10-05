@@ -31,7 +31,10 @@ ready (the roster line carries a rebirth tri-state computed with the same predic
  	char cmd[32], param[128];
  	if (!message || !*message || sscanf(message, "%31s %127[^\n]", cmd, param) < 1) {
 -		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name> [slots] | homunculus <name> [on|off]");
-+		// RAGNAROKMAC (rebirth): the player's explicit choice for a maxed 2nd-class companion.
++		clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name> [slots] | homunculus <name> [on|off] | rebirth <name> novice|trans");
+ 		return -1;
+ 	}
++	// RAGNAROKMAC (rebirth): the player's explicit choice for a maxed 2nd-class companion.
 +	// Never automatic - entering a transcendent class unequips gear the companion can no longer
 +	// wear, and anything the player handed over goes back to them.
 +	if (strcmpi(cmd, "rebirth") == 0) {
@@ -57,7 +60,4 @@ ready (the roster line carries a rebirth tri-state computed with the same predic
 +			: (rb_rc == 0 ? "That companion is not ready to be reborn." : "Rebirth done."));
 +		return 0;
 +	}
-+	clif_displaymessage(fd, "Usage: @companion list | favorite <name> | unfavorite <name> | summon <name> | remove <name> | gear <name> [slots] | homunculus <name> [on|off]");
- 		return -1;
- 	}
  	if (strcmpi(cmd, "list") == 0) {
