@@ -6798,7 +6798,6 @@ static bool pop_companion_hand_back(map_session_data *owner, map_session_data *s
 	const uint32_t worn = slot.equip;
 	if (worn && !pc_unequipitem(shell, i, 2))
 		return false;
-	shell->pop.companion_given_mask &= ~worn;
 	struct item tmp = slot;
 	tmp.equip = 0;
 	const int32 amount = slot.amount;
@@ -6808,6 +6807,11 @@ static bool pop_companion_hand_back(map_session_data *owner, map_session_data *s
 			"it stays on the companion\n", tmp.nameid, shell->status.char_id, owner->status.account_id);
 		return false;
 	}
+	// Only now that the item has landed somewhere does it stop being the companion's to
+	// give back: clearing the bit before the transfer means a failed return leaves the
+	// item unequipped AND unmarked as the player's, and this bag is not persisted, so it
+	// would be silently gone at the next restart instead.
+	shell->pop.companion_given_mask &= ~worn;
 	pc_delitem(shell, i, amount, 0, 1, log_type);
 	return true;
 }
@@ -6863,6 +6867,11 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 			if (pc_equipitem(shell, i, id->equip, false) && slot.equip) {
 				shell->pop.companion_given_mask |= slot.equip;
 				equipped_any = true;
+			} else {
+				// The companion cannot equip this (class or level requirement): handing it
+				// back is the only non-destructive option - left here it would sit unequipped
+				// in a bag that is not persisted and be gone at the next restart.
+				(void)pop_companion_hand_back(owner, shell, i, LOG_TYPE_TRADE);
 			}
 			for (int16 j : given_before) {
 				if (shell->inventory.u.items_inventory[j].equip == 0)

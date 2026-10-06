@@ -29,6 +29,11 @@ test('the one hand-back path deletes from the companion only after the item has 
 		'the owner\'s bag, then the owner\'s feet, must both be tried before the companion lets go');
 	assert.match(body.slice(floor, del), /return false;/,
 		'when neither works the item must stay on the companion, not be deleted');
+	// The given bit is what makes a future hand-back attempt recognise the item as the
+	// player's. Clearing it before the transfer means a failed return leaves the item
+	// unequipped AND unmarked, and this bag is not persisted - silently gone at restart.
+	const mask = body.indexOf('companion_given_mask &= ~worn');
+	assert.ok(mask > floor && mask < del, 'the given bit must be cleared only after the item has landed');
 });
 
 test('the trade and gear-return paths go through hand-back instead of deleting themselves', () => {

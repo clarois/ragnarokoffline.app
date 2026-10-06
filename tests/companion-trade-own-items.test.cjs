@@ -28,8 +28,13 @@ test('the equip pass acts only on what the trade brought in', () => {
 	assert.match(fn[1], /before\.swap\(shell->pop\.companion_trade_before\);/, 'the snapshot is consumed');
 	assert.match(fn[1], /it\.nameid\) != before\[i\]\.first \|\| static_cast<int32_t>\(it\.amount\) > before\[i\]\.second/,
 		'a new item in the slot, or a stack that grew');
-	assert.match(fn[1], /if \(!slot\.nameid \|\| slot\.equip\) continue;\n\t\tif \(!traded\(i\)\) continue;/,
+	assert.match(fn[1], /if \(!slot\.nameid \|\| slot\.equip\) continue;\n		if \(!traded\(i\)\) continue;/,
 		'untraded items are neither equipped nor handed back');
+	// A traded piece the companion cannot equip (class/level requirement) must go back to
+	// the owner: left in the bag it would sit unequipped in an inventory that is not
+	// persisted and be gone at the next restart.
+	assert.match(fn[1], /\} else \{\n[	 ]*\/\/ The companion cannot equip this[\s\S]*?\(void\)pop_companion_hand_back\(owner, shell, i, LOG_TYPE_TRADE\);/,
+			'a traded piece that cannot be equipped is handed back, not stranded');
 	const snap = /void population_engine_companion_trade_snapshot\([^)]*\)\n\{([\s\S]*?)\n\}\n/.exec(engine);
 	assert.ok(snap, 'snapshot function found');
 	assert.match(snap[1], /before\.assign\(MAX_INVENTORY, \{0, 0\}\);/);
