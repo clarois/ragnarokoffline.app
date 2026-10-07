@@ -505,12 +505,21 @@ class AgentDriver {
 			// Take off a worn item: `unequip <itemId>`. Uses the equipment window's own
 			// onUnEquip (CZ.REQ_TAKEOFF_EQUIP), so no window needs to be open.
 			unequip: async ([id]) => {
-				const result = await this.eval(`
-					const eq = window.roAgent.modules.UIManager.getComponent('Equipment');
-					const item = eq?.getItemById ? eq.getItemById(Number(arg)) : null;
-					if (!item) return { ok: false, reason: 'item ' + arg + ' is not equipped' };
-					eq.onUnEquip(item.index);
-					return { ok: true, index: item.index };`, id);
+			// Take off a worn item by nameid. Inventory.getItemById(id) finds it by ITID
+			// (works whether it is still in the bag list or shown on the equipped tab);
+			// Equipment.getUI().onUnEquip(item.index) sends CZ.REQ_TAKEOFF_EQUIP.
+			const result = await this.eval(`
+				const inv = window.roAgent.modules.UIManager.getComponent('Inventory');
+				const eq = window.roAgent.modules.UIManager.getComponent('Equipment');
+				const want = Number(arg);
+				let item = inv?.getItemById ? inv.getItemById(want) : null;
+				if (!item && inv?.getItemByIndex) item = inv.getItemByIndex(want);
+				if (!item) return { ok: false, reason: 'item ' + arg + ' is not equipped' };
+				const equi = eq?.getUI ? eq.getUI() : eq;
+				if (!equi || typeof equi.onUnEquip !== 'function')
+					return { ok: false, reason: 'equipment window unavailable' };
+				equi.onUnEquip(item.index);
+				return { ok: true, index: item.index };`, id);
 				await sleep(800);
 				return { ...result, chat: await this.newChat(), errors: this.newErrors() };
 			},
