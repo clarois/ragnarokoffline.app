@@ -502,6 +502,19 @@ class AgentDriver {
 				await sleep(800);
 				return { ...result, chat: await this.newChat(), errors: this.newErrors() };
 			},
+			// The inventory's own use path (what a double-click on a potion runs):
+			// heals, usable and cash items take their effect. No window needs to be
+			// open; the packet goes straight out like equip does.
+			use: async ([id]) => {
+				const result = await this.eval(`
+					const inv = window.roAgent.modules.UIManager.getComponent('Inventory');
+					const item = inv?.getItemById(Number(arg));
+					if (!item) return { ok: false, reason: 'item ' + arg + ' is not in the inventory' };
+					inv.useItem(item);
+					return { ok: true, index: item.index, type: item.type };`, id);
+				await sleep(800);
+				return { ...result, chat: await this.newChat(), errors: this.newErrors() };
+			},
 			// Walk to a cell anywhere on this map. One click only reaches a cell
 			// that is on screen, so a far one is reached in steps: each click
 			// goes as far along the way as is visible and not behind a window.
@@ -670,6 +683,7 @@ const COMMANDS = {
 	skills: { description: 'Skills the character has: id, name, level, SP, range.', args: [['filter', 'string', 'Id or part of a name', true]] },
 	skill: { description: 'Use a skill. For a targeted one add --target <gid|nearest|self> or --cell <x> <y>.', args: [['id', 'number', 'Skill id'], ['rest', 'string', 'Level and flags, e.g. "5 --target nearest"', true]] },
 	equip: { description: 'Equip an item from the inventory by item id.', args: [['item', 'number', 'Item id']] },
+	use: { description: 'Use a consumable from the inventory by item id: a potion or other usable item takes its effect.', args: [['item', 'number', 'Item id']] },
 	shot: { description: 'Screenshot of the agent\'s game window.', args: [['name', 'string', 'Label for the file', true]] },
 	hover: { description: 'Put the cursor on a cell (or pixels with --px) and report what the client sees there.', args: [['x', 'number', 'Cell x'], ['y', 'number', 'Cell y'], ['flag', 'string', '--px for page pixels', true]] },
 	click: { description: 'A raw mouse click at page pixels.', args: [['x', 'number', 'Pixel x'], ['y', 'number', 'Pixel y'], ['button', 'string', 'left or right', true]] },

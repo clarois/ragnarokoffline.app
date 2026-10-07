@@ -41,6 +41,7 @@ Your game window opens the first time you use a command. The player may have cho
 | `answer yes\|no` | Answer a yes/no box the game shows, such as a party invitation. `state` shows it as `prompt`. |
 | `skills [filter]` / `skill <id> [level] [--target <gid\|nearest\|self>] [--cell <x> <y>]` | Your skills, and using one. |
 | `equip <itemId>` | Equip something from your inventory. |
+| `use <itemId>` | Use a consumable from your inventory (a potion, scroll...). |
 | `hover <x> <y>`, `click <x> <y> [right]`, `key <key>` | Lower-level input when nothing above fits. Keys: `Enter`, `Escape`, `F1`–`F9` (hotbar), `Alt+E` (inventory), `Alt+Q` (equipment), `Alt+S` (skills), `Alt+U` (quests), `Alt+A` (stats), `Alt+G` (guild). The same key closes the window again. |
 | `wait <ms>`, `errors`, `status` | Pause, client errors so far, and whether you are in game. |
 

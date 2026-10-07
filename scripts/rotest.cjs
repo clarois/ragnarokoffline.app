@@ -43,6 +43,7 @@ server:  server <args>                     the world's ragnarok-stack: logs map 
   gm <text> | say <text>     type into the chat box and send (e.g. gm "@jobchange 4252")
   state [radius]             player, nearby entities, chat, new errors
   equip <itemId>             equip an item already in the inventory
+  use <itemId>               use a consumable from the inventory (potion, scroll)
   skills [filter]            skills the character has: id, name, level, sp, range, type
   hover <x> <y> [--px]       put the cursor on a cell (or pixels); what the client sees there
   shot [name]                screenshot; prints the file
@@ -498,6 +499,18 @@ async function daemon(flags) {
                 if (!item) return { ok: false, reason: `item ${id} is not in the inventory (gm "@item ${id}")` };
                 inv.onEquipItem(item.index, item.location);
                 return { ok: true, index: item.index, location: item.location };
+            }, id);
+            await page.waitForTimeout(800);
+            return { ...result, chat: await agent('chat', [3]), errors: newErrors() };
+        },
+        // The inventory's own use path (what a double-click on a potion runs).
+        use: async ([id]) => {
+            const result = await page.evaluate(id => {
+                const inv = window.roAgent.modules.UIManager.getComponent('Inventory');
+                const item = inv?.getItemById(Number(id));
+                if (!item) return { ok: false, reason: `item ${id} is not in the inventory (gm "@item ${id}")` };
+                inv.useItem(item);
+                return { ok: true, index: item.index, type: item.type };
             }, id);
             await page.waitForTimeout(800);
             return { ...result, chat: await agent('chat', [3]), errors: newErrors() };

@@ -69,7 +69,7 @@ test('MCP initializes, lists every command as a tool, and maps named arguments',
 		assert.strictEqual(note.status, 202);
 		const list = await request(port, { path: '/mcp', body: { jsonrpc: '2.0', id: 2, method: 'tools/list' } });
 		const names = list.body.result.tools.map(t => t.name);
-		for (const name of ['login', 'char', 'state', 'walk', 'attack', 'interact', 'choose', 'skill', 'shot', 'say']) assert.ok(names.includes(name), name);
+		for (const name of ['login', 'char', 'state', 'walk', 'attack', 'interact', 'choose', 'skill', 'equip', 'use', 'shot', 'say']) assert.ok(names.includes(name), name);
 		assert.ok(!names.includes('eval'));
 		const skill = await request(port, { path: '/mcp', body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'skill', arguments: { id: 5, rest: '10 --target nearest' } } } });
 		assert.ok(!skill.body.result.isError);
