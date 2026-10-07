@@ -49,7 +49,10 @@ echo "==> population engine: patches"
 # stamp is more honest than probing the tree. Re-running with a changed patch
 # set therefore needs a fresh checkout, which is what CI does anyway.
 STAMP="$TARGET/.ragnarokmac-server-mods"
-WANT=$(cat "$MOD"/patches/*.patch | sha256sum | cut -d' ' -f1)
+# The anchor scripts' contents are part of the stamp too: they rewrite rAthena
+# sources after the patches, so a changed script must not land on a checkout
+# that stamps itself up to date without running them.
+WANT=$(cat "$MOD"/patches/*.patch "$ROOT"/scripts/apply-party-chat-hook.py "$ROOT"/scripts/apply-mob-hp-bars.py | sha256sum | cut -d' ' -f1)
 
 if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$WANT" ]; then
     echo "    already applied"
@@ -70,4 +73,5 @@ for p in "$MOD"/patches/*.patch; do
     echo "    applied $(basename "$p")"
 done
 python3 "$ROOT/scripts/apply-party-chat-hook.py" "$TARGET/src/map/clif.cpp"
+python3 "$ROOT/scripts/apply-mob-hp-bars.py" "$TARGET/src/map/clif.cpp"
 echo "$WANT" > "$STAMP"
