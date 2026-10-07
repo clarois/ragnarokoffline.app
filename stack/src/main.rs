@@ -31,6 +31,9 @@ mod groups;
 mod json;
 mod mapcache;
 mod mods;
+mod navmob;
+mod navnpc;
+mod navwarp;
 mod process_identity;
 mod registration;
 mod hosting;
@@ -49,7 +52,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::exit;
 
-const USAGE: &str = "usage: ragnarok-stack host-check|capture-crashes|hosting-check [--lan]|secure-services [--lan] [--ram MiB]|mods|mod-enable NAME|mod-disable NAME|mod-forget NAME|mod-check DIR|up [--lan] [--ram MiB]|down|repair [--lan] [--ram MiB]|status|logs [service] [tail]|logs --follow <map|char|login|db> [--tail N]|agent <command> [args]|export-table <name>|ports\n\
+const USAGE: &str = "usage: ragnarok-stack host-check|capture-crashes|hosting-check [--lan]|secure-services [--lan] [--ram MiB]|mods|mod-enable NAME|mod-disable NAME|mod-forget NAME|mod-data-reset NAME|mod-check DIR|up [--lan] [--ram MiB]|down|repair [--lan] [--ram MiB]|status|logs [service] [tail]|logs --follow <map|char|login|db> [--tail N]|agent <command> [args]|export-table <name>|ports\n\
                      \x20      db tables|describe <table>|rows|apply (JSON on stdin for rows and apply)\n\
                      \x20      backup [--full] <file>|restore [--full] <file>\n\
                      \x20      sql [--write] [--file <path>] [<statement>]\n\
@@ -106,6 +109,41 @@ fn main() {
         return;
     }
 
+    // Build the navigation-server-npcs mod's stock index from a rAthena
+    // checkout (navnpc.rs). A developer tool for when the pin moves: no app,
+    // no config.
+    if verb == "navigation-npc-index" {
+        let result = args.get(1).ok_or_else(|| "a rAthena checkout is required".to_string())
+            .and_then(|root| navnpc::build_index(std::path::Path::new(root)));
+        match result {
+            Ok(index) => print!("{}", index.to_text()),
+            Err(error) => { eprintln!("{error}"); exit(1); }
+        }
+        return;
+    }
+
+    // The same for navigation-server-monsters (navmob.rs).
+    if verb == "navigation-mob-index" {
+        let result = args.get(1).ok_or_else(|| "a rAthena checkout is required".to_string())
+            .and_then(|root| navmob::build_index(std::path::Path::new(root)));
+        match result {
+            Ok(index) => print!("{}", index.to_text()),
+            Err(error) => { eprintln!("{error}"); exit(1); }
+        }
+        return;
+    }
+
+    // And for navigation-server-warps (navwarp.rs).
+    if verb == "navigation-warp-index" {
+        let result = args.get(1).ok_or_else(|| "a rAthena checkout is required".to_string())
+            .and_then(|root| navwarp::build_index(std::path::Path::new(root)));
+        match result {
+            Ok(index) => print!("{}", index.to_text()),
+            Err(error) => { eprintln!("{error}"); exit(1); }
+        }
+        return;
+    }
+
     if verb == "process-identity" {
         let result = args.get(1).and_then(|s| s.parse::<u32>().ok())
             .ok_or_else(|| "process-identity needs a numeric PID".to_string())
@@ -132,7 +170,7 @@ fn main() {
     // queue behind the others.
     let writes_sql = (verb == "sql" && args.iter().any(|a| a == "--write"))
         || (verb == "db" && args.get(1).map(String::as_str) == Some("apply"));
-    let _operation = if writes_sql || matches!(verb, "up" | "down" | "repair" | "backup" | "restore" | "accounts" | "secure-services" | "hosting-check" | "sharing-check" | "capture-crashes") {
+    let _operation = if writes_sql || matches!(verb, "up" | "down" | "repair" | "backup" | "restore" | "accounts" | "mod-data-reset" | "secure-services" | "hosting-check" | "sharing-check" | "capture-crashes") {
         match operation_lock::acquire(&cfg.state) {
             Ok(lock) => Some(lock),
             Err(error) => fail(verb, &error),
@@ -251,6 +289,12 @@ fn main() {
         // about the mod so a later install under the same name starts fresh.
         "mod-forget" => match args.get(1) {
             Some(n) => mods::forget(&cfg.state, n),
+            None => Err("mod name required".into()),
+        },
+        // Everything a mod keeps in the store, every scope. Stops the game
+        // around it (the map server holds documents in memory) and backs up.
+        "mod-data-reset" => match args.get(1) {
+            Some(n) => cmds::mod_data_reset(&cfg, &dk, n),
             None => Err("mod name required".into()),
         },
         // A folder that is not in the mods directory yet -- a release the app

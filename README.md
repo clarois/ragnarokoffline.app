@@ -79,6 +79,13 @@ Cloudflare account or token; connecting your own fixed hostname is optional.
 Friends open the HTTPS link in their browser and play on your running world.
 See [setup, invitation expiry and Stop sharing](docs/FRIENDS_SHARING.md).
 
+## Hosting on a machine with no screen
+
+Start the app with `--headless` and it opens no windows: the server starts on
+its own, and Settings opens in a browser at an address it prints. It works the
+same on macOS, Windows and Linux, so a home server or a cloud machine can host
+the world. Experimental for now; see [Running headless](docs/HEADLESS.md).
+
 ## Hosting and playing with friends on your LAN
 
 Everyone on the same wifi can play together on one person's machine. Only the
@@ -391,7 +398,9 @@ rebuild, no compiler, no Docker.
 
 You can change what monsters are worth and what they drop, add NPCs with real
 quests, replace the login screen and the loading screens with your own art,
-build a map that is in nobody's GRF and put monsters and NPCs on it, decide
+build a map that is in nobody's GRF and put monsters and NPCs on it — with
+**Settings → Tools → [Map editor](docs/mods/MAP_EDITOR.md)**, which an AI agent
+can drive too — decide
 where new characters wake up, and restyle the client itself. Settings → Mods
 lists what is installed, with a checkbox each.
 

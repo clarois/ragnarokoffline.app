@@ -122,6 +122,11 @@ pub struct ModTables {
     /// File names, relative to their table's `dir`, by config key, in mod order.
     lists: BTreeMap<&'static str, Vec<String>>,
     pub views: ViewTables,
+    /// `customMaps`: each map's sky, clouds, weather and music from the mods'
+    /// mod.json (`Manifest::maps`), as the JavaScript object the fork's
+    /// `DB/Map/CustomMaps.js` reads, by `<map>.rsw`. A later mod's entry for a
+    /// map replaces an earlier one's, as in db/.
+    custom_maps: BTreeMap<String, String>,
 }
 
 impl ModTables {
@@ -135,6 +140,30 @@ impl ModTables {
             self.lists.entry(key).or_default().extend(files);
         }
         self.views.extend(other.views);
+        self.custom_maps.extend(other.custom_maps);
+    }
+
+    /// A mod's `"maps"`, after those of the mods before it.
+    pub fn add_maps(&mut self, maps: &[crate::mods::MapLook]) {
+        // Numbers as JavaScript reads them: 1 rather than 1.0 is the same
+        // value, and `{}` never prints an exponent for a value from 0 to 1.
+        let list = |c: &[f64]| c.iter().map(|n| format!("{n}")).collect::<Vec<_>>().join(", ");
+        for look in maps {
+            let mut fields = Vec::new();
+            if let Some(sky) = &look.sky {
+                fields.push(format!("skyColor: [{}]", list(sky)));
+            }
+            if let Some(clouds) = &look.clouds {
+                fields.push(format!("cloudColor: [{}]", list(clouds)));
+            }
+            if let Some(weather) = &look.weather {
+                fields.push(format!("weather: {}", crate::json::quote(weather)));
+            }
+            if let Some(bgm) = &look.bgm {
+                fields.push(format!("bgm: {}", crate::json::quote(bgm)));
+            }
+            self.custom_maps.insert(format!("{}.rsw", look.name), format!("{{ {} }}", fields.join(", ")));
+        }
     }
 
     /// Copy `from` into `dir` as this mod's next table of its kind, numbered
@@ -172,6 +201,14 @@ impl ModTables {
         }
         if !self.views.is_empty() {
             out.push(self.views.config_entry());
+        }
+        if !self.custom_maps.is_empty() {
+            let maps: Vec<String> = self
+                .custom_maps
+                .iter()
+                .map(|(map, look)| format!("\t\t{}: {look}", crate::json::quote(map)))
+                .collect();
+            out.push(format!("\tcustomMaps: {{\n{}\n\t}},\n", maps.join(",\n")));
         }
         out
     }
@@ -559,6 +596,36 @@ mod tests {
     }
 
     /// A mod that adds one item must not have to ship the whole table.
+    #[test]
+    fn custom_maps_are_written_for_the_fork_with_a_later_mod_winning() {
+        use crate::mods::MapLook;
+        let look = |name: &str, sky: [f64; 4], weather: Option<&str>| MapLook {
+            name: name.into(),
+            sky: Some(sky),
+            clouds: Some([1.0, 1.0, 1.0]),
+            weather: weather.map(str::to_string),
+            bgm: None,
+        };
+        let mut tables = ModTables::default();
+        assert!(tables.config_entries(Path::new("/nowhere")).is_empty(), "no mod, no entry");
+        tables.add_maps(&[look("ro_isle", [0.4, 0.6, 0.8, 1.0], None), look("my_cave", [0.0, 0.0, 0.1, 1.0], Some("snow"))]);
+        let mut later = ModTables::default();
+        let mut music = look("ro_isle", [1.0, 0.5, 0.2, 1.0], None);
+        music.bgm = Some("ro_isle.mp3".into());
+        later.add_maps(&[music]);
+        tables.extend(later);
+        assert_eq!(
+            tables.config_entries(Path::new("/nowhere")),
+            vec![
+                "\tcustomMaps: {\n\
+                 \t\t\"my_cave.rsw\": { skyColor: [0, 0, 0.1, 1], cloudColor: [1, 1, 1], weather: \"snow\" },\n\
+                 \t\t\"ro_isle.rsw\": { skyColor: [1, 0.5, 0.2, 1], cloudColor: [1, 1, 1], bgm: \"ro_isle.mp3\" }\n\
+                 \t},\n"
+                    .to_string()
+            ]
+        );
+    }
+
     #[test]
     fn an_item_table_is_kept_aside_rather_than_replacing_the_base() {
         let tmp = tmp("item");

@@ -5,8 +5,10 @@ name: release
 # GitHub release.
 #
 # The version bump lands first, as an ordinary pull request whose commit is
-# named "<version>" and changes only package.json: main takes nothing but
-# merged pull requests. This workflow never commits; it only tags.
+# named "<version>" and changes only package.json and adds
+# release-notes/<version>.md: main takes nothing but merged pull requests.
+# This workflow never commits; it only tags. build.yml publishes the release
+# with those notes.
 #
 # Only the maintainer may run it. Anyone with write access can start a
 # workflow_dispatch, so the first step stops every other actor. The scheduled
@@ -87,9 +89,25 @@ jobs:
             echo "::error::main's package.json is $have. Merge the \"$VERSION\" bump pull request first."; exit 1
           fi
           last=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-          if [ -z "$(git log --oneline "$last..HEAD" -- . ':!package.json')" ]; then
+          if [ -z "$(git log --oneline "$last..HEAD" -- . ':!package.json' ':!release-notes')" ]; then
             echo "::error::nothing but the version changed since $last"; exit 1
           fi
+
+      - name: main has this version's release notes
+        run: |
+          set -euo pipefail
+          # build.yml publishes the release with this file, so the release is
+          # right from the start and nothing has to edit it afterwards. It
+          # comes in with the version bump pull request.
+          file="release-notes/$VERSION.md"
+          if [ ! -f "$file" ]; then
+            echo "::error::main has no $file. Add the release notes to the \"$VERSION\" bump pull request."; exit 1
+          fi
+          last=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if ! grep -qF "compare/$last...v$VERSION" "$file"; then
+            echo "::error::$file does not end with the Full Changelog link compare/$last...v$VERSION"; exit 1
+          fi
+          echo "$file: $(wc -c < "$file") bytes"
 
       - name: main's own CI passed
         run: |

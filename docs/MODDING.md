@@ -77,6 +77,11 @@ mod safe to hand to a stranger:
 - **`mods`** — other mods this one cannot work without, by folder name. Each
   must be installed and switched on. (Before 1.2.6 this key was refused as
   unknown, so a mod using it did not load at all.)
+- **`client`** — which game client's files the mod is for: `"kRO"`, or a list
+  like `["kRO", "jRO"]`. On another client the mod isn't applied, and Settings
+  → Mods says why ("is for kRO, and this client is iRO"). See
+  [Mods for one client](#mods-for-one-client). An app from before this key
+  refuses the whole mod, naming the key, so the player knows to update.
 
 `"after": ["other-mod"]`, beside `requires`, is about precedence rather than
 need: when both are on, this mod is applied later and wins where the two
@@ -93,6 +98,57 @@ being switched off.)
 
 `"host"` declares a [host route](#host-routes): JavaScript of the mod's own
 that runs on the host's computer, and the addresses it may connect to.
+
+`"maps"` gives maps a sky, clouds, weather and music, by map name:
+`"maps": { "my_isle": { "sky": [0.4, 0.6, 0.8], "clouds": [1, 1, 1], "bgm": "my_isle.mp3" } }`.
+It is how a custom map gets anything but black behind it and the default track;
+see [Custom maps](mods/CUSTOM_MAPS.md#the-sky-the-weather-and-the-music).
+
+### Mods for one client
+
+Players host with different clients' files: kRO's, iRO's, others. Most mods
+don't care, but some ship data that only matches one client. An `iteminfo.lua`
+made for kRO's item tables, for example, overwrites the descriptions and art
+of iRO's own items, which an iRO player sees as a broken cash shop.
+
+The app reads which client the player has from their `data.grf`, and Settings
+→ General → Client shows it: `iRO (from data.grf)`. (It comes from the
+message table every client ships, `msgstring_kr.lub` in kRO, `msgstring_us.lub`
+in iRO. The GRF's header can't tell them apart.)
+
+- **Only for one client:** `"requires": { "client": "kRO" }`. Anywhere else
+  the mod is not applied, and says why.
+- **Different files per client:** `clientFolders`, laid out and applied like
+  [era folders](#renewalfolder--prerenewalfolder--one-mod-for-both-eras), last,
+  so the client's copy of a file wins over the mod's own and its era's:
+
+  ```json
+  {
+    "name": "item-art",
+    "clientFolders": { "kRO": "kro", "iRO": "iro" }
+  }
+  ```
+
+  ```
+  item-art/
+  ├── mod.json
+  ├── System/itemInfo.lua          every client, unless its folder has its own
+  ├── kro/System/itemInfo.lua      kRO: kRO's item tables, with the mod's items
+  └── iro/System/itemInfo.lua      iRO: iRO's
+  ```
+
+Names are compared without regard to case. The app knows `kRO`, `iRO`, `bRO`,
+`jRO`, `twRO`, `thRO`, `idRO`, `pRO`, `ruRO`, `cRO` and `vRO`. When it can't
+tell which client the files are (no message table, or one it doesn't know),
+nothing is refused: the mod may well be right for it. Diagnostics and the log
+say what was detected.
+
+There is no client version to require: a GRF doesn't record its date. When a
+mod needs data only newer clients have, say so in its description and check
+for the file in a script, rather than assuming a date.
+
+An app from before `clientFolders` ignores it and reads only the mod's own
+folders; `requires.client` makes such an app refuse the mod by name.
 
 ### renewalFolder / prerenewalFolder — one mod for both eras
 
@@ -345,6 +401,13 @@ A UI skin or a cursor pack in the official client's format is not a mod yet;
 A mod adds scripts and tables to your server and can run JavaScript in the game
 window. Installing one is running somebody's code — install ones you trust.
 
+A mod installed from Find Mods is offered its updates on Settings → Mods →
+Updates, with what changed: for a mod in the mod list, the sections of its
+`CHANGELOG.md` for every version since the installed one; for a mod from its
+own GitHub repository, the notes of every release since then. See
+[CHANGELOG.md](MOD_REGISTRY.md#changelogmd-what-each-version-changed) and
+[How updates reach players](MOD_REGISTRY.md#how-updates-reach-players).
+
 ## Turning mods off
 
 Settings → Mods → Installed lists what is installed with a switch each. Under the hood
@@ -492,10 +555,31 @@ The other eight population databases — chat lines, names, gear sets, vendor
 placement — are **not** wired this way yet. A mod's copy of those still lands
 in a directory nothing opens.
 
+**How recruited companions fight** is a table a mod can ship as well:
+`db/population_strategy.yml` gives them per-monster, per-job and per-build rules,
+with strategies they switch between.
+[docs/mods/companion-strategies/](mods/companion-strategies/README.md) is its
+reference. [`examples/mods/companion-roles`](../examples/mods/companion-roles)
+is what each kind of companion does at any boss, and
+[`examples/mods/companion-tactics`](../examples/mods/companion-tactics) adds
+particular bosses on top.
+
 **[docs/mods/ai-characters.md](mods/ai-characters.md)** is the full reference:
 every key, how the headcount is divided between maps, which tables are still
 unreachable, and the two ways this data fails without the server saying
 anything.
+
+### Directing an AI character from a script
+
+A script can take one AI character away from the engine for a while and drive
+it with the stock `unitwalk`, `unittalk`, `emotion` and `unitskilluseid`
+commands: a shell that says "gz" when you level, a wizard that walls off a
+gate, a rival who turns up while you grind. Nine `population_*` commands find
+shells, hold and release them, spawn a particular one, remove one, and tell
+your script when someone whispers it or when its follow loses you.
+
+**[docs/mods/shell-control.md](mods/shell-control.md)** is the reference, and
+[examples/mods/shell-gz](../examples/mods/shell-gz) is a working start.
 
 ## Making new things: items, monsters, and how they look
 
@@ -543,7 +627,7 @@ forms:
 | `itemheal rand(120,180),0;` | a potion |
 
 The chances in `bAutoSpell…` and `autobonus` are out of 1000. Anything a bonus can't express
-("only below 30% HP", "every fifth hit") is what [Lua](#lua--changing-how-a-skill-works)
+("only below 30% HP", "every fifth hit") is what [Lua](#lua--changing-how-a-skill-or-item-works)
 is for.
 
 ### A new monster
@@ -888,7 +972,31 @@ mod's `db/extension_db.yml` and call it from `OnInit`. The
 [map-spawn-rate](../registry/mods/map-spawn-rate) mod does this for any map,
 picked in its settings window.
 
-See [`examples/mods/quest-npc`](../examples/mods/quest-npc).
+See [`examples/mods/quest-npc`](../examples/mods/quest-npc). For a quest in
+the game's own quest log, with kill counters the server keeps, see
+[Custom quests](mods/CUSTOM_QUESTS.md).
+
+### Reading the database: `query_sql` and `query_logsql` are read-only
+
+A mod's script can **read** the game database with `query_sql` (and
+`query_logsql`, below), but not change it. Both log in as `ragnarok_mods`,
+a login the app creates that can only `SELECT`:
+
+- **Every table but `login` and `mod_store`** can be read. `login` holds every
+  account's password hash and e-mail, and `mod_store` holds every mod's own
+  data, so a mod never sees them, not even through a join.
+- **Nothing can be written.** `INSERT`, `UPDATE`, `DELETE`, `CREATE`,
+  `ALTER`, `DROP` and `SELECT … INTO OUTFILE` all fail. The query returns
+  `-1`, and the map server's log shows MariaDB's "command denied" error,
+  naming the table.
+
+So a mod can't make its own tables in the game database, or edit characters
+behind the server's back (which it would overwrite anyway; see
+[docs/DATABASE.md](DATABASE.md)). **To keep a mod's own data, use the
+[mod store](MOD_STORE.md)**: key/value storage, global, per account and per
+character, from NPC scripts and Lua. rAthena's permanent variables
+(`$mymod_price[501]`, `#mymod_rank`) still work for simple cases; prefix them
+with your mod's name so mods don't collide.
 
 ### Knowing what players did: rAthena's logs
 
@@ -1475,6 +1583,67 @@ and so on. Or ship your own image there and name it.
   anywhere else under `data/`, is copied like any other file and changes
   nothing on screen, and the log says so.
 
+### Cut-ins: an NPC's full-length picture
+
+`cutin "<name>", <position>;` in an NPC's script shows a picture beside the
+dialogue. The client loads it from `data/texture/유저인터페이스/illust/`:
+
+- **A name with no extension is a BMP.** `cutin "skogul", 2;` loads
+  `illust/skogul.bmp`.
+- **A name with an extension is used as given.** `cutin "skogul.png", 2;`
+  loads `illust/skogul.png`.
+- **`cutin "", 255;`** takes the picture away.
+- **Positions:** 0 bottom left, 1 bottom centre, 2 bottom right, 4 centre of
+  the screen.
+
+```
+my-mod/data/texture/유저인터페이스/illust/skogul.bmp
+my-mod/npc/my_npc.txt          cutin "skogul", 2;
+```
+
+**A BMP's transparency is magenta, and only near-pure magenta.** BMPs have no
+alpha channel, so the client makes `#FF00FF` transparent. To be exact, it
+clears any pixel with red above 230, green below 20 and blue above 230. This
+applies to every BMP it loads: cut-ins, item icons, signboards.
+
+That's the trap with modern art. A picture cut out and **antialiased** onto a
+magenta background has edge pixels that are part art, part magenta, like
+`(180, 40, 170)`. They aren't near-pure magenta, so they're drawn, and the
+picture gets a purple halo.
+
+| | |
+|---|---|
+| <img src="assets/cutin-fringe-before.png" alt="A dark winged figure on a grey background, outlined in thin magenta along every edge, with a zoomed wing showing the magenta pixels" width="300"> | <img src="assets/cutin-fringe-after.png" alt="The same figure with a clean edge and no magenta, zoomed the same way" width="300"> |
+| Antialiased onto magenta: a purple halo | Every pixel art or exact `#FF00FF` |
+
+The client can't safely key the halo away: a looser rule would also erase
+real purple in the art. Fix the picture, one of two ways.
+
+**Use a PNG with real transparency** (the smooth edges you drew):
+
+1. Export the art with its transparent background as PNG. Don't flatten it
+   onto magenta first.
+2. Put it in `illust/` and name the extension in the script:
+   `cutin "skogul.png", 2;`.
+
+A PNG keeps its alpha as it is, so antialiased edges, soft shadows and glows
+all work. That's a feature of Ragnarok Offline's client: don't count on other
+RO clients reading a PNG cut-in.
+
+**Or keep the BMP, with a hard edge.** Every pixel must be either art or exact
+`#FF00FF`:
+- **From art with transparency:** in your editor, make the selection or alpha
+  hard first (threshold the alpha at 50%, or select with antialiasing off),
+  then fill what's outside with `#FF00FF` and save as a 24-bit BMP.
+- **From a BMP that already has a halo:** select the background with the magic
+  wand at tolerance 0, grow the selection by 1–2 pixels, and fill it with
+  `#FF00FF`. That eats into the edge's blended pixels rather than keeping them.
+- **Check it:** zoom in on an edge. There should be no pinkish or purplish
+  pixel between the art and the magenta.
+
+The same goes for any BMP with transparency in a mod: item and collection
+icons and signboard icons.
+
 ### The client caches, hard
 
 There are two caches between your file and the screen, and they fail
@@ -1617,74 +1786,28 @@ my-mod/BGM/my-theme.mp3
 It is its own layer rather than part of `data/` because the client asks for
 music as `BGM/<file>`, a path root outside `data/`.
 
-Which track plays on which map is `data/mp3nametable.txt` — a `data/` file, so a
-mod can override it to point maps at its own music. Start from the client's copy
-and edit it.
+Which track plays on which map is `data/mp3nametable.txt`, one table for the
+whole game. Rather than ship a copy of it, which replaces every map's music with
+what the copy says, name the track per map in `mod.json`:
+`"maps": { "my_isle": { "bgm": "my-theme.mp3" } }`. See
+[Custom maps](mods/CUSTOM_MAPS.md#the-sky-the-weather-and-the-music).
 
 ## Custom maps
 
-**This works, end to end**, and there is nothing to configure: put the geometry
-in `data/` and the server side is done.
+A mod can add a map that is in nobody's GRF: put its `.gat`, `.gnd` and `.rsw`
+in `data/`, and the app registers it with the server on every start (the
+`map:` line, `map_index.txt` and the map cache rAthena would otherwise need a
+separate tool for). A `"maps"` entry in `mod.json` gives it a sky, clouds,
+weather and music; without one, the background behind a custom map is black and
+it plays the default track.
 
-That is worth stating plainly because it is not obvious and because it is not
-how rAthena works on its own. A custom map needs **three** things on the server,
-two of which are invisible:
+**Settings → Tools → Map editor** makes one for you, as a mod: see
+[The map editor](mods/MAP_EDITOR.md).
 
-1. **A `map:` line in the map config.** The map server builds its list of maps
-   from `map:` directives — `conf/maps_athena.conf` is twelve hundred of them.
-   A map never named there is not in the list and the server says *nothing at
-   all* about it. This is the one that wastes the afternoon.
-2. **An entry in `db/import/map_index.txt`**, which gives the map the number
-   the servers pass between them. Missing, and the map is dropped at load with
-   only a "maps removed" count to say so.
-3. **An entry in `db/import/map_cache.dat`.** rAthena's map server never reads
-   a `.gat` at runtime; it reads a prebuilt cache and refuses any map not in
-   one, however correctly it is registered elsewhere. Upstream builds this file
-   with a separate `mapcache` tool that links against the whole server and
-   reads geometry out of a GRF.
-
-On every start, the supervisor scans each enabled mod's `data/` for `.gat`
-files, decodes them, writes `map_cache.dat` and `map_index.txt` into the
-`db/import` tree it mounts, and adds the `map:` lines to the generated
-`map_conf.txt` (`stack/src/mapcache.rs`, `stack/src/mods.rs`). It prints what
-it found:
-
-```
-mods: custom-map
-mod maps: ro_isle
-```
-
-The map cache is built in-process rather than by running rAthena's `mapcache`
-tool, so a custom map needs no Docker rebuild and no image change — which is
-the same promise as the rest of the mod system.
-
-### Making one
-
-```
-scripts/mkmap.py my_isle --out path/to/my-mod/data --cells 40
-```
-
-writes a flat, walled, walkable square with a generated ground texture and a
-minimap: `.gat`, `.gnd`, `.rsw`, `data/texture/my_isle/ground.bmp` and
-`data/texture/À¯ÀúÀÎÅÍÆäÀÌ½º/map/my_isle.bmp`. It is a floor to stand on, not a
-landscape — for real terrain, use one of the community map editors and copy its
-`.gat`/`.gnd`/`.rsw` into `data/` exactly the same way.
-
-Three traps:
-
-- **Map names are at most 11 characters.** rAthena truncates silently at three
-  separate layers before anything complains.
-- **The `.gnd` is half the `.gat`'s resolution.** An 80 × 80 walkable map is a
-  40 × 40 ground mesh.
-- **A `.gnd` lightmap cell is not a brightness value.** It is 64 bytes of
-  shadow followed by 64 RGB triples of *additive* coloured light. Filling the
-  cell with `0xff` — the obvious thing — adds full white light to every pixel
-  and renders the map as a flat white sheet with the texture washed out of it.
-- **Without a minimap bitmap** at `data/texture/À¯ÀúÀÎÅÍÆäÀÌ½º/map/<name>.bmp`
-  the client asks once, gets a 404, and shows an empty frame.
-
-See [`examples/mods/custom-map`](../examples/mods/custom-map) and
-[`examples/mods/island-ferry`](../examples/mods/island-ferry).
+[Custom maps](mods/CUSTOM_MAPS.md) is the whole of it: the files, making the
+geometry, the sky and weather, getting players there, and what to check when a
+map does not show. See [`examples/mods/custom-map`](../examples/mods/custom-map)
+and [`examples/mods/island-ferry`](../examples/mods/island-ferry).
 
 ## Generating a mod instead of writing one
 
@@ -1775,7 +1898,7 @@ quest window, and every other quest keeps its own:
 ```lua
 -- my-mod/System/OngoingQuestInfoList.lub
 QuestInfoList = {
-	[70001] = {
+	[105001] = {
 		Title = "The Islander's Errand",
 		Summary = "Bring Hana 10 Jellopies.",
 		IconName = "ico_nq.bmp",
@@ -1793,6 +1916,8 @@ text in ASCII: the client reads quest tables in its own codepage, not as
 UTF-8. The app copies each table aside as `OngoingQuestInfoList-<mod>.lub` and
 lists them in the client's `customQuestInfo`, which loads **after** the base,
 in mod order, the last definition of a quest winning.
+[Custom quests](mods/CUSTOM_QUESTS.md) covers the whole quest: the server's
+side, the fields this table takes, and choosing an id no one else uses.
 
 Everything else in `System/` still replaces the client's copy, so start from the
 translation's version and add to it.
@@ -1865,6 +1990,7 @@ It is a supported interface, not a sandbox for untrusted JavaScript.
 | `api.ui.menuButton({ background, hover, down, title, onClick })` | A button of the mod's own in the option menu (Escape), drawn from pictures the mod ships like the menu's own. Returns a function that takes it out; it also goes with the plugin. See [below](#a-button-in-the-option-menu--apiuimenubutton). Absent in an older app. |
 | `api.items.search(text, limit)` / `.get(id)` / `.icon(id)` | Items from the client's own tables, mods' included: `{ id, name, description, slots }`, and an icon URL for an `<img>`. |
 | `api.server.request(command, text, { timeout })` | Ask the mod's server script for something; resolves with its answer. See [Windows and server requests](#windows-and-server-requests). |
+| `api.store.get(scope, path, { timeout })` | Read what the mod keeps in its store under `client` (`'global'`, or the player's own `'account'` / `'char'`); resolves with a value, an object, or `null`. See [MOD_STORE.md](MOD_STORE.md#from-the-mods-client-ui). |
 | `api.cleanup(fn)` | Register idempotent cleanup immediately after allocating a resource. The returned function can release it early. Runs on failure, scope replacement and page teardown. |
 | `api.screens.replace(screen, hook)` / `.stage(canvas)` / `.image(path)` | Draw the login screen, server list, character select or character creation yourself. See [below](#the-screens-before-the-game--apiscreens). |
 | `api.account.status()` / `.remember()` / `.resume()` / `.forget()` | A remembered login the page never holds, traded for a one-time login token. See [below](#leaving-the-game-and-remembered-logins--exit-and-apiaccount). |

@@ -334,6 +334,11 @@ it first if you cannot push to it. Then:
      commit.
    - RemoteClient: set `config/REMOTECLIENT_PIN` to the merged commit, a full
      40-character hash.
+
+   When a `docker-slim` or RemoteClient pin is a tagged release, the build
+   scripts download that release's binary; any other commit is built from
+   source, which adds a minute or two to every CI run. So before the pin
+   moves, ask for a release at the merged commit.
    - rAthena or roBrowserLegacy: `scripts/vendor-bump.sh <rathena|roBrowserLegacy>`.
 
 Some changes need both sides at once, such as a protocol change between the

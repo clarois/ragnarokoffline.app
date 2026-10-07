@@ -66,6 +66,9 @@
   }
   button.ghost:hover:not(:disabled) { border-color: var(--accent-dim); color: var(--text); }
   button:disabled { opacity: .4; cursor: default; }
+  /* A button that ends a sentence in the status line: the line's own size,
+     level with the words before it, not a form control on a row of its own. */
+  #era-status button { padding: 0 8px; margin-left: 4px; font-size: inherit; line-height: inherit; vertical-align: baseline; }
   .spinner {
     width: 12px; height: 12px; border: 2px solid var(--line);
     border-top-color: var(--accent); border-radius: 50%;
@@ -248,13 +251,52 @@
   @media (prefers-reduced-motion: reduce) { .sw span, .sw span::after, .mname::before { transition: none; } }
 
   /* Updates: what is waiting, and when the app last asked. */
-  .updrow { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  /* Top-aligned: under the name there can be a screenful of release notes,
+     and the buttons belong next to the name, not halfway down them. */
+  .updrow { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: start;
     padding: 10px 0; border-bottom: 1px solid var(--line); }
   .updrow:last-child { border-bottom: 0; }
   .updrow .modicon { width: 36px; height: 36px; font-size: 14px; }
   .updrow .mname::before { content: none; }
-  .updrow .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .updrow .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
   .updrow .acts button { font-size: 12px; padding: 4px 12px; }
+  /* What's new: a release's notes under its update, a few lines and the rest
+     a click away. Text only -- the author's markdown headings and bullets are
+     recognised by their first characters, nothing is parsed as HTML. */
+  .notes { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-hi); padding: 8px 10px 6px; }
+  .notes h5 { margin: 0 0 4px; font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  .notes .body { color: var(--text-2); font-size: 12px; line-height: 1.5; overflow: hidden; position: relative; overflow-wrap: anywhere; }
+  .notes.clip .body { max-height: 6.2em; }
+  .notes.clip .body::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.2em;
+    background: linear-gradient(transparent, var(--panel-hi)); }
+  .notes .body p { margin: 0; white-space: pre-wrap; }
+  .notes .body .h2 { color: var(--text); font-weight: 600; }
+  .notes .body .h3 { color: var(--dim); font-weight: 600; margin-top: 4px; }
+  .notes .body .li { padding-left: 14px; text-indent: -10px; }
+  .notes .body .li::before { content: "•"; display: inline-block; width: 10px; text-indent: 0; color: var(--dim); }
+  .notes .more { background: none; border: 0; padding: 4px 0 0; color: var(--accent-hi); font-weight: 600; font-size: 12px; }
+  .notes .more:hover:not(:disabled) { background: none; text-decoration: underline; }
+  .notes .more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* The Mods tab's own questions -- Remove, and folder or archive -- in this
+     window's style rather than the system's. An update from GitHub still asks
+     in a native box: see installFromSource in electron/main.js for why. */
+  #mods-ask { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; width: min(540px, 92vw); }
+  #mods-ask::backdrop { background: rgba(0, 0, 0, 0.55); }
+  #mods-ask h3 { margin: 0; font-size: 15px; }
+  #mods-ask .ask-text { margin: 8px 0 0; color: var(--text-2); font-size: 12.5px; }
+  #mods-ask .ask-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  #mods-ask button.ask-choice { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 8px;
+    background: var(--panel-hi); border: 1px solid var(--line); color: var(--text); font-weight: 400; }
+  #mods-ask button.ask-choice b { font-size: 13px; font-weight: 600; }
+  #mods-ask button.ask-choice span { color: var(--text-2); font-size: 12px; line-height: 1.45; }
+  #mods-ask button.ask-choice:hover:not(:disabled), #mods-ask button.ask-choice:focus-visible { background: var(--panel-hi); border-color: var(--accent); outline: none; }
+  #mods-ask .actions { margin-top: 14px; justify-content: flex-end; }
+  /* Remove is the button that loses something: filled red, never the default. */
+  #mods-ask .actions button.danger { background: #c97a7a; color: #0d0f15; border: 0; }
+  #mods-ask .actions button.danger:hover:not(:disabled) { background: #d99494; }
+  @media (max-width: 520px) { #mods-ask .ask-choices { grid-template-columns: 1fr; } }
 
   /* Find Mods: the most used tags, as filters over the search box. */
   .tagbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
@@ -442,6 +484,7 @@
   <div class="panel">
     <div class="row"><span class="name">Game assets</span><span class="state" id="s-client">—</span></div>
     <div class="row"><span class="name">Client folders</span><span class="state" id="s-client-folders">—</span></div>
+    <div class="row"><span class="name">Client</span><span class="state" id="s-client-kind">—</span></div>
     <div class="row actions" style="padding-top:10px">
       <button id="change-client" class="ghost">Change asset locations…</button>
     </div>
@@ -449,6 +492,8 @@
        Offline only references them, so nothing is duplicated. The System and AI
        folders are not chosen separately: they come from the folder that holds
        data.grf.</p>
+    <p class="note"><b>Client</b> is which game's files these are (kRO, iRO and so on), read from
+       data.grf. A mod made for another client's files is not applied, and says so in the Mods tab.</p>
   </div>
   </div>
 
@@ -721,6 +766,15 @@
   </div>
 
   <div class="tabpanel" id="panel-mods" role="tabpanel" aria-labelledby="tab-mods" hidden>
+  <!-- One question at a time for the Mods tab: askInWindow fills it. -->
+  <dialog id="mods-ask" aria-labelledby="mods-ask-title">
+    <form method="dialog">
+      <h3 id="mods-ask-title"></h3>
+      <p class="ask-text" id="mods-ask-text" hidden></p>
+      <div class="ask-choices" id="mods-ask-choices" hidden></div>
+      <div class="actions" id="mods-ask-buttons"></div>
+    </form>
+  </dialog>
   <!-- Pinned under the section tabs while the lists scroll: the three lists on
        the left, the ways to add a mod by hand on the right. Apply lives in the
        bar at the bottom, with what it is waiting for. -->
@@ -889,6 +943,69 @@
     <p class="note" id="ram-note"></p>
   </div>
 
+  <h2 style="margin-top:18px">Loot</h2>
+  <div class="panel" id="loot-panel">
+    <label>
+      <span>Fake players loot</span>
+      <input type="checkbox" id="population_loot_enable" style="accent-color: var(--accent); flex: none" />
+      <span class="val" style="width:auto; color: var(--dim)">they pick up what their kills drop</span>
+    </label>
+    <div id="loot-settings">
+      <label style="margin-top:6px">
+        <span>Picks up common drops</span>
+        <input type="range" id="population_loot_common_pickup_pct" min="0" max="100" step="5">
+        <span class="val" id="v-population_loot_common_pickup_pct"></span>
+      </label>
+      <label style="margin-top:6px">
+        <span>Rare from</span>
+        <input type="range" id="population_loot_rare_pct" min="0" max="5" step="0.05">
+        <span class="val" id="v-population_loot_rare_pct"></span>
+      </label>
+      <label style="margin-top:6px">
+        <span>Picks up rare drops</span>
+        <input type="range" id="population_loot_rare_pickup_pct" min="50" max="100" step="1">
+        <span class="val" id="v-population_loot_rare_pickup_pct"></span>
+      </label>
+      <label style="margin-top:6px">
+        <span>Forgets after a fight</span>
+        <input type="range" id="population_loot_forget_pct" min="0" max="100" step="5">
+        <span class="val" id="v-population_loot_forget_pct"></span>
+      </label>
+      <label style="margin-top:6px">
+        <span>Rare mid-fight above</span>
+        <input type="range" id="population_loot_hp_abort_pct" min="0" max="90" step="5">
+        <span class="val" id="v-population_loot_hp_abort_pct"></span>
+      </label>
+      <label style="margin-top:6px">
+        <span>Gives up after</span>
+        <input type="range" id="population_loot_timeout_s" min="5" max="60" step="5">
+        <span class="val" id="v-population_loot_timeout_s"></span>
+      </label>
+      <label style="margin-top:6px">
+        <span>Looks around</span>
+        <input type="range" id="population_loot_radius" min="3" max="20" step="1">
+        <span class="val" id="v-population_loot_radius"></span>
+      </label>
+    </div>
+    <p class="note" id="loot-note"></p>
+    <div class="actions" style="margin-top:10px">
+      <button id="save-population-loot" class="ghost">Apply</button>
+    </div>
+    <p class="note">Without this, fake players leave every drop on the ground. With it, they walk
+       over and pick up what their own kills dropped, the way a player would. For each drop
+       they decide once whether they want it: <b>Picks up common drops</b> is how often they
+       bother with an ordinary one. A drop is rare when it is a card, or the monster drops it
+       at most as often as <b>Rare from</b>; those they want <b>Picks up rare drops</b> of the
+       time, very likely but not certain. Rare drops are fetched straight away, even while
+       being hit, as long as their HP is above <b>Rare mid-fight above</b>. Everything else
+       waits until nothing is attacking them, and when the fight is over they forget it with
+       the <b>Forgets after a fight</b> chance. A drop they have not reached after <b>Gives up
+       after</b> is left behind (rare ones get twice as long). <b>Looks around</b> is how many
+       cells away they notice their drops. Companions in your party are not affected: what
+       they kill is yours to pick up. Fake players' bags are not saved, so what they loot is
+       gone when they leave.</p>
+  </div>
+
   <h2 style="margin-top:18px">Play with an AI agent</h2>
   <div class="panel">
     <label>
@@ -931,6 +1048,27 @@
          From a terminal: <code id="agent-command"></code> <code>state</code>. Point the agent at
          <b>the guide</b> (AGENT.md) before it starts: it says how to play and what not to do.</p>
     </div>
+    <label style="margin-top:10px">
+      <span>Map editor</span>
+      <input type="checkbox" id="map_editor_agent" style="accent-color: var(--accent); flex: none" />
+      <span class="val" style="width:auto; color: var(--dim)">let an AI agent use the map editor</span>
+    </label>
+    <p class="note">The map editor has its own MCP route on the same address, <code>/mcp/map</code>,
+       for an agent that builds maps rather than plays. Its tools are the editor's
+       (<code>map_open</code>, <code>terrain_brush</code>, <code>view_screenshot</code>, &hellip;) and its token is its
+       own. It is separate from the AI agent above: either can be on without the other. It opens
+       when you open the map editor; turning it off here closes it and forgets the token, and
+       opening the editor then leaves it closed.</p>
+    <div id="agent-map" hidden>
+      <pre id="agent-map-claude" style="white-space: pre-wrap; word-break: break-all; font-size: 11px; margin: 4px 0"></pre>
+      <div class="actions" style="margin-top:4px">
+        <button id="agent-copy-map" class="ghost">Copy</button>
+      </div>
+      <p class="note">Other MCP clients: <code id="agent-map-mcp"></code>, with the token in
+         <code id="agent-map-file"></code>. Point the agent at <code>AGENTS.md</code> beside it.</p>
+    </div>
+    <p class="note" id="agent-map-setup" hidden>Open the map editor once (Settings &rarr; Tools &rarr; Map editor)
+       and the command to connect an agent to it appears here.</p>
     <p class="note" id="agent-status"></p>
   </div>
   </div>
@@ -1191,7 +1329,26 @@ async function chooseEra(pre) {
     const s = await invoke('get_settings');
     const out = await invoke('save_settings', { settings: { ...s, prerenewal: pre } });
     clearInterval(ticking);
-    show(`Switched to ${label} in ${elapsed()}s. Log in again — your character list is the ${label} one.`);
+    // The open game keeps the item and sign text it already loaded, so logging
+    // in again is not enough: it has to be reopened to show the new era.
+    const gameOpen = await invoke('game_status').then(g => g.open, () => false);
+    const afterwards = `Log in again — your character list is the ${label} one.`;
+    show(`Switched to ${label} in ${elapsed()}s. ` + (gameOpen
+      ? `The open game still shows the old era's items and signs. ${afterwards}`
+      : afterwards));
+    if (gameOpen) {
+      // Offered here rather than described: nobody should have to know that
+      // the game window can be closed on its own and the setting stays.
+      const reopen = document.createElement('button');
+      reopen.id = 'era-reopen';
+      reopen.textContent = 'Reopen game';
+      reopen.onclick = async () => {
+        reopen.disabled = true; reopen.textContent = 'Opening…';
+        try { await invoke('open_game'); reopen.textContent = 'Reopened'; }
+        catch (e) { reopen.disabled = false; reopen.textContent = 'Reopen game'; log('error: ' + e); }
+      };
+      status.append(reopen);
+    }
     // Internet hosting credentials are per era, so an era that was never
     // prepared for friends starts in Local mode. The supervisor says so; say
     // it here as well, because the player asked for a different era, not for
@@ -1329,6 +1486,8 @@ async function refresh() {
   paint($('s-client-folders'), !!client.data_grf,
         client.data_grf ? found.map(([name, dir]) => (dir ? name : `no ${name}`)).join(' · ') : '—');
   $('s-client-folders').title = found.filter(([, dir]) => dir).map(([, dir]) => dir).join('\n');
+  const kind = client.data_grf ? await invoke('client_detected').catch(() => null) : null;
+  paint($('s-client-kind'), !!(kind && kind.client), kind ? kind.text : '—');
 
   const assets = await invoke('assets_ready');
   paint($('s-assets'), assets, assets ? 'ready' : 'stopped');
@@ -1536,6 +1695,21 @@ function refreshPopulation() {
   $('population_companion_hire').disabled = !on;
   $('companion-fee').hidden = !hired;
   $('population_skill_weapon_check').disabled = !on;
+  const loot = $('population_loot_enable').checked;
+  $('population_loot_enable').disabled = !on;
+  for (const id of LOOT_FIELDS) $(id).disabled = !on || !loot;
+  $('loot-settings').style.opacity = on && loot ? '' : '0.5';
+  const rare = Number($('population_loot_rare_pct').value);
+  $('v-population_loot_common_pickup_pct').textContent = `${$('population_loot_common_pickup_pct').value}% of the time`;
+  $('v-population_loot_rare_pct').textContent = rare > 0 ? `cards, and drops of ${rare}% or less` : 'cards only';
+  $('v-population_loot_rare_pickup_pct').textContent = `${$('population_loot_rare_pickup_pct').value}% of the time`;
+  $('v-population_loot_forget_pct').textContent = `${$('population_loot_forget_pct').value}% chance`;
+  $('v-population_loot_hp_abort_pct').textContent = Number($('population_loot_hp_abort_pct').value) > 0
+    ? `${$('population_loot_hp_abort_pct').value}% HP` : 'any HP';
+  $('v-population_loot_timeout_s').textContent = `${$('population_loot_timeout_s').value} s`;
+  $('v-population_loot_radius').textContent = `${$('population_loot_radius').value} cells`;
+  $('loot-note').textContent = !on ? 'Fake players are off.'
+    : loot ? 'On: fake players pick up their drops.' : 'Off: drops stay on the ground until they expire.';
   // The trade-off spelled out where the box is ticked: what turning it on
   // costs, and how to get the skills back.
   $('weapon-check-note').textContent = $('population_skill_weapon_check').checked
@@ -1602,6 +1776,12 @@ $('population_companion_limit').addEventListener('input', refreshPopulation);
 for (const area of POPULATION_AREAS) $(`population_${area}_pct`).addEventListener('input', refreshPopulation);
 $('population_companion_hire').addEventListener('change', refreshPopulation);
 $('population_skill_weapon_check').addEventListener('change', refreshPopulation);
+// Every loot slider, besides the on/off box: disabled together, saved together.
+const LOOT_FIELDS = ['population_loot_common_pickup_pct', 'population_loot_rare_pct',
+  'population_loot_rare_pickup_pct', 'population_loot_forget_pct', 'population_loot_hp_abort_pct',
+  'population_loot_timeout_s', 'population_loot_radius'];
+$('population_loot_enable').addEventListener('change', refreshPopulation);
+for (const id of LOOT_FIELDS) $(id).addEventListener('input', refreshPopulation);
 $('population_companion_fee_zeny').addEventListener('input', refreshPopulation);
 $('vm_ram_mib').addEventListener('input', refreshPopulation);
 
@@ -1617,6 +1797,8 @@ $('save-population').onclick = async () => {
   settings.population_companion_fee_item = Number($('population_companion_fee_item').value) || 0;
   settings.population_companion_fee_item_amount = Number($('population_companion_fee_item_amount').value) || 0;
   settings.population_skill_weapon_check = $('population_skill_weapon_check').checked;
+  settings.population_loot_enable = $('population_loot_enable').checked;
+  for (const id of LOOT_FIELDS) settings[id] = Number($(id).value);
   // Machine-level, so it lives in client.json beside the client paths and the
   // LAN switch rather than in settings.json. Written first: save_settings
   // restarts the stack, which is what makes the new ceiling take effect.
@@ -1627,6 +1809,9 @@ $('save-population').onclick = async () => {
   $('save-population').disabled = false;
   refresh();
 };
+
+// The Loot section saves with the rest of Population: one settings write, one restart.
+$('save-population-loot').onclick = () => $('save-population').onclick();
 
 // Everything a maintainer would otherwise have to talk someone through
 // finding, on the clipboard, because the destination is a text box on GitHub
@@ -1796,6 +1981,11 @@ function modBadges(m, pendingNames) {
   const kindLabel = { skin: 'UI skin', cursor: 'Cursor pack' }[m.kind];
   if (kindLabel) add(kindLabel, '', 'One at a time');
   if (m.source) add('GitHub', 'gh', `From github.com/${m.source.repo}`);
+  else if (modLocalCopies[m.name] && !m.bundled) {
+    const repo = modLocalCopies[m.name].repo;
+    add('Your own copy', '', `${m.name} is published on GitHub (github.com/${repo}), but this copy didn't come from there, ` +
+      'so it is not checked for updates. To get its releases, install it from Find Mods: that replaces this folder, so keep a copy of your own work first.');
+  }
   const u = modUpdate(m.name);
   if (u) add(`Update ${u.installed} → ${u.latest}`, 'upd');
   if (m.refused) add('Not loaded', 'bad');
@@ -2028,14 +2218,39 @@ function modRow(m, kindBoxes, pendingNames) {
   }
 
   const actions = el('div', 'mactions');
+  // What the mod keeps in the mod store, for every player. Any mod can have
+  // some, bundled or not, so every mod gets the button.
+  const reset = el('button', '', 'Reset data…');
+  reset.type = 'button';
+  reset.onclick = async () => {
+    const sure = await askInWindow({
+      title: `Reset ${m.name}'s data?`,
+      text: 'Everything this mod has saved for itself is deleted: its own records, and what it kept for every account and character. The game stops while it runs, and a backup is saved first. Characters and items are not touched.',
+      buttons: [{ value: 'cancel', label: 'Cancel', focus: true }, { value: 'reset', label: 'Reset data', className: 'danger' }],
+    });
+    if (!sure) return;
+    reset.disabled = true;
+    try { log(await invoke('mod_data_reset', { name: m.name })); }
+    catch (e) { log('error: ' + e); }
+    reset.disabled = false;
+  };
+  actions.append(reset);
   // Only what the player installed: a mod that ships with the app lives in
   // the app itself and can only be switched off.
   if (!m.bundled) {
     const remove = el('button', 'danger', 'Remove…');
     remove.type = 'button';
     remove.onclick = async () => {
+      // Asked here, Cancel first; remove_mod then skips its native box. The
+      // text is the one that box shows (REMOVE_DETAIL, electron/main.js).
+      const sure = await askInWindow({
+        title: `Remove ${m.name}?`,
+        text: 'Its folder goes to the trash, and its on/off choice and options are forgotten. Characters and items are not touched.',
+        buttons: [{ value: 'cancel', label: 'Cancel', focus: true }, { value: 'remove', label: 'Remove', className: 'danger' }],
+      });
+      if (!sure) return;
       remove.disabled = true;
-      try { log(await invoke('remove_mod', { name: m.name })); }
+      try { log(await invoke('remove_mod', { name: m.name, asked: true })); }
       catch (e) { log('error: ' + e); }
       await refreshMods();
     };
@@ -2088,11 +2303,97 @@ function renderModList() {
   paintModsStatus();
 }
 
+// A question for the Mods tab, asked in this window: a title, a line of text,
+// choice cards and buttons, each { value, label } (a choice also takes
+// `detail`, a button `className` and `focus`). Resolves to the value picked,
+// or null for Cancel or Escape. Never for an update from GitHub: that one
+// stays a native box (installFromSource, electron/main.js).
+function askInWindow({ title, text = '', choices = [], buttons = [] }) {
+  const dialog = $('mods-ask');
+  $('mods-ask-title').textContent = title;
+  $('mods-ask-text').textContent = text;
+  $('mods-ask-text').hidden = !text;
+  const cards = $('mods-ask-choices');
+  cards.replaceChildren();
+  cards.hidden = !choices.length;
+  for (const c of choices) {
+    const card = el('button', 'ask-choice');
+    card.value = c.value;
+    card.append(el('b', '', c.label), el('span', '', c.detail || ''));
+    cards.append(card);
+  }
+  const row = $('mods-ask-buttons');
+  row.replaceChildren();
+  let first = cards.firstChild;
+  for (const b of buttons) {
+    const button = el('button', b.className || 'ghost', b.label);
+    button.value = b.value;
+    row.append(button);
+    if (b.focus) first = button;
+  }
+  return new Promise(resolve => {
+    dialog.onclose = () => resolve(dialog.returnValue && dialog.returnValue !== 'cancel' ? dialog.returnValue : null);
+    dialog.returnValue = '';
+    dialog.showModal();
+    if (first) first.focus();
+  });
+}
+
+// Where a mod comes from when added by hand. macOS's own open dialog takes a
+// folder or a file at once, so only elsewhere is it asked first.
+async function askModSource(title) {
+  if (/Mac/.test(navigator.userAgent)) return 'any';
+  return askInWindow({
+    title,
+    choices: [
+      { value: 'folder', label: 'A folder…', detail: 'A mod you unpacked yourself: the folder with its mod.json.' },
+      { value: 'archive', label: 'A .zip or .rar…', detail: 'The file as you downloaded it; it is unpacked for you.' },
+    ],
+    buttons: [{ value: 'cancel', label: 'Cancel' }],
+  });
+}
+
+// A release's notes as text: `##`/`###` headings and `-`/`*` bullets get a
+// class by their first characters, everything else is shown as written, and
+// none of it is ever HTML. A few lines show; "Show all" opens the rest, and
+// notes that fit get no button.
+function notesBlock(text, title = "What's new") {
+  const box = el('div', 'notes clip');
+  const body = el('div', 'body');
+  for (const line of String(text).trim().split(/\r?\n/)) {
+    if (/^##\s/.test(line)) body.append(el('p', 'h2', line.replace(/^##\s*/, '')));
+    else if (/^###\s/.test(line)) body.append(el('p', 'h3', line.replace(/^###\s*/, '')));
+    else if (/^[-*]\s/.test(line)) body.append(el('p', 'li', line.replace(/^[-*]\s*/, '')));
+    else body.append(el('p', '', line || ' '));
+  }
+  const more = el('button', 'more', '▸ Show all');
+  more.type = 'button';
+  more.onclick = () => {
+    const open = !box.classList.toggle('clip');
+    more.textContent = open ? '▾ Show less' : '▸ Show all';
+  };
+  // Measured once the block has a size: the Updates list is often drawn while
+  // its tab is hidden. The whole text against the clipped height (6.2em).
+  const fit = () => {
+    if (!body.offsetParent) return;
+    const short = body.scrollHeight <= parseFloat(getComputedStyle(body).fontSize) * 6.2 + 2;
+    more.hidden = short;
+    if (short) box.classList.remove('clip');
+    else if (more.textContent.startsWith('▸')) box.classList.add('clip');
+  };
+  new ResizeObserver(fit).observe(body);
+  box.append(el('h5', '', title), body, more);
+  return box;
+}
+
 // Updates for mods installed from their author's own repository. Looked up
 // when this window opens (for the number on the Mods tab), when the Mods tab
 // opens and when asked -- never in the background -- and only ever offered:
 // the player clicks Update, sees the release, and confirms.
 let modUpdates = {};
+// Installed copies of mods the list publishes from GitHub, that didn't come
+// from GitHub: name -> { repo }. Shown, never checked for updates.
+let modLocalCopies = {};
 let checkingUpdates = null;
 let modsCheckedAt = null;
 
@@ -2135,6 +2436,9 @@ function paintUpdates() {
     const head = el('div', 'mhead');
     head.append(el('span', 'mname', m.name), el('span', 'pill upd', `${u.installed} → ${u.latest}`));
     text.append(head, el('div', 'mone', m.source ? `from github.com/${m.source.repo}` : 'from the mod list'));
+    // What the update changed, here rather than in the Update… box: the
+    // GitHub releases since the installed one, or the mod's CHANGELOG.md.
+    if (u.notes && u.notes.trim()) text.append(notesBlock(u.notes));
     const acts = el('div', 'acts');
     const button = el('button', '', updateLabel(u));
     button.type = 'button';
@@ -2170,7 +2474,13 @@ async function checkModUpdates(fresh = false) {
     try { results = await invoke('check_mod_updates', { fresh }); }
     finally { checkingUpdates = null; }
     modUpdates = {};
-    for (const u of results) modUpdates[u.name] = u;
+    modLocalCopies = {};
+    // A copy of a GitHub-published mod that didn't come from GitHub isn't an
+    // update result: it was never checked, so it mustn't read as up to date.
+    for (const u of results) {
+      if (u.localCopy) modLocalCopies[u.name] = u;
+      else modUpdates[u.name] = u;
+    }
     modsCheckedAt = new Date();
     // A mod with an update moves to "Needs attention", and Find Mods
     // labels it "Update".
@@ -2560,6 +2870,7 @@ function detailFor(mod) {
   const needs = mod.requires.mods.filter(Boolean);
   if (needs.length) facts.append(el('dt', '', 'Needs'), el('dd', '', needs.join(', ') + ', installed and switched on'));
   if (mod.requires.era && mod.requires.era !== 'any') facts.append(el('dt', '', 'Era'), el('dd', '', mod.requires.era));
+  if (mod.requires.client && mod.requires.client.length) facts.append(el('dt', '', 'Client'), el('dd', '', mod.requires.client.join(', ')));
   if (mod.homepage) {
     const dd = el('dd');
     dd.append(GITHUB_PAGE.test(mod.homepage) ? outLink(mod.homepage, {}, mod.homepage) : mod.homepage);
@@ -2728,8 +3039,14 @@ if (!$('panel-mods').hidden && modsSub === 'find') loadCatalogue();
   if (window.ResizeObserver) new ResizeObserver(measure).observe(bar);
 }
 
-$('mods-install').onclick = () => withButton('mods-install', 'Installing…', 'Add mod from folder…', async () => {
-  const msg = await invoke('install_mod');
+// Folder or archive is asked here first (askModSource); the open dialog after
+// it is the system's.
+$('mods-install').onclick = async () => {
+  const kind = await askModSource('Install a mod from…');
+  if (kind) await installModFromDisk(kind);
+};
+const installModFromDisk = kind => withButton('mods-install', 'Installing…', 'Add mod from folder…', async () => {
+  const msg = await invoke('install_mod', kind === 'any' ? {} : { kind });
   // A reinstall over a mod already here replaces files the running server
   // still has the old copy of, as an update from Find Mods does.
   const name = /^Installed ([A-Za-z0-9_.-]+)\./.exec(String(msg || ''))?.[1];
@@ -2738,8 +3055,12 @@ $('mods-install').onclick = () => withButton('mods-install', 'Installing…', 'A
   return msg;
 });
 
-$('mods-install-skin').onclick = () => withButton('mods-install-skin', 'Installing…', 'Add UI skin…', async () => {
-  const msg = await invoke('install_skin');
+$('mods-install-skin').onclick = async () => {
+  const kind = await askModSource('Install a UI skin or cursor pack from…');
+  if (kind) await installSkinFromDisk(kind);
+};
+const installSkinFromDisk = kind => withButton('mods-install-skin', 'Installing…', 'Add UI skin…', async () => {
+  const msg = await invoke('install_skin', kind === 'any' ? {} : { kind });
   await refreshMods();
   // The skin installer switches its mod on, and any other of its kind off,
   // and rebuilds the client files itself -- nothing there waits for Apply.
@@ -3068,6 +3389,15 @@ invoke('get_settings').then(s => {
   $('population_companion_fee_item_amount').value = s.population_companion_fee_item_amount ?? 0;
   $('population_companion_limit').value = s.population_companion_limit ?? 4;
   $('population_skill_weapon_check').checked = s.population_skill_weapon_check === true;
+  $('population_loot_enable').checked = s.population_loot_enable === true;
+  // A save from before the loot settings has no keys: the defaults.
+  $('population_loot_common_pickup_pct').value = s.population_loot_common_pickup_pct ?? 70;
+  $('population_loot_rare_pct').value = s.population_loot_rare_pct ?? 1;
+  $('population_loot_rare_pickup_pct').value = s.population_loot_rare_pickup_pct ?? 95;
+  $('population_loot_forget_pct').value = s.population_loot_forget_pct ?? 10;
+  $('population_loot_hp_abort_pct').value = s.population_loot_hp_abort_pct ?? 30;
+  $('population_loot_timeout_s').value = s.population_loot_timeout_s ?? 15;
+  $('population_loot_radius').value = s.population_loot_radius ?? 9;
   refreshPopulation();
 });
 
@@ -3147,6 +3477,15 @@ function paintAgent(a) {
     // Quoted: the folder has spaces in it on every platform.
     $('agent-command').textContent = a.command ? `"${a.command}"` : '';
   }
+  const m = a.mapEditor;
+  $('map_editor_agent').checked = !!a.mapEditorEnabled;
+  $('agent-map').hidden = !m;
+  $('agent-map-setup').hidden = !!m || !a.mapEditorEnabled;
+  if (m) {
+    $('agent-map-claude').textContent = m.claudeCommand || '';
+    $('agent-map-mcp').textContent = m.mcp || '';
+    $('agent-map-file').textContent = m.connection || '';
+  }
   const playing = (a.agents || []).filter(x => x.playing).length;
   $('agent-status').textContent = a.enabled
     ? (playing ? `${playing} of ${a.count || 1} playing now.` : 'Waiting for an agent to connect. Its game window opens when it logs in.')
@@ -3165,6 +3504,15 @@ $('agent_count').addEventListener('change', setAgent);
 $('agent-copy-claude').addEventListener('click', async () => {
   const text = $('agent-claude').textContent;
   if (text) { await invoke('copy_text', { text }); $('agent-status').textContent = 'Copied. Paste each line into a terminal.'; }
+});
+$('map_editor_agent').addEventListener('change', async e => {
+  $('agent-status').textContent = 'Saving…';
+  try { paintAgent(await invoke('map_editor_agent_set', { enabled: e.target.checked })); }
+  catch (err) { $('agent-status').textContent = String(err.message || err); }
+});
+$('agent-copy-map').addEventListener('click', async () => {
+  const text = $('agent-map-claude').textContent;
+  if (text) { await invoke('copy_text', { text }); $('agent-status').textContent = 'Copied. Paste it into a terminal.'; }
 });
 $('agent-open-guide').addEventListener('click', () => invoke('agent_open_guide').catch(e => { $('agent-status').textContent = String(e.message || e); }));
 $('agent-replace').addEventListener('click', async () => {

@@ -9,6 +9,7 @@
 #include "../../population_engine.hpp"
 #include "../config/population_yaml_types.hpp"
 #include "../core/population_engine_core.hpp"
+#include "population_shell_loot.hpp"
 #include "population_shell_runtime.hpp"
 
 #include <algorithm>
@@ -41,6 +42,7 @@
 #include "../../skill.hpp"
 #include "../../status.hpp"
 #include "../../unit.hpp"
+#include "../strategy/population_strategy.hpp" // RAGNAROKMAC (companion strategies)
 
 using namespace rathena;
 
@@ -203,6 +205,9 @@ static bool population_shell_pick_sphere_chain_skill(map_session_data *sd, uint1
 	// unconfigured companion behaves exactly as before.
 	auto pick = [&](uint16 id, uint16 lv) {
 		if (!population_shell_skill_selected(sd, id))
+			return false;
+		// RAGNAROKMAC (companion strategies): Ban: and Rotation: false bind the chain as well.
+		if (!population_strategy_rotation_allows(sd, map_id2bl(sd->pop.target_id), id))
 			return false;
 		if (!skill_isNotOk(id, *sd) && sd->battle_status.sp >= static_cast<uint32>(skill_get_sp(id, lv))) {
 			out_id = id; out_lv = lv; return true;
@@ -389,6 +394,16 @@ static bool pop_ally_skill_refused(const map_session_data *shell, const map_sess
 		return shell != ally && battle_check_target(shell, ally, BCT_PARTY) <= 0;
 	case WL_WHITEIMPRISON: // mage/whiteimprison.cpp: the caster or an enemy, never an ally
 		return shell != ally;
+	// RAGNAROKMAC: skill.cpp, skill_castend_nodamage_id -- on the undead, by race or by an armour's
+	// element (Evil Druid card), these turn into attacks, and on an ally they fail. The Priest kept
+	// healing the most hurt member, an undead-armoured one, losing every cast; Sanctuary neither
+	// heals nor hurts such an ally.
+	case AL_HEAL:
+	case AB_HIGHNESSHEAL:
+	case ALL_RESURRECTION:
+	case PR_ASPERSIO:
+	case PR_SANCTUARY:
+		return battle_check_undead(ally->battle_status.race, ally->battle_status.def_ele) != 0;
 	default:
 		return false;
 	}
@@ -454,6 +469,9 @@ static int32 pop_dead_party_ally_scan_cb(block_list *bl, va_list ap)
 	PopDeadAllySearchCtx *ctx = va_arg(ap, PopDeadAllySearchCtx *);
 	if (!pop_is_party_ally(ctx->shell, ally) || !ally->state.active ||
 		ally->state.warping || !status_isdead(*ally))
+		return 0;
+	// RAGNAROKMAC: Resurrection fails on an undead-armoured ally (pop_ally_skill_refused).
+	if (battle_check_undead(ally->battle_status.race, ally->battle_status.def_ele))
 		return 0;
 	const int ally_distance = distance_bl(ctx->shell, ally);
 	if (ally_distance < ctx->best_distance) {
@@ -1380,6 +1398,9 @@ static void population_shell_pick_attack_skill(map_session_data *sd, uint16 &ski
 		if (!pop_skill_cond_satisfied(sd, sk, target_bl)) {
 			continue;
 		}
+		// RAGNAROKMAC (companion strategies): Ban: and Rotation: false for this monster.
+		if (!population_strategy_rotation_allows(sd, target_bl, sk.skill_id))
+			continue;
 		if (skill_isNotOk(sk.skill_id, *sd)) {
 			continue;
 		}
@@ -1547,6 +1568,29 @@ static bool pop_row_is_rescue(uint8_t condition)
 }
 
 /// `rescue_only`: just the rows gated on someone's HP (pop_row_is_rescue).
+// RAGNAROKMAC: Sanctuary heals every unit standing in it that is neither undead nor a demon --
+// monsters included (skill.cpp, UNT_SANCTUARY) -- and damages those two. Shells placed it at their
+// own or an ally's feet, where the monsters hitting them stood, and healed the monsters. It is not
+// placed while a monster it would heal is within its 5x5; over undead and demons alone it is.
+static int32 pop_sanctuary_heals_cb(block_list *bl, va_list ap)
+{
+	bool *found = va_arg(ap, bool *);
+	const status_data *st = status_get_status_data(*bl);
+	if (!*found && !status_isdead(*bl) && st != nullptr
+			&& !battle_check_undead(st->race, st->def_ele) && st->race != RC_DEMON)
+		*found = true;
+	return 0;
+}
+
+static bool pop_ground_heal_helps_enemy(const map_session_data *sd, uint16 skill_id, int16 x, int16 y)
+{
+	if (skill_id != PR_SANCTUARY)
+		return false;
+	bool found = false;
+	map_foreachinallarea(pop_sanctuary_heals_cb, sd->m, x - 2, y - 2, x + 2, y + 2, BL_MOB, &found);
+	return found;
+}
+
 static bool population_shell_cast_expired_self_buffs(map_session_data *sd, t_tick current_tick,
 	bool rescue_only = false)
 {
@@ -1570,6 +1614,9 @@ static bool population_shell_cast_expired_self_buffs(map_session_data *sd, t_tic
 
 	for (const PopulationShellBuffSkill &bs : sd->pop.buff_skills) {
 		if (rescue_only && !pop_row_is_rescue(bs.condition))
+			continue;
+		// RAGNAROKMAC (companion strategies): a plan's Allow and Ban bind the engine's own buffs.
+		if (!population_strategy_skill_allowed(sd, map_id2bl(sd->pop.target_id), bs.skill_id))
 			continue;
 		// YAML-authoritative: when the class doesn't have the skill learned
 		// (e.g. Monk/Champion using TF_HIDING), use the YAML level directly.
@@ -1630,6 +1677,8 @@ static bool population_shell_cast_expired_self_buffs(map_session_data *sd, t_tic
 			if (skill_get_inf(bs.skill_id) & (INF_GROUND_SKILL | INF_TRAP_SKILL)) {
 				int16_t tx = sd->x, ty = sd->y;
 				population_shell_resolve_placement(sd, bs.around_range, tx, ty);
+				if (pop_ground_heal_helps_enemy(sd, bs.skill_id, tx, ty)) // RAGNAROKMAC: not on a monster
+					continue;
 				if (unit_skilluse_pos(sd, tx, ty, bs.skill_id, use_lv)) {
 					if (bs.cooldown_ms > 0) sd->pop.skill_next_use_tick[bs.skill_id] = current_tick + static_cast<t_tick>(bs.cooldown_ms);
 					sd->pop.last_cast_skill_id = bs.skill_id;
@@ -1697,6 +1746,8 @@ static bool population_shell_cast_expired_self_buffs(map_session_data *sd, t_tic
 		if (skill_get_inf(bs.skill_id) & (INF_GROUND_SKILL | INF_TRAP_SKILL)) {
 			int16_t tx = sd->x, ty = sd->y;
 			population_shell_resolve_placement(sd, bs.around_range, tx, ty);
+			if (pop_ground_heal_helps_enemy(sd, bs.skill_id, tx, ty)) // RAGNAROKMAC: not on a monster
+				continue;
 			if (unit_skilluse_pos(sd, tx, ty, bs.skill_id, use_lv)) {
 				if (bs.cooldown_ms > 0) sd->pop.skill_next_use_tick[bs.skill_id] = current_tick + static_cast<t_tick>(bs.cooldown_ms);
 				sd->pop.last_cast_skill_id = bs.skill_id;
@@ -1746,6 +1797,9 @@ static bool population_shell_cast_ally_attack_skill(map_session_data *sd, t_tick
 		if (!sk.active || sk.skill_id == 0 || sk.target != 2)
 			continue;
 		if (rescue_only && !pop_row_is_rescue(sk.condition))
+			continue;
+		// RAGNAROKMAC (companion strategies): ... and its heals and ally buffs (no Sanctuary at a boss).
+		if (!population_strategy_skill_allowed(sd, map_id2bl(sd->pop.target_id), sk.skill_id))
 			continue;
 		if (!rescue_only && sk.rate < 10000 && static_cast<uint16_t>(rnd() % 10000) >= sk.rate)
 			continue;
@@ -1798,6 +1852,8 @@ static bool population_shell_cast_ally_attack_skill(map_session_data *sd, t_tick
 		if (skill_get_inf(sk.skill_id) & (INF_GROUND_SKILL | INF_TRAP_SKILL)) {
 			int16_t tx = sd->x, ty = sd->y;
 			population_shell_resolve_placement(sd, sk.around_range, tx, ty);
+			if (pop_ground_heal_helps_enemy(sd, sk.skill_id, tx, ty)) // RAGNAROKMAC: not on a monster
+				continue;
 			used = unit_skilluse_pos(sd, tx, ty, sk.skill_id, sk.skill_lv);
 		} else
 			used = unit_skilluse_id(sd, ally->id, sk.skill_id, sk.skill_lv);
@@ -1842,15 +1898,21 @@ static void population_shell_combat_process_tick(map_session_data *sd, t_tick cu
 
 	const bool flag_attack_only = (sd->pop.flags & PSF::AttackOnly) != 0
 		|| sd->sc.getSCE(SC_BERSERK) != nullptr; // Frenzy: auto-attack only, no skills
-	const bool flag_skill_only  = (sd->pop.flags & PSF::SkillOnly)  != 0;
+	const bool flag_skill_only  = (sd->pop.flags & PSF::SkillOnly)  != 0
+		|| !population_strategy_attack_allowed(sd); // RAGNAROKMAC (companion strategies): Attack: false
 	const PopulationRoleType shell_role = static_cast<PopulationRoleType>(sd->pop.role);
 	const int32 pai = battle_config.population_engine_ai;
 
 	// Party resurrection outranks ordinary role behaviour.  This intentionally
 	// also applies to a priest assigned Tank, Attacker, or None: class capability
 	// determines whether the party can recover from a death.
-	if (!flag_attack_only && do_skills &&
+	// RAGNAROKMAC (companion strategies): unless the companion's plan revives with its own rule.
+	if (!flag_attack_only && do_skills && !population_strategy_handles_resurrection(sd) &&
 		population_shell_try_party_resurrection(sd, current_tick))
+		return;
+
+	// RAGNAROKMAC (companion strategies): then the rules; one that acts ends the turn.
+	if (population_strategy_turn(sd, current_tick, do_skills, flag_attack_only))
 		return;
 
 	// --- PANIC INTERRUPT: emergency hide dodge ---
@@ -1870,7 +1932,9 @@ static void population_shell_combat_process_tick(map_session_data *sd, t_tick cu
 		if (!already_hiding) {
 			const PopulationShellBuffSkill *hide_bs = nullptr;
 			for (const PopulationShellBuffSkill &b : sd->pop.buff_skills) {
-				if (b.skill_id == TF_HIDING || b.skill_id == AS_CLOAKING) {
+				// RAGNAROKMAC (companion strategies): ... and its emergency Hiding.
+				if ((b.skill_id == TF_HIDING || b.skill_id == AS_CLOAKING)
+						&& population_strategy_skill_allowed(sd, map_id2bl(sd->pop.target_id), b.skill_id)) {
 					hide_bs = &b;
 					break;
 				}
@@ -2887,6 +2951,17 @@ int population_engine_combat_per_tick(map_session_data *sd, bool do_skills)
 		return 0;
 	}
 
+	// RAGNAROKMAC (shell looting): an ambient shell goes for its own drops before
+	// picking the next fight. Looting decides itself when combat should win (an
+	// ordinary drop while something attacks the shell); when it claims the tick,
+	// combat sits this one out. Off unless population_engine_loot_enable.
+	// No homunculus turn on this early return: only companions have one, and
+	// looting never runs for them.
+	if (!hired_companion && population_shell_loot_tick(sd, current_tick)) {
+		population_shell_status_checkmapchange(sd);
+		return 0;
+	}
+
 	// Do not drop a chase target just because it is outside client sight yet — that prevented pathing.
 	// Hired companions receive targets from their owner/party-threat controller
 	// and must never fall back to the shell's ambient town/field target scan.
@@ -3061,6 +3136,7 @@ void population_engine_combat_cleanup_player(map_session_data *sd)
 	}
 	pe.session_guard = pe.session_guard + 1;
 	pe.recently_cleared_targets.clear();
+	population_shell_loot_clear(sd);
 }
 
 void do_init_population_engine_combat()

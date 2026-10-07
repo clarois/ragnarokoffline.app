@@ -23,10 +23,9 @@ What changes:
 
 The panel offers this from a Rebirth tab, which appears only for a companion the server reports as
 ready (the roster line carries a rebirth tri-state computed with the same predicate).
-
 --- a/src/custom/atcommand.inc
 +++ b/src/custom/atcommand.inc
-@@ -287,7 +287,33 @@
+@@ -287,9 +287,35 @@
  	// NAME_LENGTH where they are looked up.
  	char cmd[32], param[128];
  	if (!message || !*message || sscanf(message, "%31s %127[^\n]", cmd, param) < 1) {
@@ -61,3 +60,5 @@ ready (the roster line carries a rebirth tri-state computed with the same predic
 +		return 0;
 +	}
  	if (strcmpi(cmd, "list") == 0) {
+ 		// RAGNAROKMAC (Phase 3): "list raw" emits the machine-readable form for
+ 		// the in-game panel (@CP|name|job|level|active|favorite|live). The plain

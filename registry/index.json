@@ -2,6 +2,31 @@
   "version": 1,
   "mods": [
     {
+      "name": "affix-forge",
+      "version": "",
+      "author": "rhewid",
+      "description": "Equipment that monsters drop also comes with 1-4 random affixes from 214 options in four rarity tiers, on the ground or in your inventory. The Affix Smith in Prontera moves, removes and rerolls affixes for zeny and materials you set.",
+      "homepage": "https://github.com/rhewid/affix-forge",
+      "tags": [
+        "drops",
+        "equipment",
+        "npc",
+        "random-options"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "",
+        "app": ""
+      },
+      "source": {
+        "github": "rhewid/affix-forge",
+        "asset": "affix-forge-*.zip"
+      },
+      "files": []
+    },
+    {
       "name": "arpg-equipments",
       "version": "",
       "author": "Iguera",
@@ -24,6 +49,33 @@
       "source": {
         "github": "igueradx/ARPG-Equipments-Mod",
         "asset": "arpg-equipments*.zip"
+      },
+      "files": []
+    },
+    {
+      "name": "auto-hunt",
+      "version": "",
+      "author": "Thomas (v4.1 hunting core) / clarois (v4.2 skill presets, v4.3 auto-teleport)",
+      "description": "AFK hunting from an on-screen panel: attacks the nearest monster, wanders when the area is empty, avoids warps, recovers from getting stuck, auto-heals, and casts a per-character skill preset from your hotbar. Opt-in auto-teleport flies to a fresh spot when nothing is in range. Client-side only - it presses hotbar slots through the app's own client API, so the server still enforces cooldowns, SP, range and targeting. Based on Auto-Hunt v4.1 by Thomas.",
+      "homepage": "https://github.com/clarois/auto-hunt",
+      "tags": [
+        "afk",
+        "auto-hunt",
+        "client",
+        "farming",
+        "hotbar",
+        "quality-of-life"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "",
+        "app": ""
+      },
+      "source": {
+        "github": "clarois/auto-hunt",
+        "asset": "auto-hunt-*.zip"
       },
       "files": []
     },
@@ -233,8 +285,10 @@
         "npc",
         "quality-of-life"
       ],
-      "icon": "",
-      "screenshots": [],
+      "icon": "images/icon.png",
+      "screenshots": [
+        "images/cash-shop.png"
+      ],
       "requires": {
         "mods": [],
         "era": "",
@@ -244,7 +298,45 @@
         "github": "LilArt420/cashshopmod",
         "asset": "cash-shop-extended-*.zip"
       },
-      "files": []
+      "files": [
+        {
+          "path": "images/cash-shop.png",
+          "sha256": "59312e6a6cb77b303652bf51279aaa6e2992c43c90c59d4f3ec79fe6b39bc510"
+        },
+        {
+          "path": "images/icon.png",
+          "sha256": "b31932fe6a704db42b21a4ceee244a31be3bb1f34479277cb22acca19d24354d"
+        }
+      ]
+    },
+    {
+      "name": "droprate-penalty-remover",
+      "version": "1.0.1",
+      "author": "Leptis",
+      "description": "Remove the renewal drop rate penalty based on the level difference between you and the monster. Every monster drops at its full rate, whatever your level.",
+      "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/droprate-penalty-remover",
+      "tags": [
+        "drops",
+        "quality-of-life",
+        "renewal"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "renewal",
+        "app": ">=1.3.0"
+      },
+      "files": [
+        {
+          "path": "db/level_penalty.yml",
+          "sha256": "c5ccd5c1499da0bf0348fe7b2082f7688ae880d71f7944d5cba574755e813f63"
+        },
+        {
+          "path": "mod.json",
+          "sha256": "e6333ffb39131a458f15decbbe3de4688f725a13cc87f07f3fdbaed23a464f4a"
+        }
+      ]
     },
     {
       "name": "exp-card",
@@ -295,6 +387,121 @@
         {
           "path": "npc/exp_card.txt",
           "sha256": "e06490d46d57710a922eb67fffdb3f584e98725fb8bebb1a4264d8b0536bd774"
+        }
+      ]
+    },
+    {
+      "name": "exprate-penalty-remover",
+      "version": "1.0.0",
+      "author": "BlaXun",
+      "description": "Remove the renewal EXP penalty for killing monsters far below or far above your level. The bonus for monsters 3-15 levels above you is kept.",
+      "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/exprate-penalty-remover",
+      "tags": [
+        "experience",
+        "leveling",
+        "quality-of-life",
+        "renewal"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "renewal",
+        "app": ">=1.3.0"
+      },
+      "files": [
+        {
+          "path": "db/level_penalty.yml",
+          "sha256": "f474fbb694a1ce33978c88b88e02c4658e596a9d72d2cb7b8c9f3262f21cfa97"
+        },
+        {
+          "path": "mod.json",
+          "sha256": "8622efccd7bd9a92495e5c6de67fa6e83d0b0ec97c09093d31fc384a3ee93402"
+        }
+      ]
+    },
+    {
+      "name": "friendlier-refine",
+      "version": "1.0.0",
+      "author": "BlaXun",
+      "description": "Refining without the dread. A failed refine no longer destroys your equipment (a setting brings breaking back), and choose from which refine level a failure takes the item down one level instead. Works with the refine window every town blacksmith opens and with the Advanced Refiners Suhnbi (Payon) and Holink (Malangdo, renewal), in renewal and pre-renewal. The success chance of every refine, and how many levels a failure takes off, are rAthena's own values and can be changed by editing renewal/db/refine.yml or pre-renewal/db/refine.yml in the mod's folder (Windows %APPDATA%\\Ragnarok Offline\\state\\mods\\friendlier-refine, macOS ~/Library/Application Support/Ragnarok Offline/state/mods/friendlier-refine, Linux ~/.local/share/Ragnarok Offline/state/mods/friendlier-refine). Rate is the chance of success out of 10000 (6000 is 60%); DowngradeAmount is the levels a failure takes off. While a \"Revert from\" option is ticked, its own file under db/when/ sets the levels lost instead. The server reads these files only when it starts, so restart it after an edit (Apply in Settings, or quit and start the game again). An update of this mod replaces them, so keep a copy of your changes. Refines inside quests are left as they are: Vestri (Mjolnir seal) and the Novice Academy's refining machine use your edited success rates but still break the item on failure, and the Kagerou/Oboro job quest's tool keeps its own chances and always drops one level. The README has the details.",
+      "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/friendlier-refine",
+      "tags": [
+        "equipment",
+        "quality-of-life",
+        "refine"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "any",
+        "app": ">=1.4.3"
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "56c5f62caae4c0f4a588d08eac547d761de4ce05467e8ceb37771c5d7b038235"
+        },
+        {
+          "path": "mod.json",
+          "sha256": "7a70bfbad2f365f72cd8f0ed7608fedef6d7fc2a90930ac263d3a181695d4e6b"
+        },
+        {
+          "path": "npc/functions.txt",
+          "sha256": "82a68458e644d5eea039c24aa50db9ce159458ae1018f7fe6b0e7344b1cfae22"
+        },
+        {
+          "path": "npc/suhnbi.txt",
+          "sha256": "7a9d642e78bc9f513f59a64d20ba0687b2c2f1c61514df4f03ea543e7ea26ade"
+        },
+        {
+          "path": "pre-renewal/db/refine.yml",
+          "sha256": "943ab813796d5963f1c799c9b2346c9e0a55d08e62faa3a80b26959506722d4f"
+        },
+        {
+          "path": "pre-renewal/db/when/allow_break/refine.yml",
+          "sha256": "78a73c600b41f3f075912cbc801bae6e0b27f85912f9570581974f8ae4937575"
+        },
+        {
+          "path": "pre-renewal/db/when/revert_from_05/refine.yml",
+          "sha256": "9f2dd8c19d3c83728cebccd55720779028377e1e09c80b7ce43c16e71030ff20"
+        },
+        {
+          "path": "pre-renewal/db/when/revert_from_07/refine.yml",
+          "sha256": "1eae11661081faf44bda3fae418d512b0a7e432b5654d48fef89a96644d8c5a8"
+        },
+        {
+          "path": "pre-renewal/db/when/revert_from_09/refine.yml",
+          "sha256": "5bf4e0b4d81a2e824abd740545f549e306b5a0331c6c55c704ef8c675e0d7e47"
+        },
+        {
+          "path": "renewal/db/refine.yml",
+          "sha256": "4dbaf83194090c377bb1e5f94e9b6572c2b1c6097d1771115948924b134d3cf7"
+        },
+        {
+          "path": "renewal/db/when/allow_break/refine.yml",
+          "sha256": "8d74a18712066f7fee9affc79c39b2888511d308d0300a01e4538293113469ed"
+        },
+        {
+          "path": "renewal/db/when/revert_from_05/refine.yml",
+          "sha256": "9b9c6f90e2296eff40dcdce7fe5a0f8c73c2cd17daf177a2ec954eb08300e526"
+        },
+        {
+          "path": "renewal/db/when/revert_from_07/refine.yml",
+          "sha256": "2c3b64bd552aff8197a9ea5de6858ad94de7ca93a1e02e8566f61337d68922df"
+        },
+        {
+          "path": "renewal/db/when/revert_from_09/refine.yml",
+          "sha256": "e7b786f58f058fc3960e2526122dbe1a874778b9e95e54470cffca3badbb2f3b"
+        },
+        {
+          "path": "renewal/db/when/revert_from_11/refine.yml",
+          "sha256": "e7b9581e7d1d063a86a36a6288c4704fdc27776b68fba3ecb650ba8d1f5b571d"
+        },
+        {
+          "path": "renewal/npc/holink.txt",
+          "sha256": "cc18a0b7886355ecfb1f083629cf16fe85c098722b14aeede837221c5781bdd8"
         }
       ]
     },
@@ -487,6 +694,58 @@
       ]
     },
     {
+      "name": "quick-move",
+      "version": "",
+      "author": "rhewid",
+      "description": "Quality-of-life item moving: reliable fast double click in NPC shops, plus Ctrl+click to move items between Inventory, Storage, Cart, Equipment, Vending, Trade and Rodex.",
+      "homepage": "https://github.com/rhewid/quick-move",
+      "tags": [
+        "client",
+        "inventory",
+        "quality-of-life",
+        "shop",
+        "storage"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "",
+        "app": ""
+      },
+      "source": {
+        "github": "rhewid/quick-move",
+        "asset": "quick-move-*.zip"
+      },
+      "files": []
+    },
+    {
+      "name": "random-headgear-box",
+      "version": "",
+      "author": "rhewid",
+      "description": "Every monster can drop a Random Headgear Box (0.05% by default, adjustable). Opening one gives a random headgear that nothing in the stock item database drops or sells: 417 in pre-renewal, including Snake Head and Skull Cap, and 1,207 in renewal. Works in both eras.",
+      "homepage": "https://github.com/rhewid/random-headgear-box",
+      "tags": [
+        "drops",
+        "equipment",
+        "headgear",
+        "pre-renewal",
+        "renewal"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "",
+        "app": ""
+      },
+      "source": {
+        "github": "rhewid/random-headgear-box",
+        "asset": "random-headgear-box-*.zip"
+      },
+      "files": []
+    },
+    {
       "name": "refine-matk",
       "version": "1.0.0",
       "author": "BlaXun",
@@ -527,6 +786,37 @@
         {
           "path": "npc/refine_matk.txt",
           "sha256": "0819a593314d4254b1fea0b8d209de0ddab2b0176bed8a8bf0646f266f84a663"
+        }
+      ]
+    },
+    {
+      "name": "royal-nightmare",
+      "version": "",
+      "author": "Lil Art",
+      "description": "A solo challenge in a nightmare version of Prontera, for Base Level 230 and up. Fight through two hordes of the Nightmare Queen's cursed townspeople, then her Death Witches, and finally Demi Freyja, within a 60-minute limit shown on screen. Clearing it opens a reward chest; it can be run again after 8 hours. One player at a time. Renewal only.",
+      "homepage": "https://github.com/LilArt420/royalnightmare",
+      "tags": [
+        "challenge",
+        "endgame",
+        "instance",
+        "mvp",
+        "npc"
+      ],
+      "icon": "images/icon.png",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "renewal",
+        "app": ""
+      },
+      "source": {
+        "github": "LilArt420/royalnightmare",
+        "asset": "royal-nightmare-*.zip"
+      },
+      "files": [
+        {
+          "path": "images/icon.png",
+          "sha256": "680a9d2920038ab63a2e11ce9f7c3c2c2458b327a7b47a5ce0e1ab0d2d15fab1"
         }
       ]
     },

@@ -18,6 +18,7 @@
 #include <common/timer.hpp> // t_tick
 
 #include "population_engine_core.hpp"
+#include "population_shell_hold.hpp" // RAGNAROKMAC
 
 namespace expanded_ai { class ExpandedCondition; }
 
@@ -53,6 +54,19 @@ struct PopulationShellBuffSkill {
 	bool     around_target = false; ///< When true, around_range centres on the enemy (mob_skill_db around5-8); when false (default), on self (around1-4)
 	uint32_t cooldown_ms  = 0;   ///< Per-skill cooldown in ms after a successful cast (0 = no individual cooldown)
 	std::shared_ptr<expanded_ai::ExpandedCondition> expanded; ///< Set iff condition == Expanded; evaluated in lieu of the flat condition fields.
+};
+
+/// RAGNAROKMAC (shell looting): one floor item a shell has decided to pick up.
+/// Kept by block id and re-resolved every tick, never by pointer: the item can
+/// be taken by someone else or expire between ticks.
+struct PopulationShellLootEntry {
+	int32_t  item_bl_id = 0;   ///< flooritem_data block id
+	uint32_t nameid     = 0;   ///< guards against the block id being reused for another item
+	t_tick   ready_at   = 0;   ///< reaction delay: not before this tick
+	t_tick   give_up_at = 0;   ///< after this tick the shell "forgets" it
+	bool     rare       = false;
+	bool     interrupted = false; ///< a fight held it back; rolls the forget chance once the fight is over
+	uint8_t  walk_fails = 0;
 };
 
 /// Population engine shell state (sd->pop). Only meaningful for bots managed by the population engine;
@@ -218,6 +232,7 @@ struct s_population {
 	// RAGNAROKMAC: this mod vendor runs a buying store, not a vending stall.
 	bool vendor_buying = false;
 
+	s_pop_hold hold; ///< RAGNAROKMAC: a script's hold on the shell (shell control API)
 	// --- Party invite auto-accept flag ---
 	bool   accept_party_request = false; ///< When true, bot auto-accepts the next party invite it receives.
 	uint32_t party_request_account = 0; ///< Player who requested this one-shot invitation.
@@ -234,13 +249,29 @@ struct s_population {
 	/// that replaced a per-tick re-warp loop (a shell teleported every 400 ms
 	/// cannot walk, which reads as "the companion stands still").
 	uint16_t placement_fail_streak = 0;
+	/// RAGNAROKMAC (rest): the shell sat down to recover between fights (pop_shell_rest),
+	/// so a companion's follow leaves it sitting while the owner stands still.
+	bool     resting = false;
+	/// RAGNAROKMAC (potions): the shell has its potion stock (pop_shell_stock_potions), given
+	/// on its first combat tick and topped up after each full rest.
+	bool     potions_stocked = false;
+	t_tick   next_potion_tick = 0; ///< no potion before this tick: one a second, not one a tick
 	/// RAGNAROKMAC (growth): last base level pushed to the party window. The stock
 	/// party_send_levelup() routes through intif_party_changemap() to the CHAR
 	/// server, which has no row for a shell and therefore discards it - so a
 	/// companion's level in the party window only ever updated on a map change.
 	/// The growth poll compares against this and re-broadcasts locally instead.
 	int16_t  last_party_level_broadcast = 0;
+	/// RAGNAROKMAC (growth): base level the extra point grant has been paid up to. Set on the
+	/// first growth poll after spawn or recall without paying, so only levels gained from
+	/// then on are paid, and reset down when a rebirth starts the level over.
+	int16_t  points_granted_level = 0;
 	int16_t  companion_emergency_at = 35; ///< emergency/big-heal below this HP%
+	/// RAGNAROKMAC (rest): the companion sits down between fights below this SP% or HP%
+	/// (0 = never) and stands once both are back to companion_rest_until. Set from the
+	/// Companions window (@companion rest) and persisted with the row (v12).
+	int16_t  companion_rest_below   = 30;
+	int16_t  companion_rest_until   = 95;
 	/// RAGNAROKMAC (gear custody): equip positions (EQP_* bits) worn by items the OWNER gave this
 	/// companion, as opposed to the gear it was generated with. Only these come back through
 	/// @companion gear, and only these are kept or handed back across a job advance. Persisted
@@ -254,6 +285,17 @@ struct s_population {
 	bool companion_formation_active = false; ///< True while walking to the shell's assigned idle formation cell.
 	int16_t companion_formation_x = 0; ///< Current formation walk destination.
 	int16_t companion_formation_y = 0; ///< Current formation walk destination.
+
+	// --- RAGNAROKMAC (shell looting, population_shell_loot.cpp) ---
+	bool ambient_quota = false; ///< Only ordinary autosummon shells may reserve a selling return.
+	bool loot_selling_pending = false; ///< Deferred selling departure, rechecked before release.
+	bool loot_collected = false; ///< At least one real pickup this lifetime; starting supplies do not count.
+	bool loot_bag_blocked = false; ///< An owned drop would exceed the loot weight limit.
+	std::vector<PopulationShellLootEntry> loot_queue{};     ///< Items it means to pick up, in no particular order.
+	std::unordered_map<int32_t, t_tick> loot_seen{};      ///< Floor items already decided on (queued or forgotten) -> when to drop the record.
+	t_tick  loot_next_scan    = 0; ///< Rate limit for the floor-item scan.
+	t_tick  loot_next_action  = 0; ///< Short human pause between pickups.
+	int32_t loot_walking_to   = 0; ///< Floor item the shell is walking to (0 = none).
 
 	// --- Skill fail tracking ---
 	t_tick last_skill_fail    = 0;  ///< Tick of last failed skill use.

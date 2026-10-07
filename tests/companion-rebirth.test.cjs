@@ -18,7 +18,7 @@ const { test } = require('node:test');
 const ROOT = path.join(__dirname, '..');
 const ENGINE = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.cpp');
 const HEADER = path.join(ROOT, 'third-party', 'population-engine', 'files', 'src', 'map', 'population_engine.hpp');
-const PATCH = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0017-companion-rebirth.patch');
+const PATCH = path.join(ROOT, 'third-party', 'population-engine', 'patches', '0028-companion-rebirth.patch');
 const PANEL = path.join(ROOT, 'patches', 'CompanionPanel.js');
 const PANEL_HTML = path.join(ROOT, 'patches', 'CompanionPanel.html');
 
@@ -70,7 +70,10 @@ test('the High Novice route exists', () => {
 	for (const [from, toA] of [[4002, 4008], [4003, 4010], [4004, 4012], [4005, 4009], [4006, 4011], [4007, 4013]]) {
 		const hit = rows().find(r => r.from === from && r.toA === toA);
 		assert.ok(hit, `high first job ${from} must advance to ${toA}`);
-		assert.equal(hit.job, 50, `${from} -> ${toA} gates on job 50 like the other rebirth steps`);
+		// These are 1st -> 2nd steps, not rebirths, so they take the SAME gate as the plain
+		// 1st -> 2nd rows: a reborn companion must not sit as a high 1st job up to base 99.
+		assert.equal(hit.base, 40, `${from} -> ${toA} gates on base 40 like the other 1st -> 2nd rows`);
+		assert.equal(hit.job, 0, `${from} -> ${toA} has no job gate, like the other 1st -> 2nd rows`);
 	}
 });
 
@@ -90,8 +93,14 @@ test('the automatic path can never take a rebirth', () => {
 test('the player\'s rebirth reuses the same machinery, with the level reset only for High Novice', () => {
 	assert.match(engine, /static bool pop_companion_apply_job_change\(map_session_data \*sd, uint16_t forced_target\)/,
 		'the change must be shared, not duplicated');
-	assert.match(engine, /if \(next == JOB_NOVICE_HIGH\) \{\s*\n\s*sd->status\.base_level = 1;/,
-		'the High Novice rebirth resets the base level');
+	assert.match(engine, /if \(next == JOB_NOVICE_HIGH\) \{\s*\n\s*pc_resetlvl\(sd, 1\);/,
+		'the High Novice rebirth runs the official resetlvl(1): level, stats and status points');
+	// every OTHER change (straight to transcendent, or any automatic advance) keeps its base
+	// level and stats, and only the new job level starts over.
+	assert.match(engine, /pc_resetlvl\(sd, 1\);\s*\n\t\} else \{\s*\n\s*sd->status\.job_level = 1;\s*\n\s*sd->status\.job_exp = 0;/,
+		'a non-rebirth change resets only the job level, never the stats');
+	assert.ok(!/if \(next == JOB_NOVICE_HIGH\) \{\s*\n\s*sd->status\.base_level = 1;/.test(engine),
+		'hand-assigning the level kept the level-99 build; pc_resetlvl is the only reset now');
 	assert.match(engine, /int population_engine_companion_rebirth\(uint32_t owner_account, const char \*name_, int mode,/,
 		'the rebirth command must exist');
 	assert.match(header, /int population_engine_companion_rebirth\(uint32_t owner_account, const char\* name_, int mode,/,
@@ -102,7 +111,7 @@ test('the player\'s rebirth reuses the same machinery, with the level reset only
 });
 
 test('the at-command verb ships in its own patch', () => {
-	assert.ok(patch.length > 0, '0017-companion-rebirth.patch must exist');
+	assert.ok(patch.length > 0, '0028-companion-rebirth.patch must exist');
 	assert.match(patch, /@companion rebirth <name> novice\|trans/,
 		'the usage string must name both options');
 	assert.match(patch, /population_engine_companion_rebirth\(/,
@@ -111,13 +120,13 @@ test('the at-command verb ships in its own patch', () => {
 });
 
 test('the roster carries rebirth readiness, computed like the homunculus field', () => {
-	assert.match(engine, /hom_enabled(, \w+)*, job_level FROM `cp_companion_persistence`/,
+	assert.match(engine, /hom_enabled(, \w+)*, job_level(, \w+)* FROM `cp_companion_persistence`/,
 		'the SELECT must read job_level (appended, so the earlier fields keep their positions)');
 	assert.match(engine, /int rebirth = -1;/,
 		'-1 must mean "this class cannot be reborn"');
 	assert.match(engine, /else if \(tree_class >= 7 && tree_class <= 20\)\s*\n\s*rebirth = 0;/,
 		'0 must mean "a 2nd class that is not ready yet"');
-	assert.match(engine, /"@CP\|%s\|%s\|%d\|%d\|%d\|%d\|%s\|%d(\|%d){1,2}"/,
+	assert.match(engine, /"@CP\|%s\|%s\|%d\|%d\|%d\|%d\|%s\|%d(\|%d){1,6}"/,
 		'the line carries the pet switch and the fields appended after it');
 });
 

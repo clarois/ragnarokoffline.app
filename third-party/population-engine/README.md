@@ -129,6 +129,34 @@ stack after map changes, and stops stocking before the shell becomes
 overweight. All ammo uses normal `pc_isequip`/`pc_equipitem` validation;
 invalid items are never forced into the equipment slot.
 
+### Companion strategies
+
+`db/population_strategy.yml` gives recruited companions plans: rules per
+monster, job and build, grouped into named strategies that each plan switches
+between (a small state machine per plan). Rules react to events (a monster
+starting a cast, a party-chat line, a party member dying), to the engine's own
+`population_skill_db.yml` conditions, and to a few of their own (status charges,
+the companion's own ground units). They cast, step back, keep their distance,
+hold still, speak and switch strategy. `docs/mods/companion-strategies/` is the
+reference. `examples/mods/companion-roles` (each role at any boss) and
+`examples/mods/companion-tactics` (particular bosses) are worked sets.
+
+It is built to stay out of upstream's way. The whole feature is
+`src/map/population_engine/strategy/`, and the engine calls it from thirteen
+marked places in three of its own files (listed in `docs/COMPANION_DEVELOPMENT.md`).
+It needs no patch against rAthena. It runs for recruited companions, and for
+regular combat shells only through plans a mod marks `For: shells` or `For: all`.
+The table ships empty, and every entry point returns at once when no rules are
+loaded, so with no mod the engine behaves exactly as before. Decisions are
+deterministic: no `rnd()` in the rule path.
+
+Two things it changes in how a companion casts, both only for rules:
+
+- A rule never casts a skill the shell has not learned. The rotation's
+  rows may.
+- A combo step (Chain Combo, Combo Finish, ...) may be cast during the previous
+  step's after-cast delay, which is when rAthena accepts it.
+
 ### Appearance, names, and ambient chat
 
 Hair and clothes now use rAthena's client-supported palette constants instead
@@ -214,6 +242,103 @@ engine. It now skips shells whose map holds no real player. A shell standing
 still on an empty map is indistinguishable from one wandering there, and it
 starts moving again the moment somebody arrives.
 
+### Shells pick up their loot
+
+Upstream shells never pick anything up: with `item_auto_get` off, as it is by
+default, every kill leaves its drops lying until they expire, which no real
+player does. `population_engine_loot_enable` (off by default; Settings ->
+Population -> Loot, which sets every knob below) lets an ambient shell walk over
+and take the drops of its own kills, those it holds first loot priority on,
+through stock `pc_takeitem`, so the client sees the pickup and `picklog` records
+it under the shell's char_id (95000000 and up). The logic is in
+`runtime/population_shell_loot.cpp`, run from the combat tick before target
+selection; `patches/0026-shell-looting.patch` registers the settings.
+
+It loots the way a player does. Each drop is decided once, when the shell
+notices it:
+
+- **Rare drops are very likely, not certain.** A card, or a drop whose base
+  rate in the monster's table is at most `population_engine_loot_rare_rate`
+  (per 10000, default 100 = 1%), is wanted with
+  `population_engine_loot_rare_pickup_pct` chance (default 95).
+- **Common drops at a base rate.** Anything else is wanted with
+  `population_engine_loot_common_pickup_pct` chance (default 70); the rest it
+  walks past.
+
+And then fetched with a player's priorities:
+
+- **Rare first.** A rare drop is fetched even while monsters attack the shell,
+  unless its HP is below `population_engine_loot_hp_abort_pct` (default 30).
+- **Fight first, otherwise.** A common drop waits until nothing is attacking or
+  targeting the shell; a hit on the way there sends it back to the fight. A
+  drop a fight held back is forgotten with `population_engine_loot_forget_pct`
+  chance (default 10) once the fight is over.
+- **Not forever.** A drop not reached within
+  `population_engine_loot_timeout_ms` (default 15000; twice that for rare ones)
+  is given up.
+- A short reaction delay before going for a fresh drop, and a pause between
+  pickups, so it does not vacuum the screen in one frame.
+
+It looks `population_engine_loot_radius` cells (default 9) around itself.
+Recruited companions are left out: their loot priority already belongs to their
+owner (0003). The shell's inventory is runtime-only, so what it picks up is gone
+when it despawns; a pickup that fails (full bag) gives the item up.
+
+**Weight.** A shell stops looting at
+rAthena's first overweight step (`natural_heal_weight_rate`, 50% pre-renewal and
+70% renewal), with the same cap and the same unbonused carry limit as the ammo
+stock. Without that it would loot on to 90%, where `Weight90` stops it attacking
+and using skills, and a field would fill with shells standing still. A drop
+that would take it past the cap is left on the ground, as a player with a full
+bag would leave it.
+
+**Selling trips.** With looting enabled, ordinary ambient shells that have
+successfully picked something up leave with a teleport effect when their bag
+is nearly full: 90% of the loot weight cap, at most one free inventory slot,
+or an owned drop that would exceed the cap. They wait until not being attacked
+or casting. The population timer checks existing bags even outside the player's
+view, on maps containing a real player; combat and floor-item searches stay
+proximity-limited. Starting gear and ammunition alone never trigger a trip.
+
+A small in-memory snapshot reserves the shell's map/profile population slot
+for a random 2–4 minutes. The normal autosummon pass then returns the same
+name, class, base/job level, sex, hairstyle, colors, mounted appearance and
+worn equipment selections at a valid location on that map. It has a new
+internal id, freshly provisioned supplies and no collected loot. This is a
+simulated selling trip: no NPC sale, zeny payment or market stock is created.
+
+Reservations prevent normal refill during the absence and respect the global
+live-shell limit and spawn budget. When the global cap is below the map quota,
+other profiles on that same map cannot take the reserved slot; other maps can
+still use spare global capacity. A failed spawn retains its reservation for
+retry. Returns wait while the map has no real players; abandonment follows the
+normal grace window and capacity-pressure cleanup. Reduced quotas cancel excess
+returns. Reloading profiles, stopping the engine or disabling looting clears
+the snapshots; nothing survives a server restart. A conflicting online name
+cancels that return. Companions, vendors, manual/script-spawned actors, pending
+recruits, arena shells and script-held shells do not take these trips.
+
+The queue, trigger and deferred-departure checks execute C++ without a game server:
+`python3 tests/diagnostics/verify-shell-returns.py` (requires a C++17 compiler;
+`CXX` can select it). CI runs them alongside the server diagnostics. The callback
+and unloading checks compile verbatim `DIAGNOSTIC-BEGIN` / `DIAGNOSTIC-END`
+regions with server-boundary stubs. Keep each marker pair around its whole
+function; the harness validates the markers without relying on C++ indentation
+or brace placement. For live acceptance,
+observe pickup, departure, the reserved headcount and the same
+appearance returning, including map abandonment and recruitment during looting.
+
+**The log grows faster.** Every pickup is a `P` row in `picklog`, beside the `M`
+row the drop already wrote. rAthena never trims that table, so with a few
+hundred shells looting it gains tens of thousands of rows an hour, which take up
+space on the server's disk. Nothing reads it back except mods that ask for it
+(prontera-vendors' market reads only `V`/`B` rows, by `id`). A long-running
+server that loots can clear old rows from Settings -> Tools -> Database, or with
+`ragnarok-stack sql --write "DELETE FROM picklog WHERE time < NOW() - INTERVAL 7 DAY"`
+while the game is stopped.
+Settings writes all of them (`electron/population-conf.js`, `shellLoot`); a mod
+can still change any of them at runtime with `setbattleflag`.
+
 ### Vendors a mod can add
 
 Upstream places vendors per map with one `VendorPlacement` each, and picks the
@@ -293,6 +418,13 @@ engine's vendors spawn exactly as upstream's do.
   sold-out stall. Its callouts come from `buyer_call` in population_chat.yml.
   Patch 0020 keeps shells' buying stores out of the database, as 0001 does
   for vending.
+- Patches 0029 (vending) and 0030 (buying stores): behind the battle flag
+  `population_engine_list_stalls` (off by default), a shell's stall is also written to
+  `vendings` / `vending_items` / `buyingstores` / `buyingstore_items` like a player's, so a script
+  or mod can search the fake players' shops (the whosell mod switches it on with
+  `setbattleflag`). A shell has no cart_inventory rows, so a vending row's `cartinventory_id` is
+  `0x80000000 | item id`; buying rows already hold the item id. Closing a stall and every sale
+  always clean up, so turning the flag off leaves nothing behind.
 - Patch 0021: a pet egg bought from a shell's stall is created for the buyer
   there and then (`pet_create_egg`), since a stall's eggs are placeholders
   with no pet row and would not hatch; unsold eggs leave nothing behind.
@@ -317,6 +449,110 @@ engine's vendors spawn exactly as upstream's do.
 
 `registry/mods/prontera-vendors` is the worked example (its generator is in
 `registry/tools/prontera-vendors`).
+
+### Shell control for mods
+
+Nine script commands let a mod's NPC script find shells (`population_is_shell`,
+`population_shells`), take one from the AI for a while (`population_hold`,
+`population_unhold`), make or remove one (`population_spawn`,
+`population_despawn`), handle whispers to it (`population_whisper_event`,
+`population_whisper`), and hear when its follow loses someone
+(`population_lost_event`). Everything else a script does with a shell is stock:
+it is a real character, so `unitwalk`, `unittalk`, `emotion`, `unitattack` and
+`unitskilluseid` already work on it.
+
+It is kept out of the engine's own files, so an engine update merges around it:
+
+| | |
+|---|---|
+| `patches/0027-shell-control-api.patch` | the script commands, in rAthena's `src/custom/script.inc` and `script_def.inc` only |
+| `files/src/map/population_engine/runtime/population_shell_control.cpp` | all of the engine side; `population_engine.cpp` includes it, as it does `population_customers.cpp` |
+| `files/src/map/population_engine/population_shell_control.hpp` | its declarations |
+| `files/src/map/population_engine/core/population_shell_hold.hpp` | the per-shell state, one member (`hold`) on `s_population` |
+
+What remains in the engine's own files are one-line hooks, each marked
+`RAGNAROKMAC`: the combat tick, reactive casts, wander sweep, ambient chat and
+name-mention replies skip a held shell (`population_engine_shell_is_held`); the
+whisper handler asks `population_shell_control_whisper` first; the drift check
+and the two map-quota counts skip `sd->pop.hold`; and the combat timer calls
+`population_shell_control_sweep` before its stale sweep.
+
+A hold belongs to the NPC that took it, is bounded (30 minutes at most), and
+ends by itself when it lapses or its NPC is unloaded. The sweep also does the
+part of three stock commands a player's client would: it puts a held shell
+that `pc_setpos` took off the map back on it (`unitwarp`), walks one with an
+attack order into range (`unitattack`), and runs its `pcfollow` in place of
+rAthena's follow timer, which would teleport it onto a target it cannot reach:
+a target that left by a portal is followed into that portal after a short
+pause, and one that left any other way ends the follow and runs the lost
+event. A shell `population_spawn` made is left out of the map quota counts.
+Companions and vendors are never handed out. Nothing changes until a script
+calls one of the commands.
+
+The player-facing reference is [docs/mods/shell-control.md](../../docs/mods/shell-control.md).
+
+### Shells built to their level
+
+Upstream rolled each stat straight from the profile's `Str`..`Luk` range, whatever
+the shell's level, and a profile that declares no ranges got 90-109 in all six. The
+shipped `novice_default`, `combat_pve_low`, `combat_pve_low_transcended`,
+`combat_pve` and `combat_pve_high` declare none, so a level 10 Acolyte had about 100
+in everything.
+
+The rolls are now only the shape of the build (`pop_shell_spend_to_level`, marked
+`RAGNAROKMAC`):
+- every stat starts at 1;
+- the shell gets the points a character of its level has, the stock table plus the
+  transcendent bonus, as `pc_resetstate` gives them;
+- it spends them a point at a time, at the stock cost and within the job's cap, on
+  whichever stat is furthest behind its share of the target.
+
+A stat a profile leaves out is not invested in. A profile that declares none gets its
+job line's build (`pop_shell_job_build`) instead. Points left over stay in
+`status_point`, for a companion's growth to spend. A recalled companion keeps the
+stats saved with it.
+
+Trait stats (`Pow`..`Crt`) work the same way (`pop_shell_spend_traits_to_level`):
+- they start at 0;
+- the shell gets the trait points a character of its level has (none up to level 200,
+  about 4 a level after it, from `get_trait_table_point`);
+- they are spent toward the rolled ranges at the stock cost and within the trait cap.
+
+A trait the profile does not declare stays 0. Only the `companion_fourth_*` profiles
+declare any.
+
+### Shells pay for their skills
+
+Upstream's shells never spent SP, for two reasons:
+
+- `population_engine_spawn_shell` set `sd->state.autocast = 1` on every shell to
+  get past `skill_isNotOk`'s cast-spam check. rAthena treats `autocast` as a
+  card's or item's free skill, so `skill_consume_requirement` set every SP cost
+  to 0, companions included. The flag is no longer set (marked `RAGNAROKMAC`).
+  The spam check it bypassed is off at `skill_amotion_leniency: 0`, rAthena's
+  default, which the app keeps.
+- The immortality guard 0001 puts in `status_damage` refused everything
+  positive for a shell without the `mortal` flag, and a skill's cost arrives
+  there through `status_zap`. `patches/0031-shells-pay-skill-costs.patch`
+  narrows it: an immortal shell still refuses whatever someone else does to it,
+  but its own sourceless SP and AP costs (skills, and the upkeep `status_charge`
+  takes for maintained statuses) go through. Sourceless HP loss is still dropped,
+  since poison and bleeding ticks have no source either.
+
+Shells regenerate SP as players do: `map_addiddb` puts them on rAthena's regen
+list at spawn, and the engine's casting checks (`sp_cost > sp`, the minimum-SP
+floor for buffs) were already in place for when SP runs short.
+
+Shells also carry potions (`pop_shell_stock_potions`): 10 HP and 5 SP potions of
+their level's Tool Dealer kind, from Red Potion and Grape Juice up to White and
+Blue Potions. While needed (the test that stands a resting shell up) and below
+40% HP or 20% SP, `pop_shell_drink` uses one through `pc_useitem`, at most one a
+second, so the item delay and the heal script are the player's own. The use
+animation is sent by the engine (`ZC_USE_ITEM_ACK` to the area), because
+`clif_useitemack` sends nothing for a character without a session. The stock is given on the first combat tick, so vendors never get
+one and a recalled companion gets its restored level's kind, and it is topped
+up when a rest ends at the upper mark. A shell back from a selling trip is
+spawned anew, so it has a fresh stock too.
 
 ## Measured cost
 

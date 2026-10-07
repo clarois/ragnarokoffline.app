@@ -35,7 +35,7 @@ function validate(settings) {
       !(Number.isInteger(settings.agent_count) && settings.agent_count >= 1 && settings.agent_count <= 4)) {
     throw new Error('Cannot read the AI agent setting. Choose how many agents again in Settings.');
   }
-  for (const key of ['agent_play', 'agent_window']) {
+  for (const key of ['agent_play', 'agent_window', 'map_editor_agent']) {
     if (Object.hasOwn(settings, key) && typeof settings[key] !== 'boolean') {
       throw new Error('Cannot read the AI agent setting. Turn it off and on again in Settings.');
     }

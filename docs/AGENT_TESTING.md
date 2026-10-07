@@ -77,7 +77,7 @@ down`:
 | `RAGNAROK_OFFLINE_CHAR_PORT` | 6121 | rAthena char |
 | `RAGNAROK_OFFLINE_MAP_PORT` | 5121 | rAthena map |
 | `RAGNAROK_OFFLINE_WEB_PORT` | 8888 | rAthena web (guild emblems); only the asset server talks to it |
-| `RAGNAROK_OFFLINE_AGENT_PORT` | 7490 | the shell's AI-agent API, when a test copy of the app is run with `--user-data-dir` |
+| `RAGNAROK_OFFLINE_AGENT_PORT` | 7490 | the shell's AI-agent API (the game agent's `/mcp` and the map editor's `/mcp/map`), when a test copy of the app is run with `--user-data-dir` |
 
 ```sh
 export RAGNAROK_OFFLINE_ASSET_PORT=13338 RAGNAROK_OFFLINE_LOGIN_PORT=16900 \
