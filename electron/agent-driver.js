@@ -502,6 +502,26 @@ class AgentDriver {
 				await sleep(800);
 				return { ...result, chat: await this.newChat(), errors: this.newErrors() };
 			},
+			// Take off a worn item: `unequip <itemId>`. Uses the equipment window's own
+			// onUnEquip (CZ.REQ_TAKEOFF_EQUIP), so no window needs to be open.
+			unequip: async ([id]) => {
+				const result = await this.eval(`
+					const eq = window.roAgent.modules.UIManager.getComponent('Equipment');
+					const item = eq?.getItemById ? eq.getItemById(Number(arg)) : null;
+					if (!item) return { ok: false, reason: 'item ' + arg + ' is not equipped' };
+					eq.onUnEquip(item.index);
+					return { ok: true, index: item.index };`, id);
+				await sleep(800);
+				return { ...result, chat: await this.newChat(), errors: this.newErrors() };
+			},
+			// Current carry weight vs max (from Session.Entity, updated by the server).
+			weight: async () => {
+				const w = await this.eval(`
+					const S = window.roAgent.modules.Session.Entity;
+					return { weight: S.weight || 0, max_weight: S.max_weight || 0,
+					         pct: S.max_weight ? Math.round(100 * (S.weight||0) / S.max_weight) : 0 };`);
+				return { ...w, errors: this.newErrors() };
+			},
 			// The inventory's own use path (what a double-click on a potion runs):
 			// heals, usable and cash items take their effect. No window needs to be
 			// open; the packet goes straight out like equip does.
@@ -515,7 +535,59 @@ class AgentDriver {
 				await sleep(800);
 				return { ...result, chat: await this.newChat(), errors: this.newErrors() };
 			},
-			// Walk to a cell anywhere on this map. One click only reaches a cell
+			// Allocate status points: `stats str 10` adds 10 to STR (or read with no args).
+			// Sends CZ.STATUS_CHANGE directly, the packet the client's own "/str+ N"
+			// chat command sends, so no chat spam and no window needs to be open.
+			stats: async (args) => {
+				const STAT_IDS = { str: 13, agi: 14, vit: 15, int: 16, dex: 17, luk: 18 };
+				if (!args.length) {
+					// Read: open the stats window (so it renders), then pull values from its DOM.
+					const info = await this.eval(`
+						const UI = window.roAgent.modules.UIManager;
+						const win = UI.getComponent('WinStats');
+						try { win?.open?.(); } catch (e) {}
+						const root = win?.getRoot?.();
+						const read = sel => { const el = root?.querySelector(sel); return el ? parseInt(el.textContent, 10) : null; };
+						const out = { status_point: read('.statuspoint') };
+						for (const s of ['str','agi','vit','int','dex','luk']) out[s] = read('.stats .' + s);
+						return out;`);
+					await sleep(300);
+					return { ...info, errors: this.newErrors() };
+				}
+				const which = String(args[0]).toLowerCase();
+				const amount = Math.max(1, Math.min(99, parseInt(args[1] || '1', 10) || 1));
+				if (!(which in STAT_IDS)) throw new Error(`stats <${Object.keys(STAT_IDS).join('|')}> [amount]`);
+				// Send N packets of 1 unit each (server validates one point at a time, like the client does).
+				const sent = await this.eval(`
+					const id = arg.id, n = arg.n, Net = window.roAgent.modules.Network, P = window.roAgent.modules.PACKET;
+					for (let i = 0; i < n; i++) {
+						const pkt = new P.CZ.STATUS_CHANGE();
+						pkt.statusID = id;
+						pkt.changeAmount = 1;
+						Net.sendPacket(pkt);
+					}
+					return { sent: n, statusID: id };`, { id: STAT_IDS[which], n: amount });
+				await sleep(600);
+				return { stat: which, ...sent, errors: this.newErrors() };
+			},
+			// Spend a skill point to raise a skill: `learn 5` = upgrade skill id 5 by 1.
+		// Sends CZ.UPGRADE_SKILLLEVEL (the packet the skill window's + button sends),
+		// so the server validates prerequisites and the pending skill points.
+		learn: async ([id, times]) => {
+			const n = Math.max(1, Math.min(10, parseInt(times || '1', 10) || 1));
+			const sent = await this.eval(`
+				const id = arg.id, n = arg.n, Net = window.roAgent.modules.Network, P = window.roAgent.modules.PACKET;
+				if (!P.CZ.UPGRADE_SKILLLEVEL) return { error: 'no UPGRADE_SKILLLEVEL packet' };
+				for (let i = 0; i < n; i++) {
+					const pkt = new P.CZ.UPGRADE_SKILLLEVEL();
+					pkt.SKID = id;
+					Net.sendPacket(pkt);
+				}
+				return { sent: n, skill: id };`, { id: Number(id), n });
+			await sleep(400);
+			return { ...sent, chat: await this.newChat(), errors: this.newErrors() };
+		},
+		// Walk to a cell anywhere on this map. One click only reaches a cell
 			// that is on screen, so a far one is reached in steps: each click
 			// goes as far along the way as is visible and not behind a window.
 			walk: async ([x, y]) => {
@@ -683,7 +755,11 @@ const COMMANDS = {
 	skills: { description: 'Skills the character has: id, name, level, SP, range.', args: [['filter', 'string', 'Id or part of a name', true]] },
 	skill: { description: 'Use a skill. For a targeted one add --target <gid|nearest|self> or --cell <x> <y>.', args: [['id', 'number', 'Skill id'], ['rest', 'string', 'Level and flags, e.g. "5 --target nearest"', true]] },
 	equip: { description: 'Equip an item from the inventory by item id.', args: [['item', 'number', 'Item id']] },
+	unequip: { description: 'Take off a worn equipment item by item id.', args: [['item', 'number', 'Item id']] },
+	weight: { description: 'Current carry weight vs max weight, as a percentage.', args: [] },
 	use: { description: 'Use a consumable from the inventory by item id: a potion or other usable item takes its effect.', args: [['item', 'number', 'Item id']] },
+	learn: { description: 'Spend a skill point to raise a skill by id (repeat N times). Prerequisites are validated by the server.', args: [['skill', 'number', 'Skill id'], ['times', 'number', 'How many points to spend (default 1)', true]] },
+	stats: { description: 'Read status points and stats, or allocate points: stats str 10 adds 10 to STR. For a Knight build use str, vit, agi.', args: [['stat', 'string', 'str, agi, vit, int, dex or luk (omit to read)'], ['amount', 'number', 'How many points to add (default 1)', true]] },
 	shot: { description: 'Screenshot of the agent\'s game window.', args: [['name', 'string', 'Label for the file', true]] },
 	hover: { description: 'Put the cursor on a cell (or pixels with --px) and report what the client sees there.', args: [['x', 'number', 'Cell x'], ['y', 'number', 'Cell y'], ['flag', 'string', '--px for page pixels', true]] },
 	click: { description: 'A raw mouse click at page pixels.', args: [['x', 'number', 'Pixel x'], ['y', 'number', 'Pixel y'], ['button', 'string', 'left or right', true]] },
