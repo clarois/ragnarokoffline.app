@@ -522,7 +522,78 @@ class AgentDriver {
 					         pct: S.max_weight ? Math.round(100 * (S.weight||0) / S.max_weight) : 0 };`);
 				return { ...w, errors: this.newErrors() };
 			},
-			// The inventory's own use path (what a double-click on a potion runs):
+			// Pick buy/sell/cancel in the NPC deal-type popup (WinDeal): `deal sell`.
+		// Buttons are appended buy(0), sell(1), cancel(2) — click the matching one.
+		deal: async ([choice]) => {
+			const which = { buy: 1, sell: 2, cancel: 3 }[String(choice || '').toLowerCase()];
+			if (!which) return { ok: false, reason: 'deal <buy|sell|cancel>' };
+			const clicked = await this.eval(`
+				const want = arg.which;
+				let root = null;
+				for (const el of document.querySelectorAll('*')) {
+					if (el.shadowRoot && el.id === 'WinDeal') { root = el.shadowRoot; break; }
+				}
+				const btns = root ? root.querySelectorAll('.btns .btn, .btns button') : [];
+				const b = btns[want - 1];
+				if (!b) return { ok: false, reason: 'no deal button ' + want + ' (found ' + btns.length + ')' };
+				const r = b.getBoundingClientRect();
+				return { ok: true, x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), n: btns.length };`, { which });
+			if (!clicked.ok) return { ok: false, reason: clicked.reason };
+			await this.click(clicked.x, clicked.y);
+			await sleep(600);
+			return { ok: true, choice: String(choice).toLowerCase(), at: [clicked.x, clicked.y], n: clicked.n, errors: this.newErrors() };
+		},
+		// Sell items to the currently-open NPC shop (run `interact <shop>` + `deal sell` first).
+		// `sell` lists sellable items; `sell <nameid> <count>` moves that item to the sell
+		// box and submits. Reads .WinSell .content items by data-index.
+		sell: async (args) => {
+			if (!args.length) {
+				// list mode: what's sellable right now
+				const list = await this.eval(`
+					const root = document.getElementById('NpcStore')?.shadowRoot ||
+					             [...document.querySelectorAll('*')].find(e => e.shadowRoot && e.id==='NpcStore')?.shadowRoot;
+					if (!root) return { ok:false, reason:'no shop open' };
+					const items = [...root.querySelectorAll('.WinSell .content .item, .content .item[data-index]')]
+						.map(el => ({ index: el.getAttribute('data-index'),
+						              name: (el.querySelector('.name')||{}).textContent || '',
+						              amount: (el.querySelector('.amount')||{}).textContent || '' }));
+					return { ok:true, items };`);
+				return { ...list, errors: this.newErrors() };
+			}
+			// sell mode: nameid [count] -> move item(s) to sell box, then submit
+			const nameid = String(args[0]);
+			const count = args[1] ? String(args[1]) : null;
+			const moved = await this.eval(`
+				const nameid = arg.nameid, count = arg.count;
+				const root = document.getElementById('NpcStore')?.shadowRoot ||
+				             [...document.querySelectorAll('*')].find(e => e.shadowRoot && e.id==='NpcStore')?.shadowRoot;
+				if (!root) return { ok:false, reason:'no shop open' };
+				const items = [...root.querySelectorAll('.content .item[data-index]')];
+				// match by name text containing the nameid (items show names, not ids) — match by amount/name
+				// For now select by index order matching nameid string in name, else first item
+				let target = items.find(el => (el.querySelector('.name')||{}).textContent === nameid)
+				           || items.find(el => (el.querySelector('.name')||{}).textContent.includes(nameid))
+				           || items[0];
+				if (!target) return { ok:false, reason:'no sellable item matches ' + nameid };
+				target.click();  // moves to output (requestMoveItem)
+				return { ok:true, index: target.getAttribute('data-index'),
+				         name: (target.querySelector('.name')||{}).textContent };`,
+				{nameid, count});
+			if (!moved.ok) return { ok:false, reason: moved.reason };
+			await sleep(500);
+			// click the sell/ok submit button
+			const sub = await this.eval(`
+				const root = document.getElementById('NpcStore')?.shadowRoot ||
+				             [...document.querySelectorAll('*')].find(e => e.shadowRoot && e.id==='NpcStore')?.shadowRoot;
+				if (!root) return { ok:false, reason:'no shop' };
+				const btn = root.querySelector('.btn.sell') || root.querySelector('.btn.ok') || root.querySelector('.btn.buy');
+				if (!btn) return { ok:false, reason:'no submit button' };
+				const r = btn.getBoundingClientRect();
+				return { ok:true, x: Math.round(r.left+r.width/2), y: Math.round(r.top+r.height/2) };`);
+			if (sub.ok) { await this.click(sub.x, sub.y); await sleep(800); }
+			return { ok:true, sold: moved.name, submitted: sub.ok, errors: this.newErrors() };
+		},
+		// The inventory's own use path (what a double-click on a potion runs):
 			// heals, usable and cash items take their effect. No window needs to be
 			// open; the packet goes straight out like equip does.
 			use: async ([id]) => {
@@ -757,6 +828,8 @@ const COMMANDS = {
 	equip: { description: 'Equip an item from the inventory by item id.', args: [['item', 'number', 'Item id']] },
 	unequip: { description: 'Take off a worn equipment item by item id.', args: [['item', 'number', 'Item id']] },
 	weight: { description: 'Current carry weight vs max weight, as a percentage.', args: [] },
+	deal: { description: 'Pick buy/sell/cancel in the NPC deal-type popup.', args: [['choice', 'string', 'buy, sell or cancel']] },
+	sell: { description: 'List sellable items, or sell one by name (with the shop open).', args: [['item', 'string', 'Item name or id to sell (omit to list)', true], ['count', 'number', 'How many (default all)', true]] },
 	use: { description: 'Use a consumable from the inventory by item id: a potion or other usable item takes its effect.', args: [['item', 'number', 'Item id']] },
 	learn: { description: 'Spend a skill point to raise a skill by id (repeat N times). Prerequisites are validated by the server.', args: [['skill', 'number', 'Skill id'], ['times', 'number', 'How many points to spend (default 1)', true]] },
 	stats: { description: 'Read status points and stats, or allocate points: stats str 10 adds 10 to STR. For a Knight build use str, vit, agi.', args: [['stat', 'string', 'str, agi, vit, int, dex or luk (omit to read)'], ['amount', 'number', 'How many points to add (default 1)', true]] },
