@@ -224,6 +224,20 @@ class AgentDriver {
 	// ------------------------------------------------------------- input
 
 	async move(x, y) { this.wc.sendInputEvent({ type: 'mouseMove', x: Math.round(x), y: Math.round(y) }); }
+	async drag(x1, y1, x2, y2, steps = 8) {
+		x1 = Math.round(x1); y1 = Math.round(y1); x2 = Math.round(x2); y2 = Math.round(y2);
+		await this.move(x1, y1); await sleep(40);
+		this.wc.sendInputEvent({ type: 'mouseDown', x: x1, y: y1, button: 'left', clickCount: 1 });
+		await sleep(60);
+		for (let i = 1; i <= steps; i++) {
+			const x = Math.round(x1 + (x2 - x1) * i / steps);
+			const y = Math.round(y1 + (y2 - y1) * i / steps);
+			this.wc.sendInputEvent({ type: 'mouseMove', x, y });
+			await sleep(35);
+		}
+		await sleep(60);
+		this.wc.sendInputEvent({ type: 'mouseUp', x: x2, y: y2, button: 'left', clickCount: 1 });
+	}
 	async click(x, y, button = 'left', clickCount = 1) {
 		x = Math.round(x); y = Math.round(y);
 		this.wc.sendInputEvent({ type: 'mouseMove', x, y });
@@ -798,7 +812,12 @@ class AgentDriver {
 			click: async ([x, y, button]) => { await this.click(Number(x), Number(y), button === 'right' ? 'right' : 'left'); await sleep(300); return { ok: true, errors: this.newErrors() }; },
 		// Click an element found by CSS selector (walks shadow DOM) — opens player
 		// shop signs, menu items, etc. `--double` double-clicks (shop signs need it).
-		clicksel: async ([selector, flag]) => {
+		drag: async ([x1, y1, x2, y2]) => {
+				await this.drag(Number(x1), Number(y1), Number(x2), Number(y2));
+				await sleep(300);
+				return { ok: true, from: [Number(x1), Number(y1)], to: [Number(x2), Number(y2)], errors: this.newErrors() };
+			},
+			clicksel: async ([selector, flag]) => {
 			const double = flag === '--double';
 			const at = await this.eval(`const el = __deep(arg).find(__visible); return el ? __rect(el) : null;`, selector);
 			if (!at) return { ok: false, reason: 'no visible element for ' + selector };
@@ -865,6 +884,7 @@ const COMMANDS = {
 	hover: { description: 'Put the cursor on a cell (or pixels with --px) and report what the client sees there.', args: [['x', 'number', 'Cell x'], ['y', 'number', 'Cell y'], ['flag', 'string', '--px for page pixels', true]] },
 	click: { description: 'A raw mouse click at page pixels.', args: [['x', 'number', 'Pixel x'], ['y', 'number', 'Pixel y'], ['button', 'string', 'left or right', true]] },
 	clicksel: { description: 'Click an element by CSS selector (shadow-DOM aware); --double to double-click (opens shop signs).', args: [['selector', 'string', 'CSS selector'], ['flag', 'string', '--double for double-click', true]] },
+	drag: { description: 'Drag from (x1,y1) to (x2,y2) with real input events (adds shop items to the buy cart).', args: [['x1','number'],['y1','number'],['x2','number'],['y2','number']] },
 	key: { description: 'Press a key: Enter, Escape, F1, Alt+E ...', args: [['key', 'string', 'Key name']] },
 	wait: { description: 'Wait up to 60 seconds.', args: [['ms', 'number', 'Milliseconds']] },
 	errors: { description: 'Client errors and warnings seen so far.', args: [] },
