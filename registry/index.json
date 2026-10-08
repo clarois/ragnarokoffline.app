@@ -81,9 +81,9 @@
     },
     {
       "name": "autoloot",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": "BlaXun",
-      "description": "An Autoloot window in game: loot every drop at or below a rarity you choose, whole item types such as cards, and a list of exact items -- with a monster check that shows what you would pick up. Works even where @autoloot is kept for GMs, and your item list is kept across logins.",
+      "description": "An Autoloot window in game, in the option menu (Esc) or with Alt+O: loot every drop at or below a rarity you choose, whole item types such as cards, and a list of exact items -- with a monster check that shows what you would pick up. Works even where @autoloot is kept for GMs, and your item list is kept across logins.",
       "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/autoloot",
       "tags": [
         "drops",
@@ -99,16 +99,32 @@
       },
       "files": [
         {
+          "path": "CHANGELOG.md",
+          "sha256": "a65a69cd177964dc3dc61f96f7821fe6bc19aebd2ffc3c6f0631375de5d83d61"
+        },
+        {
           "path": "README.md",
-          "sha256": "f64b046033070073fb4d9ef8e12fe8a4e76e7fdb27834518f4f9e413c7d3fffa"
+          "sha256": "2fdfdfb1ba30a9724ce658c5a95e4d731cadbdb73a3ce3d993430211e5b7e89b"
         },
         {
           "path": "client/index.js",
-          "sha256": "0b824bfde3bd66d0472f50f0715e6226b020f025593bb31d13d7e914893fc9b4"
+          "sha256": "20d5d8ac903f13685d60c7ec563424d638d290f2343f775f27b26bfb8fa50f9f"
+        },
+        {
+          "path": "data/texture/ui/esc_autoloot_a.bmp",
+          "sha256": "4b9cd03a1ef8cd33fed21d8c7fe8fc842fb42094229c7a92024e9d329b92b8aa"
+        },
+        {
+          "path": "data/texture/ui/esc_autoloot_b.bmp",
+          "sha256": "3a9eb827cbe2cff4c1e093c8ec5f4be1078559092b7ab9abe30eab28757833f6"
+        },
+        {
+          "path": "data/texture/ui/esc_autoloot_c.bmp",
+          "sha256": "3a9eb827cbe2cff4c1e093c8ec5f4be1078559092b7ab9abe30eab28757833f6"
         },
         {
           "path": "mod.json",
-          "sha256": "99d831b471098d1e110120d4698589960c9be8b2d46d7e0731a056103589cad5"
+          "sha256": "394a870f150e4da7d71674b8e1a71b4f1f76d91643522b296dbc78b4863c10fc"
         },
         {
           "path": "npc/autoloot.txt",
@@ -339,10 +355,64 @@
       ]
     },
     {
+      "name": "eden-rework-2021",
+      "version": "",
+      "author": "akreao",
+      "description": "The Eden Group as kRO reworked it in April 2021. Instructors Ur and Boya and four new Administrators hand out the Paradise gear quests, six mission boards bring champion hunts and deliveries, and the update adds cave shortcuts, Odin's Past and English quest text. The old Eden gear and mission NPCs are hidden while it is on. Renewal only.",
+      "homepage": "https://github.com/akreao/eden-rework-2021",
+      "tags": [
+        "eden",
+        "gear",
+        "kro",
+        "missions",
+        "npc",
+        "quest",
+        "renewal"
+      ],
+      "icon": "images/icon.png",
+      "screenshots": [
+        "images/administrators.jpg",
+        "images/mission-board.jpg",
+        "images/champion-hunt.jpg",
+        "images/quest-window.jpg"
+      ],
+      "requires": {
+        "mods": [],
+        "era": "renewal",
+        "app": ""
+      },
+      "source": {
+        "github": "akreao/eden-rework-2021",
+        "asset": "eden-rework-2021-*.zip"
+      },
+      "files": [
+        {
+          "path": "images/administrators.jpg",
+          "sha256": "0e1eff732d4e1e1fdadfcde1136361cdc2ccab997befe3d671c1ad894b518244"
+        },
+        {
+          "path": "images/champion-hunt.jpg",
+          "sha256": "2e4c65484382f092cb208afa8f595b81b72979df927dfede79a3ea66ce4e0900"
+        },
+        {
+          "path": "images/icon.png",
+          "sha256": "4be96bdf205c0a74919c87d05ddc4164d25c7230b1adf63761fa9df96203833d"
+        },
+        {
+          "path": "images/mission-board.jpg",
+          "sha256": "9667c7e52d9e7b7ad1cfba6a030a6031e4c4ea379495908fff856eff776416bc"
+        },
+        {
+          "path": "images/quest-window.jpg",
+          "sha256": "0ffe4208d0bb862628c81524bb131b00acde9d89fbc2c80a466492e5d9ded035"
+        }
+      ]
+    },
+    {
       "name": "exp-card",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": "BlaXun",
-      "description": "Every monster kill has a chance to drop a tiered Exp Card, bound to the killer for the standard pickup window. Two families -- Base Exp Cards and Job Exp Cards -- each with ten levels; higher-level mobs drop higher-level cards. At 1x, a level 10 card grants roughly 5% of the exp a level-98 character needs for the next level, and each lower level is about half the one above it; card exp scales with the server's Base/Job EXP rates. Streamlines offline levelling without touching per-mob drop tables.",
+      "description": "Every monster kill has a chance to drop a tiered Exp Card, bound to the killer for the standard pickup window. Two families -- Base Exp Cards and Job Exp Cards -- each with ten levels; higher-level mobs drop higher-level cards. At 1x, a card grants about 5% of the next level at the lowest level that may use it (a level 10 card: 30,000 exp, from base level 91); card exp scales with the server's Base/Job EXP rates. Streamlines offline levelling without touching per-mob drop tables.",
       "homepage": "https://github.com/Flux159/ragnarokoffline.app/tree/main/registry/mods/exp-card",
       "tags": [
         "drops",
@@ -361,8 +431,12 @@
       },
       "files": [
         {
+          "path": "CHANGELOG.md",
+          "sha256": "056f47f4d8b65a17293851c910dacc290b68ea3852766b7a22209e6cbe93bdd7"
+        },
+        {
           "path": "README.md",
-          "sha256": "8a92b7ab55ec3b76f42385c2ecaa6a6c737f7b1620f0605e7ad56524111e05e9"
+          "sha256": "07ce4b9408a2096a02b2ce1c16cd19f8867692019de18e4727332530acca5c98"
         },
         {
           "path": "System/itemInfo.lua",
@@ -370,7 +444,7 @@
         },
         {
           "path": "db/item_db.yml",
-          "sha256": "fb5d7eb528238a877dac9be5d5c0125efb6478c378cfc6b83cc8e70e44b2026d"
+          "sha256": "b80cc5266e2ca54819254fa03d8c6f874d2a968f915ccb094f0c4b9e415f3a7f"
         },
         {
           "path": "images/exp-card.png",
@@ -382,11 +456,15 @@
         },
         {
           "path": "mod.json",
-          "sha256": "952e56168647401194448832c4ffbdb464ee959d0d87ec88acfc1800bc93cdca"
+          "sha256": "333b33b37c54a9f2ce0031d8e04a4e06b58d349f23e20b3f266541b348e0e0b3"
         },
         {
           "path": "npc/exp_card.txt",
-          "sha256": "e06490d46d57710a922eb67fffdb3f584e98725fb8bebb1a4264d8b0536bd774"
+          "sha256": "865a3c89f754f8281c0a416a38c4bae91e2d24338039e21d9507a21e9d7cedc5"
+        },
+        {
+          "path": "pre-re/db/item_db.yml",
+          "sha256": "0eea2d33ee164ea4a97c4b38f84cc49ad08f2eb02e3fa4bcaf11efdf36e61c42"
         }
       ]
     },
@@ -600,8 +678,36 @@
       ]
     },
     {
+      "name": "path-of-ragnarok",
+      "version": "",
+      "author": "rhewid",
+      "description": "A Path-of-Exile style passive skill tree. Your first class gives you an origin in the centre of a 695-node tree, every job level earns a point (50 max), and you grow outward through stats, resistances, damage against races and elements, skill boosts, auto-casts and free recasts, card sockets, masteries, job-line and rebirth branches, keystones and teleport rifts. Balanced around pre-renewal; it also loads on renewal but is not balanced for it.",
+      "homepage": "https://github.com/rhewid/path-of-ragnarok",
+      "tags": [
+        "cards",
+        "client",
+        "passive-tree",
+        "pre-renewal",
+        "progression",
+        "skills",
+        "stats"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "",
+        "app": ""
+      },
+      "source": {
+        "github": "rhewid/path-of-ragnarok",
+        "asset": "path-of-ragnarok-*.zip"
+      },
+      "files": []
+    },
+    {
       "name": "prontera-vendors",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "author": "BlaXun",
       "description": "A living player market on Prontera's main road. Fake players run real vending stalls on the inner sidewalks (cards, weapons and armor by class, refined gear, potions, gems, pet eggs, loot from every dungeon and more) and real buying stores on the outer sidewalks that buy your loot: ores, quest turn-ins, junk drops and the loot of every dungeon and leveling field. Prices follow a real server's market (kRO), stalls undercut each other and change as their owners come and go, and everything is tunable in Settings. Needs the population engine switched on.",
       "homepage": "",
@@ -624,8 +730,12 @@
       },
       "files": [
         {
+          "path": "CHANGELOG.md",
+          "sha256": "1f9bb090bcc943adfdbc5eac1931b4299123a1f5d520fb73aedc9bab3d175c11"
+        },
+        {
           "path": "README.md",
-          "sha256": "429e23ad61b206e88fd4e7bf4bd60346e2d160f6e9066f40f5e93e801cc9a42e"
+          "sha256": "be4742bc1f7619b65aec47a5b02cce6c205fc62544da64593c7549b69bef6ebf"
         },
         {
           "path": "db/population_vendor_pop.yml",
@@ -649,7 +759,7 @@
         },
         {
           "path": "mod.json",
-          "sha256": "58783ed4c79d1b2ea8af0ef5548e6e7e34aeca139c07ea74e56ac9315c455ff5"
+          "sha256": "999847e5ea92858ad50474b71e1319f11e81a900e88c8e6b28902bd99287907c"
         },
         {
           "path": "npc/prontera-vendors-customers.txt",
@@ -657,19 +767,27 @@
         },
         {
           "path": "npc/prontera-vendors-market-data.txt",
-          "sha256": "e53acc114acc3adcc5d613d70f816a5afeb85764f827acd0e81d87968ba6481e"
+          "sha256": "8f09a12931464d914a200574be699655adffb853eefab0dbd81076fbcd19cd1a"
         },
         {
           "path": "npc/prontera-vendors-market.txt",
-          "sha256": "21f2781a0ba9ac0e2814a272184b0502839c9b87debfc22397291ce038053c0a"
+          "sha256": "0c0d8486e9f5ac8f3831c7d9f91fc102bdf419f43f347857e2121c0461294e64"
         },
         {
           "path": "npc/prontera-vendors-newer.txt",
-          "sha256": "9d57fc8e30ae8e4930d157fda62dbed4f4ace57878f0f7394985c5e4d12f4b69"
+          "sha256": "290c1e13a56573c8048f7d3515d4a2f48631b048f27c55a504e836c5ff8da24b"
+        },
+        {
+          "path": "npc/prontera-vendors-supply-data.txt",
+          "sha256": "44233289657cb68cdd21a5ccea210cbca1805ceb505803817cf64f3e52d578c2"
+        },
+        {
+          "path": "npc/prontera-vendors-supply.txt",
+          "sha256": "cc8b7aa56dd25b349d6f1bd99f95ccc66da1dfd22832e9a36ec5c01f9dc212c1"
         },
         {
           "path": "npc/prontera-vendors.txt",
-          "sha256": "00ece05ed4b084b4c34642925a014787ce464b8f2e884deff3ee635451157711"
+          "sha256": "b339ca644d5442ee8301bedfa83f8e91fdbe7318615fa3089418acbcad0d830e"
         },
         {
           "path": "pre-re/db/population_vendor_pop.yml",
@@ -685,11 +803,15 @@
         },
         {
           "path": "pre-re/npc/prontera-vendors-market-data.txt",
-          "sha256": "22c39f7a983b2eb44483779eac9fb195c9bf0f729af3db989c51062451b6989e"
+          "sha256": "98d3029519bdd9aef672f620e29741c4ddaa22453eebda6fc863e849ecc712d0"
+        },
+        {
+          "path": "pre-re/npc/prontera-vendors-supply-data.txt",
+          "sha256": "19d5ab8320c19678947041cdc80ec97f2a45fd41e42a1d0c044bc8dec0fa182f"
         },
         {
           "path": "settings/index.html",
-          "sha256": "d1831b43bce2bc668e839544dbaacc9ac13b1a4cf51bceff6e201605ba0059dc"
+          "sha256": "57a64aee05e3c82db27fdbce0f448c48414fb21f60ec885d9cd53a4dc38e447f"
         }
       ]
     },
@@ -978,6 +1100,31 @@
           "sha256": "2b08b5d6dfade6a7e658a239431ec08a0cc3efbe89cbf7aa3617455c2bf5794e"
         }
       ]
+    },
+    {
+      "name": "whosell",
+      "version": "",
+      "author": "rhewid",
+      "description": "Search for Vendors: a window (and @whosell / @whobuy) to find who sells or buys an item by name, card and zeny range, with price, amount, seller and shop location. Finds real players' shops and, with the population engine, the fake-player market. Follows the active UI skin.",
+      "homepage": "https://github.com/rhewid/whosell",
+      "tags": [
+        "market",
+        "search",
+        "ui",
+        "vending"
+      ],
+      "icon": "",
+      "screenshots": [],
+      "requires": {
+        "mods": [],
+        "era": "",
+        "app": ""
+      },
+      "source": {
+        "github": "rhewid/whosell",
+        "asset": "whosell-*.zip"
+      },
+      "files": []
     }
   ]
 }

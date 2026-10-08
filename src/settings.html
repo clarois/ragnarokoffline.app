@@ -443,6 +443,17 @@
        has played it through. Changing this rebuilds the assets and restarts the server.</p>
   </div>
 
+  <h2>Server clock</h2>
+  <div class="panel">
+    <label><span>Time zone</span><select id="server_timezone"></select></label>
+    <p class="note" id="server-timezone-now" style="margin:8px 0 0"></p>
+    <p class="note" id="server-timezone-status" hidden style="margin:8px 0 0; color: var(--text)"></p>
+    <p class="note">The clock the game server keeps. War of Emperium, events that happen at a
+       set time, daily resets and mods that follow the time of day all go by it. It follows
+       this computer unless you choose a zone &mdash; for a server you share with friends
+       elsewhere, pick the one most of you live in. Changing this restarts the server.</p>
+  </div>
+
   <h2>Startup</h2>
   <div class="panel">
     <label>
@@ -914,6 +925,12 @@
     </label>
     <p class="note" id="weapon-check-note"></p>
     <label style="margin-top:6px">
+      <span>Companion inventory</span>
+      <input type="checkbox" id="population_companion_inventory" style="accent-color: var(--accent); flex: none" />
+      <span class="val" style="width:auto; color: var(--dim)">companions live on what you give them, like you do</span>
+    </label>
+    <p class="note" id="companion-inventory-note"></p>
+    <label style="margin-top:6px">
       <span>Server memory</span>
       <input type="range" id="vm_ram_mib" min="2048" max="16384" step="1024">
       <span class="val" id="v-vm_ram_mib"></span>
@@ -939,7 +956,12 @@
        <b>Weapon rules</b> is a choice between realism and convenience. Off (the default),
        companions and other fake players use every skill they have whatever they are
        holding. On, they follow the same weapon rules you do, and a skill their weapon
-       can't use is skipped until you trade them a weapon that can.</p>
+       can't use is skipped until you trade them a weapon that can.
+       <b>Companion inventory</b> is the same choice for items. Off (the default),
+       companions carry a free supply of potions, arrows and gemstones that never runs
+       out. On, a companion owns its bag: it drinks, fires and casts with what you trade
+       it, a skill that costs an item waits until it has one, and the bag is kept with
+       the companion between sessions.</p>
     <p class="note" id="ram-note"></p>
   </div>
 
@@ -1464,6 +1486,68 @@ $('packetver').onchange = async () => {
   }
 };
 
+// The game server's time zone. '' in the list follows this computer and is
+// saved as null; see stack/src/timezone.rs.
+let serverTimezone = null;
+const hostZone = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+})();
+
+function loadTimezones(saved) {
+  let zones = [];
+  try { zones = Intl.supportedValuesOf('timeZone'); } catch {}
+  const option = (value, text) => {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    return o;
+  };
+  const list = zones.filter(z => z !== 'UTC');
+  // A zone saved by hand (Etc/GMT+5) that this list lacks still shows.
+  if (saved && saved !== 'UTC' && !list.includes(saved)) list.unshift(saved);
+  $('server_timezone').replaceChildren(option('', `This computer (${hostZone.replace(/_/g, ' ')})`),
+    option('UTC', 'UTC'), ...list.map(z => option(z, z.replace(/_/g, ' '))));
+}
+
+function showServerTime() {
+  const zone = $('server_timezone').value || hostZone;
+  let now = '?';
+  try {
+    now = new Intl.DateTimeFormat(undefined, { timeZone: zone, weekday: 'short', hour: '2-digit', minute: '2-digit' })
+      .format(new Date());
+  } catch {}
+  $('server-timezone-now').textContent = `Server time: ${now} (${zone.replace(/_/g, ' ')})`;
+}
+setInterval(showServerTime, 30000);
+
+$('server_timezone').onchange = async () => {
+  const chosen = $('server_timezone').value || null;
+  showServerTime();
+  if (chosen === serverTimezone) return;
+  const status = $('server-timezone-status');
+  $('server_timezone').disabled = true;
+  status.hidden = false;
+  status.innerHTML = '<span class="spinner"></span>Restarting the server on the new clock\u2026';
+  try {
+    const s = await invoke('get_settings');
+    await invoke('save_settings', { settings: { ...s, server_timezone: chosen } });
+    serverTimezone = chosen;
+    status.textContent = `The server now keeps ${(chosen || hostZone).replace(/_/g, ' ')} time.`;
+    log('server clock: ' + (chosen || 'this computer'));
+  } catch (e) {
+    // As with the client version: show what is saved, not an invented rollback.
+    const saved = await invoke('get_settings').catch(() => ({ server_timezone: serverTimezone }));
+    serverTimezone = saved.server_timezone || null;
+    $('server_timezone').value = serverTimezone || '';
+    showServerTime();
+    status.textContent = `Could not change the clock: ${String(e)}`;
+    log(String(e));
+  } finally {
+    $('server_timezone').disabled = false;
+    refresh();
+  }
+};
+
 async function refresh() {
   await refreshMode();
   const client = await invoke('get_client_paths');
@@ -1695,6 +1779,14 @@ function refreshPopulation() {
   $('population_companion_hire').disabled = !on;
   $('companion-fee').hidden = !hired;
   $('population_skill_weapon_check').disabled = !on;
+  $('population_companion_inventory').disabled = !on;
+  $('companion-inventory-note').textContent = $('population_companion_inventory').checked
+    ? 'On: nothing refills a companion. Trade it potions, arrows or bullets, and the '
+      + 'gemstones and other items its skills cost; an archer or gunslinger with no '
+      + 'ammunition stops attacking, and a Priest without a Blue Gemstone cannot resurrect. '
+      + 'What it carries counts towards its weight. Turning this off again keeps the bag '
+      + 'saved for later.'
+    : '';
   const loot = $('population_loot_enable').checked;
   $('population_loot_enable').disabled = !on;
   for (const id of LOOT_FIELDS) $(id).disabled = !on || !loot;
@@ -1718,7 +1810,9 @@ function refreshPopulation() {
       + 'start with a bow and need an instrument to sing, and Gypsies, Wanderers and '
       + 'Trouveres a whip to dance; Spear Quicken needs a spear, Double Strafe a bow. '
       + 'Trade the companion the weapon and it puts it on. '
-      + 'Arrows, gemstones and other items are still never needed.'
+      + ($('population_companion_inventory').checked
+        ? 'Arrows, gemstones and other items come from its bag (Companion inventory).'
+        : 'Arrows, gemstones and other items are still never needed.')
     : 'Off: companions use every skill they have, whatever weapon they hold. A Minstrel '
       + 'sings with a bow in hand. Easier, but not how the game works for you.';
   const perLevel = Number($('population_companion_fee_zeny').value) || 0;
@@ -1776,6 +1870,7 @@ $('population_companion_limit').addEventListener('input', refreshPopulation);
 for (const area of POPULATION_AREAS) $(`population_${area}_pct`).addEventListener('input', refreshPopulation);
 $('population_companion_hire').addEventListener('change', refreshPopulation);
 $('population_skill_weapon_check').addEventListener('change', refreshPopulation);
+$('population_companion_inventory').addEventListener('change', refreshPopulation);
 // Every loot slider, besides the on/off box: disabled together, saved together.
 const LOOT_FIELDS = ['population_loot_common_pickup_pct', 'population_loot_rare_pct',
   'population_loot_rare_pickup_pct', 'population_loot_forget_pct', 'population_loot_hp_abort_pct',
@@ -1797,6 +1892,7 @@ $('save-population').onclick = async () => {
   settings.population_companion_fee_item = Number($('population_companion_fee_item').value) || 0;
   settings.population_companion_fee_item_amount = Number($('population_companion_fee_item_amount').value) || 0;
   settings.population_skill_weapon_check = $('population_skill_weapon_check').checked;
+  settings.population_companion_inventory = $('population_companion_inventory').checked;
   settings.population_loot_enable = $('population_loot_enable').checked;
   for (const id of LOOT_FIELDS) settings[id] = Number($(id).value);
   // Machine-level, so it lives in client.json beside the client paths and the
@@ -3375,6 +3471,10 @@ invoke('get_settings').then(s => {
     packetver = s.packetver ? String(s.packetver) : null;
     $('packetver').value = packetverValue(packetver);
   });
+  serverTimezone = s.server_timezone || null;
+  loadTimezones(serverTimezone);
+  $('server_timezone').value = serverTimezone || '';
+  showServerTime();
   $('zeny_from_mobs').checked = !!s.zeny_from_mobs;
   $('unlimited_arrows').checked = !!s.unlimited_arrows;
   $('open_settings_first').checked = !!s.open_settings_first;
@@ -3389,6 +3489,7 @@ invoke('get_settings').then(s => {
   $('population_companion_fee_item_amount').value = s.population_companion_fee_item_amount ?? 0;
   $('population_companion_limit').value = s.population_companion_limit ?? 4;
   $('population_skill_weapon_check').checked = s.population_skill_weapon_check === true;
+  $('population_companion_inventory').checked = s.population_companion_inventory === true;
   $('population_loot_enable').checked = s.population_loot_enable === true;
   // A save from before the loot settings has no keys: the defaults.
   $('population_loot_common_pickup_pct').value = s.population_loot_common_pickup_pct ?? 70;

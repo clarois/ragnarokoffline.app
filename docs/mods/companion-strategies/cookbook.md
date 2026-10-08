@@ -19,16 +19,19 @@ not yet. Adjust names, priorities and numbers to your plan. The
 - [Out of the boss's reach, within the party's](#out-of-the-bosss-reach-within-the-partys)
 - [Low on HP: kite round the healer](#low-on-hp-kite-round-the-healer)
 - [Leave hostile ground](#leave-hostile-ground)
+- [Sit down to regenerate between fights](#sit-down-to-regenerate-between-fights)
 - [Don't make a boss teleport](#dont-make-a-boss-teleport)
 
 **Damage**
 - [A bolt by element at what is on the party](#a-bolt-by-element-at-what-is-on-the-party)
 - [Area spells only on a pack](#area-spells-only-on-a-pack)
 - [Go for the boss, but take slaves off the healer](#go-for-the-boss-but-take-slaves-off-the-healer)
+- [Two of a kind: split the targets](#two-of-a-kind-split-the-targets)
 - [Turn heals on the undead](#turn-heals-on-the-undead)
 
 **Boss mechanics**
 - [Phases on the boss's HP](#phases-on-the-bosss-hp)
+- [Change tactic when a phase drags on](#change-tactic-when-a-phase-drags-on)
 - [React to a cast](#react-to-a-cast)
 - [Fall back when the healer is down](#fall-back-when-the-healer-is-down)
 
@@ -68,12 +71,13 @@ help (undead armor) is passed over automatically.
 - Name: blessing
   Priority: 50
   Cast: AL_BLESSING
-  Target: { Ally: missing, Status: SC_BLESSING }     # the nearest without it
+  Target: { Ally: missing, Status: SC_BLESSING, Expiring: 3000 }   # without it, or under 3 s left
   When: self_sp_ge120
 ```
 
-Needed whenever the plan ends in `Hold`: `Hold` ends the turn before the
-engine's own buffing would come round.
+`Expiring` renews the buff before it lapses rather than after. Needed whenever
+the plan ends in `Hold`: `Hold` ends the turn before the engine's own buffing
+would come round.
 
 ## Wall a member before a stun lands
 
@@ -192,6 +196,40 @@ A caster wants a band off the boss instead: `KeepDistance: { Min: 6, Max: 8 }`.
 These come before the engine's own flee below 30 % HP, which would run it off
 the screen.
 
+## Sit down to regenerate between fights
+
+Sit below 30 % SP when nothing is on the party, and get up at 80 % or as soon as
+something comes for it. A strategy holds the "until":
+
+```yaml
+- Mob: All
+  Jobs:
+    - Job: All
+      Start: up
+      Strategies:
+        - Name: up
+          Rules:
+            - Name: tired
+              When: self_sp_pct_lt30
+              Absent: { Enemy: attacking, Range: 14 }   # nothing on the party
+              Switch: resting
+        - Name: resting
+          Rules:
+            - Name: rested
+              Priority: 6
+              When: { OR: [self_sp_pct_ge80, self_targeted] }
+              Switch: up
+            - Name: rest
+              Priority: 5
+              Sit: true
+```
+
+A companion never sits while its owner walks, and stands up before any other
+rule acts. Sitting also switches on what a player gets from it: two Rogues with
+**Gangster's Paradise** sitting side by side are left alone by monsters, and a
+Taekwon's **Peaceful Break** and **Happy Break** regenerate faster. This recipe
+loads cleanly but hasn't been played yet.
+
 ## Leave hostile ground
 
 ```yaml
@@ -265,6 +303,27 @@ something across the screen, nor at a monster nobody is fighting.
 `SetTarget` only chooses the target; the engine (or a skill rule) does the
 hitting.
 
+## Two of a kind: split the targets
+
+With two Wizards or two Priests in the party, claims keep them from doubling up:
+
+```yaml
+- Name: freeze_one
+  Priority: 44
+  Cast: MG_FROSTDIVER
+  Target: { Enemy: attacking }         # passes over a monster the other Wizard claimed
+  Claim: frozen
+- Name: lex_once
+  Priority: 45
+  Cast: PR_LEXAETERNA
+  Target: { Enemy: boss }
+  When: not_enemy_aeterna
+  Claim: { Name: lex, For: 10000 }     # the second Priest leaves the boss's Lex to the first
+```
+
+Any rule with the same claim name respects it, across plans and mods. Loads
+cleanly; not played yet.
+
 ## Turn heals on the undead
 
 In a plan for `Mobs: [{ Race: Undead }, { Element: Undead }]`:
@@ -310,6 +369,22 @@ stand in it and be healed.
         - Name: last
           Rules: [...]
 ```
+
+## Change tactic when a phase drags on
+
+```yaml
+- Name: drags_on
+  InStrategy: { AtLeast: 60000 }       # a minute in this phase
+  Switch: plan_b
+  Say: "This takes too long, changing tactic."
+- Name: opening_burst
+  Priority: 50
+  InFight: { Below: 5000 }             # only in the first 5 s of a fight
+  Cast: WZ_METEOR
+  Target: { Enemy: boss }
+```
+
+Loads cleanly; not played yet.
 
 ## React to a cast
 

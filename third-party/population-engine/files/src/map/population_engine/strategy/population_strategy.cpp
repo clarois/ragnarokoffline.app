@@ -92,6 +92,7 @@ struct Selector {
 	int8 role = -1;              ///< Ally: only members with this role
 	std::vector<int32> jobs;     ///< Ally: only these jobs (each with its family and base class)
 	int16 status = -1;           ///< Ally missing: lacking this status
+	int32 expiring_ms = 0;       ///< Ally missing: or having it with less than this left (0: only lacking)
 	int16 range = 0;             ///< 0 = the cast's range, or AREA_SIZE without a cast
 	int8 race = -1;              ///< Enemy: only monsters of this race (RC_*)
 	int8 element = -1;           ///< Enemy: only monsters of this element (ELE_*), as they are now
@@ -164,6 +165,7 @@ struct Rule {
 	std::string switch_to;
 	std::string signal;          ///< tell the party's companions (On: signal), lower-case
 	bool hold = false;           ///< stand still and end the turn
+	bool sit = false;            ///< sit down (regenerating faster) while the rule applies
 	int16 keep_distance = 0;     ///< step out to at least this many cells from the monster (0 = off)
 	int16 keep_max = 0;          ///< and back in to at most this many (0 = no limit): stay in range of it
 	// Kite: away from the monster on the companion, within reach of an anchor (the rule's
@@ -186,6 +188,15 @@ struct Rule {
 
 	uint32 cooldown_ms = 0;
 	bool one_per_party = false;
+	// InStrategy / InFight: ms in the plan's active strategy, and in the companion's current
+	// fight, measured from timestamps (a companion that took no turns still sees time pass).
+	int32 instrategy_below = -1, instrategy_atleast = -1;
+	int32 infight_below = -1, infight_atleast = -1;
+	/// Claim: a party-wide claim on the target under this name while the rule acts, so other
+	/// companions' rules with the same claim take another target (one Lex per boss, crowd
+	/// control spread). Held claim_ms after the last action.
+	std::string claim;
+	uint32 claim_ms = 5000;
 };
 using RulePtr = std::shared_ptr<Rule>;
 
@@ -240,12 +251,10 @@ struct Targeting {
 	int32 max_attackers = 0;     ///< 0 = no cap; else the owner and party companions on it, at most
 };
 
-/// Catalysts (`Consume: true`). Shells and companions have no inventory of their own yet:
-/// nothing stocks it, the owner cannot see it, and it is gone with the shell
-/// (docs/COMPANION_STRATEGY_ROADMAP.md, item 4). Until they do, a Consume rule casts as if
-/// its catalyst were paid, which is what the engine does for every shell anyway (patch
-/// 0001, skill_get_requirement). Turn this on together with inventories: every Consume
-/// rule then checks the inventory before casting and pays when the cast starts.
+/// Catalysts (`Consume: true`). A recruited companion now pays its item costs through rAthena,
+/// as a player does (population_shell_inventory, patch 0033): pop_skill_state_ok passes a skill
+/// over when its items are not in the bag, and rAthena takes them when the cast lands. This
+/// switch would pay a second time, so it stays off.
 constexpr bool kPayCatalysts = false;
 
 constexpr uint32 kAllMobs = 0;
@@ -768,7 +777,7 @@ bool StrategyDatabase::parse_requires(const ryml::NodeRef &node, Requirements &r
 bool StrategyDatabase::parse_selector(const ryml::NodeRef &node, Selector &sel)
 {
 	this->warn_unknown_keys(node, { "Enemy", "Ally", "Who", "NotSelf", "Prefer", "Role", "Job", "Status", "Range", "Boss",
-		"Race", "Element" }, "Target");
+		"Race", "Element", "Expiring" }, "Target");
 	std::string pick;
 	if (this->nodeExists(node, "Enemy")) {
 		static const std::map<std::string, Selector::Pick> picks = {
@@ -873,6 +882,14 @@ bool StrategyDatabase::parse_selector(const ryml::NodeRef &node, Selector &sel)
 		this->invalidWarning(node, "Ally: missing and Ally: having need a Status; the rule is skipped.\n");
 		return false;
 	}
+	if (this->nodeExists(node, "Expiring")) {
+		// Expiring: ms -- Ally: missing also picks a member whose status has less than that left.
+		if (sel.kind != Selector::Kind::Ally || sel.pick != Selector::Pick::Missing) {
+			this->invalidWarning(node["Expiring"], "Expiring belongs to Ally: missing; the rule is skipped.\n");
+			return false;
+		}
+		this->asInt32(node, "Expiring", sel.expiring_ms);
+	}
 	if (this->nodeExists(node, "Range")) {
 		this->asInt16(node, "Range", sel.range);
 		sel.range = static_cast<int16>(cap_value(static_cast<int>(sel.range), 0, AREA_SIZE));
@@ -888,7 +905,7 @@ RulePtr StrategyDatabase::parse_rule(const ryml::NodeRef &node, bool &remove)
 		return nullptr;
 	}
 	this->warn_unknown_keys(node, { "Name", "Priority", "Remove", "Requires", "On", "When", "Charges", "Field",
-		"Enemy", "Count", "Reach", "Absent", "Present", "Cast", "Level", "Target", "Consume", "Say", "Channel", "Retreat", "Distance", "Hold", "KeepDistance", "Kite", "MoveTo", "Leave", "Switch", "Signal", "SetTarget", "Cooldown",
+		"Enemy", "Count", "Reach", "Absent", "Present", "Cast", "Level", "Target", "Consume", "Say", "Channel", "Retreat", "Distance", "Hold", "Sit", "KeepDistance", "Kite", "MoveTo", "Leave", "Switch", "Signal", "SetTarget", "Cooldown", "Claim", "InStrategy", "InFight",
 		"OnePerParty" }, "a rule");
 
 	auto rule = std::make_shared<Rule>();
@@ -925,6 +942,16 @@ RulePtr StrategyDatabase::parse_rule(const ryml::NodeRef &node, bool &remove)
 		}
 		return true;
 	};
+	for (const char *key : { "InStrategy", "InFight" }) {
+		if (!this->nodeExists(node, key))
+			continue;
+		const ryml::NodeRef n = node[c4::to_csubstr(key)];
+		this->warn_unknown_keys(n, { "Below", "AtLeast" }, key);
+		const bool strategy = key[2] == 'S';
+		if (!threshold(n, strategy ? rule->instrategy_below : rule->infight_below,
+				strategy ? rule->instrategy_atleast : rule->infight_atleast))
+			return nullptr;
+	}
 	if (this->nodeExists(node, "Charges")) {
 		const ryml::NodeRef c = node["Charges"];
 		this->warn_unknown_keys(c, { "Status", "Value", "Below", "AtLeast" }, "Charges");
@@ -1166,6 +1193,8 @@ RulePtr StrategyDatabase::parse_rule(const ryml::NodeRef &node, bool &remove)
 	}
 	if (this->nodeExists(node, "Hold"))
 		this->asBool(node, "Hold", rule->hold);
+	if (this->nodeExists(node, "Sit"))
+		this->asBool(node, "Sit", rule->sit);
 	if (this->nodeExists(node, "Leave")) {
 		const ryml::NodeRef l = node["Leave"];
 		if (l.is_map()) {
@@ -1279,15 +1308,33 @@ RulePtr StrategyDatabase::parse_rule(const ryml::NodeRef &node, bool &remove)
 		this->asUInt32(node, "Cooldown", rule->cooldown_ms);
 	if (this->nodeExists(node, "OnePerParty"))
 		this->asBool(node, "OnePerParty", rule->one_per_party);
+	if (this->nodeExists(node, "Claim")) {
+		// Claim: lex, or Claim: { Name: lex, For: 10000 }
+		const ryml::NodeRef c = node["Claim"];
+		if (c.is_map()) {
+			this->warn_unknown_keys(c, { "Name", "For" }, "Claim");
+			if (this->nodeExists(c, "Name"))
+				this->asString(c, "Name", rule->claim);
+			if (this->nodeExists(c, "For"))
+				this->asUInt32(c, "For", rule->claim_ms);
+		} else {
+			this->asString(node, "Claim", rule->claim);
+		}
+		rule->claim = lower(rule->claim);
+		if (rule->claim.empty()) {
+			this->invalidWarning(c, "Claim needs a name; the rule is skipped.\n");
+			return nullptr;
+		}
+	}
 
-	const int moves = (rule->cast_skill != 0) + (rule->retreat != Retreat::None) + rule->hold + (rule->keep_distance > 0)
-		+ (rule->move != Move::None) + rule->leave + rule->kite;
+	const int moves = (rule->cast_skill != 0) + (rule->retreat != Retreat::None) + rule->hold + rule->sit
+		+ (rule->keep_distance > 0) + (rule->move != Move::None) + rule->leave + rule->kite;
 	if (moves == 0 && rule->say.empty() && rule->switch_to.empty() && rule->signal.empty() && !rule->set_target) {
-		this->invalidWarning(node, "A rule needs Cast, Retreat, KeepDistance, Kite, MoveTo, Leave, Hold, Say, Switch, Signal or SetTarget; the rule is skipped.\n");
+		this->invalidWarning(node, "A rule needs Cast, Retreat, KeepDistance, Kite, MoveTo, Leave, Hold, Sit, Say, Switch, Signal or SetTarget; the rule is skipped.\n");
 		return nullptr;
 	}
 	if (moves > 1) {
-		this->invalidWarning(node, "A rule takes only one of Cast, Retreat, KeepDistance, Kite, MoveTo, Leave and Hold; the rule is skipped.\n");
+		this->invalidWarning(node, "A rule takes only one of Cast, Retreat, KeepDistance, Kite, MoveTo, Leave, Hold and Sit; the rule is skipped.\n");
 		return nullptr;
 	}
 	if (rule->move == Move::EventCell && rule->event != Event::Casts) {
@@ -1749,6 +1796,7 @@ struct PlanState {
 	bool started = false;
 	std::string active;
 	int32 fight = 0;            ///< the monster a monster-specific plan's strategy belongs to
+	t_tick entered = 0;         ///< when the active strategy became active (InStrategy)
 };
 
 /// Something that happened to the companion's fight: an encounter ended, its target was lost.
@@ -1774,6 +1822,9 @@ struct ShellState {
 	bool trace = false;
 	uint32 tracer_char = 0;     ///< a regular shell's trace goes to this player (a companion's to its owner)
 	t_tick hold_until = 0;      ///< a rule is positioning the companion: following waits until then
+	t_tick fight_since = 0;     ///< InFight: when the current fight began
+	t_tick last_engaged = 0;    ///< the last turn it had a target or a monster's plan
+	bool sat = false;           ///< a Sit rule sat it down: stood up again when none applies
 	int32 forced_target = 0;    ///< SetTarget: this monster, until forced_until
 	t_tick forced_until = 0;
 	std::string last_trace;
@@ -1806,6 +1857,23 @@ static uint64 g_signal_seq = 0;
 static uint64 g_occurrence_seq = 0;
 /// OnePerParty: (party, rule, target) -> (who claimed it, until when)
 static std::map<std::tuple<int32, uint32, int32>, std::pair<int32, t_tick>> g_claims;
+/// Claim: (party, claim name, target) -> (the companion holding it, until).
+static std::map<std::tuple<int32, std::string, int32>, std::pair<int32, t_tick>> g_named_claims;
+
+/// Whether another companion of the party holds `name` on `target` right now; `holder`, if
+/// given, gets that companion's id (for the trace).
+static bool claimed_by_other(const map_session_data *sd, const std::string &name, int32 target, t_tick tick,
+	int32 *holder = nullptr)
+{
+	if (sd->status.party_id <= 0)
+		return false;
+	const auto it = g_named_claims.find(std::make_tuple(sd->status.party_id, name, target));
+	if (it == g_named_claims.end() || it->second.first == sd->id || DIFF_TICK(tick, it->second.second) >= 0)
+		return false;
+	if (holder != nullptr)
+		*holder = it->second.first;
+	return true;
+}
 static t_tick g_next_prune = 0;
 
 /// Bumped whenever the table is loaded, reloaded or cleared: anything holding pointers into it
@@ -1819,6 +1887,7 @@ static void reset_runtime()
 	g_chat.clear();
 	g_signals.clear();
 	g_claims.clear();
+	g_named_claims.clear();
 }
 
 static void prune(t_tick tick)
@@ -1835,6 +1904,8 @@ static void prune(t_tick tick)
 	}
 	for (auto it = g_claims.begin(); it != g_claims.end();)
 		it = DIFF_TICK(tick, it->second.second) >= 0 ? g_claims.erase(it) : std::next(it);
+	for (auto it = g_named_claims.begin(); it != g_named_claims.end();)
+		it = DIFF_TICK(tick, it->second.second) >= 0 ? g_named_claims.erase(it) : std::next(it);
 	for (auto it = g_chat.begin(); it != g_chat.end();)
 		it = it->second.empty() ? g_chat.erase(it) : std::next(it);
 	for (auto it = g_signals.begin(); it != g_signals.end();) {
@@ -2083,6 +2154,10 @@ struct Turn {
 	t_tick tick;
 	ShellState *st;
 	bool target_set = false;    ///< a higher-priority rule already chose the target this turn
+	bool sitting = false;       ///< a Sit rule applied this turn
+	const std::string *claim = nullptr; ///< while a Claim rule picks its target: skip what others hold
+	int32 claim_passed = 0;     ///< the last target a selector passed over for a claim...
+	int32 claim_holder = 0;     ///< ...and who holds it (for the trace)
 	const std::vector<PlanRef> *plans = nullptr; ///< the plans that apply this turn
 };
 
@@ -2483,8 +2558,13 @@ static block_list *select_enemy(Turn &t, const Selector &sel, int range)
 					id = ud->target > 0 ? ud->target : (ud->skilltimer != INVALID_TIMER ? ud->skilltarget : 0);
 			}
 			mob_data *md = id != 0 ? map_id2md(id) : nullptr;
-			if (md != nullptr && md->m == sd->m && !status_isdead(*md) && check_distance_bl(sd, md, range))
+			if (md != nullptr && md->m == sd->m && !status_isdead(*md) && check_distance_bl(sd, md, range)) {
+				if (t.claim != nullptr && claimed_by_other(sd, *t.claim, md->id, t.tick, &t.claim_holder)) {
+					t.claim_passed = md->id;
+					continue;
+				}
 				return md;
+			}
 		}
 		return nullptr;
 	}
@@ -2498,6 +2578,10 @@ static block_list *select_enemy(Turn &t, const Selector &sel, int range)
 		int rank = 0; // lower is better
 		if (!enemy_matches(t, sel, md, rank) || at_cap(sd, t.owner, md))
 			continue;
+		if (t.claim != nullptr && claimed_by_other(sd, *t.claim, md->id, t.tick, &t.claim_holder)) {
+			t.claim_passed = md->id;
+			continue;
+		}
 		const auto key = std::make_tuple(rank, distance_bl(sd, md), 0, md->id);
 		if (best == nullptr || key < best_key) {
 			best = md;
@@ -2505,6 +2589,15 @@ static block_list *select_enemy(Turn &t, const Selector &sel, int range)
 		}
 	}
 	return best;
+}
+
+/// How long a status has left, in ms. One without a timer (it lasts until removed) never lapses.
+static int64 status_left_ms(const status_change_entry *sce, t_tick now)
+{
+	if (sce == nullptr)
+		return 0;
+	const TimerData *td = sce->timer != INVALID_TIMER ? get_timer(sce->timer) : nullptr;
+	return td != nullptr ? std::max<int64>(0, DIFF_TICK(td->tick, now)) : INT64_MAX;
 }
 
 /// Target: { Ally: ... }: the companion itself counts unless NotSelf.
@@ -2538,13 +2631,20 @@ static block_list *select_ally(Turn &t, const Selector &sel, int range, uint16 s
 			continue;
 		if (skill != 0 && pop_ally_skill_refused(sd, m, skill))
 			continue;
+		if (t.claim != nullptr && claimed_by_other(sd, *t.claim, m->id, t.tick, &t.claim_holder)) {
+			t.claim_passed = m->id;
+			continue;
+		}
 		int rank = 0;
 		if (sel.pick == Selector::Pick::LowestHp) {
 			rank = hp_pct(m);
 			if (rank >= 100)
 				continue;
-		} else if (sel.pick == Selector::Pick::Missing && m->sc.getSCE(static_cast<sc_type>(sel.status)) != nullptr) {
-			continue;
+		} else if (sel.pick == Selector::Pick::Missing) {
+			// Missing, or (Expiring) about to lapse: renewed before the gap, not after it.
+			const status_change_entry *sce = m->sc.getSCE(static_cast<sc_type>(sel.status));
+			if (sce != nullptr && !(sel.expiring_ms > 0 && status_left_ms(sce, t.tick) < sel.expiring_ms))
+				continue;
 		} else if (sel.pick == Selector::Pick::Having && m->sc.getSCE(static_cast<sc_type>(sel.status)) == nullptr) {
 			continue;
 		} else if (sel.pick == Selector::Pick::Attacked) {
@@ -2649,7 +2749,7 @@ static uint16 best_against(const map_session_data *sd, const Rule &rule, block_l
 	int best_mult = 0;
 	for (const uint16 id : rule.cast_options) {
 		uint16 lv = pc_checkskill(const_cast<map_session_data *>(sd), id);
-		if (lv == 0 || (plans != nullptr && !plans_allow(sd, *plans, id, true)))
+		if (lv == 0 || !population_shell_skill_selected(sd, id) || (plans != nullptr && !plans_allow(sd, *plans, id, true)))
 			continue;
 		if (rule.cast_lv > 0)
 			lv = std::min<uint16>(lv, rule.cast_lv);
@@ -3049,14 +3149,22 @@ static bool requires_ok(const map_session_data *sd, const Requirements &req)
 	return true;
 }
 
+/// Whether a rule may cast this skill at all: the companion has it, and its owner has not
+/// unticked it in the companion's skill selection (population_shell_skill_selected, the combat
+/// file). That selection is a deliberate choice; a plan does not override it.
+static bool may_cast(const map_session_data *sd, uint16 id)
+{
+	return pc_checkskill(const_cast<map_session_data *>(sd), id) > 0 && population_shell_skill_selected(sd, id);
+}
+
 static bool requires_ok(const map_session_data *sd, const Rule &rule)
 {
-	// Unlike the skill rotation, a rule never casts a skill the companion has not learned.
+	// Unlike the skill rotation, a rule never casts a skill the companion has not learned, nor
+	// one its owner deselected.
 	if (!rule.cast_options.empty()) {
-		if (std::none_of(rule.cast_options.begin(), rule.cast_options.end(),
-				[&](uint16 id) { return pc_checkskill(const_cast<map_session_data *>(sd), id) > 0; }))
+		if (std::none_of(rule.cast_options.begin(), rule.cast_options.end(), [&](uint16 id) { return may_cast(sd, id); }))
 			return false;
-	} else if (rule.cast_skill != 0 && pc_checkskill(sd, rule.cast_skill) == 0) {
+	} else if (rule.cast_skill != 0 && !may_cast(sd, rule.cast_skill)) {
 		return false;
 	}
 	return requires_ok(sd, rule.req);
@@ -3086,6 +3194,50 @@ static bool mode_allows_enemy(const Turn &t, const block_list *mob)
 	return (owner_ud != nullptr && owner_ud->target == md->id) || (md->target_id != 0 && is_party(sd, md->target_id));
 }
 
+/// Sit: true. The checks a player's sit request passes (clif_parse_ActionRequest_sub), and the
+/// calls the engine's own rest makes (pop_shell_rest). Never while its owner walks: a sitting
+/// companion cannot follow. True when it sits now.
+static bool sit_down(Turn &t)
+{
+	map_session_data *sd = t.sd;
+	// Never while its owner walks, sitting or not: the follow code stands it up to follow.
+	if (t.owner != nullptr && unit_is_walking(t.owner))
+		return false;
+	if (pc_issit(sd)) {
+		// Already sitting, by this rule or by the engine's rest: either way, it stays down.
+		return true;
+	}
+	if (pc_isdead(sd) || sd->ud.skilltimer != INVALID_TIMER
+			|| (sd->sc.opt1 && sd->sc.opt1 != OPT1_STONEWAIT && sd->sc.opt1 != OPT1_BURNING)
+			|| sd->sc.getSCE(SC_DANCING)
+			|| (sd->sc.getSCE(SC_GRAVITATION) && sd->sc.getSCE(SC_GRAVITATION)->val3 == BCT_SELF)
+			|| (sd->state.block_action & PCBLOCK_SITSTAND))
+		return false;
+	if (unit_is_walking(sd))
+		unit_stop_walking(sd, USW_FIXPOS);
+	unit_stop_attack(sd);
+	sd->pop.companion_formation_active = false;
+	pc_setsit(sd);
+	skill_sit(sd, true);
+	clif_sitting(*sd);
+	t.st->sat = true;
+	return true;
+}
+
+/// Stand up a companion a Sit rule sat down, the way a player's client does (pop_shell_stand).
+/// One the engine's own rest sat down is left to the rest.
+static void rise(Turn &t)
+{
+	map_session_data *sd = t.sd;
+	if (!t.st->sat)
+		return;
+	t.st->sat = false;
+	if (pc_issit(sd) && pc_setstand(sd, false)) {
+		skill_sit(sd, false);
+		clif_standing(*sd);
+	}
+}
+
 static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &ps, bool do_skills, bool attack_only)
 {
 	map_session_data *sd = t.sd;
@@ -3094,6 +3246,17 @@ static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &
 		return Outcome::Skipped;
 	if (rule.event != Event::None && DIFF_TICK(t.tick, rs.pending_until) >= 0)
 		return Outcome::Skipped;
+	if ((rule.instrategy_below >= 0 || rule.instrategy_atleast >= 0)
+			&& !threshold_ok(static_cast<int32>(std::min<int64>(DIFF_TICK(t.tick, ps.entered), INT32_MAX)),
+				rule.instrategy_below, rule.instrategy_atleast))
+		return Outcome::Skipped;
+	if (rule.infight_below >= 0 || rule.infight_atleast >= 0) {
+		const ShellState &st = *t.st;
+		const bool fighting = st.fight_since != 0 && DIFF_TICK(t.tick, st.last_engaged) <= 5000;
+		const int32 in_fight = fighting ? static_cast<int32>(std::min<int64>(DIFF_TICK(t.tick, st.fight_since), INT32_MAX)) : 0;
+		if (!threshold_ok(in_fight, rule.infight_below, rule.infight_atleast))
+			return Outcome::Skipped;
+	}
 	if (rule.charge_sc >= 0 && !threshold_ok(status_charges(sd, rule.charge_sc, rule.charge_val), rule.charge_below, rule.charge_atleast))
 		return Outcome::Skipped;
 	if (rule.field_skill != 0 && !rule.field_at_target
@@ -3114,7 +3277,26 @@ static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &
 				range = std::max(range, skill_get_range2(sd, id, lv, true));
 		}
 	}
+	t.claim = rule.claim.empty() ? nullptr : &rule.claim;   // selectors pass over claimed targets
+	t.claim_passed = t.claim_holder = 0;
 	block_list *target = resolve_target(t, rule, rs, range);
+	t.claim = nullptr;
+	// A fixed target (the current one, an event's) that another companion has claimed: not this rule.
+	if (!rule.claim.empty() && target != nullptr && target != sd
+			&& claimed_by_other(sd, rule.claim, target->id, t.tick, &t.claim_holder)) {
+		t.claim_passed = target->id;
+		target = nullptr;
+	}
+	if (target == nullptr && t.claim_passed != 0) {
+		// Without this line, a rule that found every target claimed looks like one that never fires.
+		char cbuf[16];
+		block_list *passed = map_id2bl(t.claim_passed);
+		const map_session_data *holder = map_id2sd(t.claim_holder);
+		trace(sd, *t.st, t.tick, "rule %s: %s is claimed (%s) by %s", label(rule, cbuf, sizeof(cbuf)),
+			passed != nullptr ? status_get_name(*passed) : "its target", rule.claim.c_str(),
+			holder != nullptr ? holder->status.name : "another companion");
+		return Outcome::Skipped;
+	}
 	// A monster the rule picked itself: the companion's mode decides, as for the engine's own
 	// choice. (The current target, t.enemy, already went through it.)
 	if (rule.sel.kind == Selector::Kind::Enemy && target != nullptr && !mode_allows_enemy(t, target)) {
@@ -3190,6 +3372,12 @@ static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &
 	char buf[16];
 	const char *name = label(rule, buf, sizeof(buf));
 	bool acted = false;
+	// Every action but Sit needs the companion on its feet: a sitting character can neither
+	// move (unit_can_move) nor act.
+	if (!rule.sit && (rule.cast_skill != 0 || rule.retreat != Retreat::None || rule.hold || rule.keep_distance > 0
+			|| rule.move != Move::None || rule.leave || rule.kite)
+			&& !(rule.cast_skill != 0 && (!do_skills || attack_only)))
+		rise(t);
 	if (rule.cast_skill != 0) {
 		if (!do_skills || attack_only)
 			return Outcome::Skipped;
@@ -3279,6 +3467,15 @@ static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &
 		else
 			trace(sd, *t.st, t.tick, "rule %s: keeping %d cells away", name, rule.keep_distance);
 		acted = true;
+	} else if (rule.sit) {
+		if (!sit_down(t)) {
+			trace(sd, *t.st, t.tick, "rule %s: cannot sit now", name);
+			return Outcome::Skipped;
+		}
+		t.sitting = true;
+		trace(sd, *t.st, t.tick, "rule %s: sit (SP %u/%u, HP %u/%u)", name, sd->battle_status.sp,
+			sd->battle_status.max_sp, sd->battle_status.hp, sd->battle_status.max_hp);
+		acted = true;
 	} else if (rule.hold) {
 		// Stand still: no chase, no walk toward the target. A continuous attack command
 		// would chase it too, so that goes as well.
@@ -3291,7 +3488,7 @@ static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &
 	}
 
 	if (acted && rule.cast_skill == 0)
-		hold_position(t); // Retreat, KeepDistance, MoveTo, Leave, Hold
+		hold_position(t); // Retreat, KeepDistance, MoveTo, Leave, Hold, Sit
 	if (rule.set_target && target != nullptr && target->type == BL_MOB && !t.target_set) {
 		t.target_set = true;
 		// Held for a few seconds and renewed while the rule applies; population_strategy_target
@@ -3318,6 +3515,7 @@ static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &
 		trace(sd, *t.st, t.tick, "rule %s: strategy %s -> %s", name, ps.active.empty() ? "(none)" : ps.active.c_str(),
 			rule.switch_to.c_str());
 		ps.active = rule.switch_to;
+		ps.entered = t.tick;
 		switched = true;
 	}
 
@@ -3326,6 +3524,9 @@ static Outcome run_rule(Turn &t, const Rule &rule, const Plan &plan, PlanState &
 		rs.cooldown_until = t.tick + static_cast<t_tick>(rule.cooldown_ms);
 	if (rule.one_per_party)
 		g_claims[claim_key] = std::make_pair(sd->id, t.tick + static_cast<t_tick>(std::max<uint32>(rule.cooldown_ms, 3000)));
+	if (acted && !rule.claim.empty() && claim_on != 0 && claim_on != sd->id && sd->status.party_id > 0)
+		g_named_claims[std::make_tuple(sd->status.party_id, rule.claim, claim_on)]
+			= std::make_pair(sd->id, t.tick + static_cast<t_tick>(rule.claim_ms));
 	if (acted)
 		return Outcome::Acted;
 	return switched ? Outcome::Switched : Outcome::Done;
@@ -3568,12 +3769,26 @@ bool population_strategy_turn(map_session_data *sd, t_tick tick, bool do_skills,
 
 	block_list *enemy = same_map_bl(sd, sd->pop.target_id);
 	const auto plans = plans_for(sd, enemy);
-	if (plans.empty())
+	if (plans.empty()) {
+		const auto it = g_shells.find(sd->id);
+		if (it != g_shells.end() && it->second.sat) { // no plan, no Sit rule: up again
+			Turn up{ sd, nullptr, enemy, tick, &it->second };
+			rise(up);
+		}
 		return false;
+	}
 
 	Turn t{ sd, population_engine_companion_loot_owner(sd), enemy, tick, &shell_state(sd, tick) };
 	t.plans = &plans;
 	track_fight(t, plans);
+	// InFight: a fight begins when the companion has a target, or a plan about a monster applies,
+	// after at least 5 s without either; it ends 5 s after the last.
+	if (sd->pop.target_id != 0
+			|| std::any_of(plans.begin(), plans.end(), [](const PlanRef &p) { return std::get<0>(p.key) != kAllMobs; })) {
+		if (t.st->fight_since == 0 || DIFF_TICK(tick, t.st->last_engaged) > 5000)
+			t.st->fight_since = tick;
+		t.st->last_engaged = tick;
+	}
 
 	// Every plan keeps its own active strategy. A monster's plan starts over with each
 	// new monster of that kind (an encounter plan: with each new boss, not each new target);
@@ -3585,6 +3800,7 @@ bool population_strategy_turn(map_session_data *sd, t_tick tick, bool do_skills,
 			ps.started = true;
 			ps.active = p.plan->start;
 			ps.fight = p.instance;
+			ps.entered = tick;
 		}
 		states.emplace_back(p.plan, &ps);
 	}
@@ -3635,9 +3851,14 @@ bool population_strategy_turn(map_session_data *sd, t_tick tick, bool do_skills,
 				break;
 			}
 		}
-		if (!switched)
+		if (!switched) {
+			if (!t.sitting)
+				rise(t); // no Sit rule applies any more
 			return false;
+		}
 	}
+	if (!t.sitting)
+		rise(t);
 	return false;
 }
 
@@ -3650,8 +3871,9 @@ bool population_strategy_handles_resurrection(map_session_data *sd)
 	for (const PlanRef &p : plans_for(sd, same_map_bl(sd, sd->pop.target_id))) {
 		auto revives = [&](const std::vector<RulePtr> &rules) {
 			return std::any_of(rules.begin(), rules.end(), [&](const RulePtr &r) {
-				return (r->cast_skill == ALL_RESURRECTION || r->cast_skill == WM_DEADHILLHERE)
-					&& pc_checkskill(sd, r->cast_skill) > 0 && requires_ok(sd, r->req);
+				// requires_ok(sd, *r): the skill known and not deselected by the owner, or the
+				// engine's own Resurrection must not stand aside for a rule that cannot cast.
+				return (r->cast_skill == ALL_RESURRECTION || r->cast_skill == WM_DEADHILLHERE) && requires_ok(sd, *r);
 			});
 		};
 		if (revives(p.plan->rules))
@@ -3671,6 +3893,14 @@ bool population_strategy_handles_resurrection(map_session_data *sd)
 			return true;
 	}
 	return false;
+}
+
+bool population_strategy_keeps_seated(const map_session_data *sd)
+{
+	if (g_db.rule_count == 0 || sd == nullptr || !pc_issit(sd))
+		return false;
+	const auto it = g_shells.find(sd->id);
+	return it != g_shells.end() && it->second.char_id == sd->status.char_id && it->second.sat;
 }
 
 bool population_strategy_holds_position(const map_session_data *sd, t_tick tick)

@@ -74,6 +74,7 @@ support.
 | Help whoever is in trouble | `{ Ally: attacked }`, `{ Ally: lowest_hp }` | the healer heals, walls and Kyries whoever the monsters are on |
 | Protect a member | `{ Enemy: attacking, Job: Priest }` + `SetTarget` | a melee takes the slaves off the healer |
 | Not all do the same | `OnePerParty: true` | one companion says "it teleported", one takes the slaves |
+| Split the targets | `Claim: name` | two Wizards freeze two monsters, not the same one; one Lex Aeterna per boss |
 | Tell each other | `Signal: name` / `On: { Event: signal, Name }` | "on me" (gather on a Land Protector), "kyrie me", "struck" |
 | Stay where the healer can help | `KeepDistance` / `Kite` with `Target: { Ally: nearest, Job: Priest }` | melee runs the boss round the healer |
 | Notice a missing member | `Absent:` / `Present:` | no living Priest: fall back to the owner |

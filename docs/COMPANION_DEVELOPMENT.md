@@ -118,8 +118,9 @@ listed above.
 - Priest, High Priest, Arch Bishop, trans Arch Bishop, and Cardinal shells can
   use fixed level 3 Resurrection on dead real party members and companions.
 - Level 3 restores 50% HP. Normal SP and timing apply.
-- The Blue Gemstone requirement is intentionally virtual and unlimited because
-  a shell has no player-accessible inventory.
+- With Companion inventory on (`population_engine_companion_inventory`), a
+  companion pays the Blue Gemstone from its own bag and does not try
+  Resurrection without one. Otherwise, and for ambient shells, it is waived.
 - A real player can use a Yggdrasil Leaf on a dead companion.
 - If the owner leaves the map while the companion is dead, stale cleanup
   releases it and removes it from the party.
@@ -148,6 +149,8 @@ listed above.
 | `third-party/population-engine/files/src/map/population_engine/core/population_shell_state.hpp` | Companion runtime state in the normal engine layout |
 | `third-party/population-engine/files/src/map/population_engine/core/population_shell_combat_skills.hpp` | Matching runtime state in the combat-skills layout; keep both state definitions aligned |
 | `third-party/population-engine/patches/0001-population-engine-hooks.patch` | rAthena-owned hooks, including party acceptance, membership callbacks, damage/death integration, and population ally semantics |
+| `third-party/population-engine/files/src/map/population_engine/runtime/population_shell_inventory.cpp` | The companion's own bag: no top-ups, item-cost checks, potion choice, and saving and restoring it (`inventory_detail`) |
+| `third-party/population-engine/patches/0033-companion-inventory.patch` | Lifts the `skill_get_requirement` waiver for recruited companions, so rAthena checks and takes their item and ammunition costs |
 | `third-party/population-engine/patches/0003-companion-loot-owner.patch` | Redirects recruited-shell loot priority to the active same-map owner and excludes recruited shells as item-share recipients; ambient shells, real-player sharing, and EXP attribution are unchanged |
 | `scripts/apply-party-chat-hook.py` | Idempotently inserts the party-chat command hook into pinned `clif.cpp` without a fragile line-number patch |
 | `scripts/apply-server-mods.sh` | Copies engine-owned files, applies rAthena patches, then installs the party-chat hook |
@@ -351,6 +354,10 @@ idempotent application, and a clean Population Engine data validation.
   always consent if the party has room.
 - Behaviour coverage is only as good as each class's generated resources and
   configured skill lists.
+- With Companion inventory on, a companion's bag is real and saved, but the owner can only fill it by trade:
+  there is no window to see it or take items back, and nothing refills it.
+  Deleting a saved companion loses its bag. Plans can't yet use an item or
+  switch gear (see
 - **Upstream now ships its own population-engine patch series** (`0001`-`0005`, including
   `0005-companion-kill-events.patch`) and a restructured population data set with new tiers. Our fork
   keeps its own `0001`-`0010` series and its own profiles/GearSets, so the two coexist: at the 1.3.9
@@ -460,9 +467,10 @@ The replacement is centralized in `population_shell_ammo.*`:
   `AmmoType` requires them is about to be used, not carried by every Ninja;
 - elemental ammunition is selected against the current monster where useful;
 - every item is equipped through `pc_equipitem` and must pass `pc_isequip`;
-- inaccessible shell inventories are replenished as a virtual resource, but
+- an ambient shell's ammunition is replenished as a virtual resource, but
   never past rAthena's first overweight threshold, since a shell at 90% cannot
-  attack; and
+  attack. With Companion inventory on, a recruited companion is never
+  replenished: it fires what it carries (`population_shell_inventory`); and
 - provisioning runs at spawn, after companion map warps, and immediately
   before attacks. An equip cooldown (Desperado, Arrow Vulcan) blocks a swap,
   not an attack with the stack already equipped.

@@ -80,3 +80,14 @@ test('the real supervisor rejects corrupt policy before startup or Repair reache
     assert.equal(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), '{"open_registration":"false"}');
   }
 });
+
+test('the server clock takes a zone name or null, and nothing that could leave the docker command line', t => {
+  const file = fixture(t);
+  for (const zone of [null, 'UTC', 'Europe/Berlin', 'America/Argentina/Buenos_Aires', 'Etc/GMT+5', 'America/Port-au-Prince']) {
+    store.write(file, { server_timezone: zone }, defaults);
+    assert.equal(store.read(file, defaults).server_timezone, zone);
+  }
+  for (const zone of ['', 'Europe/', '/UTC', 'Europe/Berlin; rm -rf /', 'UTC TZ=x', '../etc/passwd', 'a/b/c/d', 9, true, 'A'.repeat(65)]) {
+    assert.throws(() => store.write(file, { server_timezone: zone }, defaults), /server clock setting/, String(zone));
+  }
+});

@@ -45,7 +45,7 @@ Body:
           - Name: bless_the_tank
             Priority: 30
             Cast: AL_BLESSING
-            Target: { Ally: missing, Status: SC_BLESSING, Role: tank }
+            Target: { Ally: missing, Status: SC_BLESSING, Role: tank, Expiring: 3000 }   # renewed before it lapses
 
       # The healer's survival and resurrection, in every fight and not only near a boss:
       # in Mob: Boss they were lost whenever the Priest stepped more than 14 cells from
@@ -319,17 +319,17 @@ Body:
           - Name: blessing
             Priority: 50
             Cast: AL_BLESSING
-            Target: { Ally: missing, Status: SC_BLESSING }
+            Target: { Ally: missing, Status: SC_BLESSING, Expiring: 3000 }   # or under 3 s left
             When: self_sp_ge120
           - Name: increase_agi
             Priority: 49
             Cast: AL_INCAGI
-            Target: { Ally: missing, Status: SC_INCREASEAGI }
+            Target: { Ally: missing, Status: SC_INCREASEAGI, Expiring: 3000 }
             When: self_sp_ge120
           - Name: impositio
             Priority: 48
             Cast: PR_IMPOSITIO
-            Target: { Ally: missing, Status: SC_IMPOSITIO, NotSelf: true }
+            Target: { Ally: missing, Status: SC_IMPOSITIO, NotSelf: true, Expiring: 3000 }
             When: self_sp_ge120
           - Name: magnificat
             Priority: 47

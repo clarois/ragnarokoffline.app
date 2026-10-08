@@ -24,6 +24,14 @@ function validate(settings) {
       !/^\d{8}$/.test(typeof settings.packetver === 'number' ? String(settings.packetver) : settings.packetver)) {
     throw new Error('Cannot read the client version setting. Choose one in Settings.');
   }
+  // An IANA zone name (UTC, Europe/Berlin, Etc/GMT+5), or null for this
+  // computer's: the same shape stack/src/timezone.rs accepts, since it ends up
+  // on a docker command line.
+  if (Object.hasOwn(settings, 'server_timezone') && settings.server_timezone !== null &&
+      !(typeof settings.server_timezone === 'string' && settings.server_timezone.length <= 64 &&
+        /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z][A-Za-z0-9_+-]*){0,2}$/.test(settings.server_timezone))) {
+    throw new Error('Cannot read the server clock setting. Choose a time zone in Settings.');
+  }
   // Checked here as well as in the supervisor: the supervisor refuses to start
   // on a damaged value, and a refusal is a much worse way to learn about it
   // than a rejected Apply.

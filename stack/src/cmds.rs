@@ -1313,6 +1313,9 @@ const COMPANION_COLUMNS: &[(&str, &str)] = &[
     // window. An existing row gets the defaults every companion starts with.
     ("rest_below", "TINYINT NOT NULL DEFAULT 30"),
     ("rest_until", "TINYINT NOT NULL DEFAULT 95"),
+    // v13: the companion's own bag beyond its worn gear. NULL on an existing row, which keeps
+    // what the recall spawn gives it until the first save makes that its own.
+    ("inventory_detail", "TEXT NULL DEFAULT NULL"),
 ];
 
 /// Indexes added after the table first shipped, as (name, columns).
@@ -1490,10 +1493,14 @@ fn run_server(cfg: &Config, dk: &Docker, name: &str, port: u16, binary: &str, la
     // the whole difference between "only this machine" and "anyone who can
     // reach this machine".
     let bind = if lan { "0.0.0.0" } else { "127.0.0.1" };
+    // The clock rAthena's localtime() reads: WoE, OnClock events, daily
+    // resets. See timezone.rs.
+    let zone = crate::timezone::chosen(cfg)?;
     let opts = vec![
         "-t".to_string(),
         "--network".into(), NET.into(),
         "-p".into(), format!("{bind}:{port}:{port}"),
+        "-e".into(), format!("TZ={zone}"),
     ];
     dk.run_container(name, &cfg.image, &[binary.to_string()], &mounts, &opts)
         .map_err(|e| format!("starting {name}: {e}"))

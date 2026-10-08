@@ -9,6 +9,7 @@
 #include "../../population_engine.hpp"
 #include "../config/population_yaml_types.hpp"
 #include "../core/population_engine_core.hpp"
+#include "population_shell_inventory.hpp"
 #include "population_shell_loot.hpp"
 #include "population_shell_runtime.hpp"
 
@@ -495,10 +496,9 @@ static bool pop_is_resurrection_job(uint16 job_id)
 	}
 }
 
-/// Priest-line companions always know level-3 Resurrection.  Population PCs
-/// already bypass skill item requirements in skill_get_requirement(), so the
-/// Blue Gemstone catalyst is intentionally unlimited and never enters their
-/// inaccessible inventory.
+/// Priest-line companions always know level-3 Resurrection.  An ambient shell's
+/// Blue Gemstone is waived in skill_get_requirement(); a recruited companion pays
+/// it from its own bag (population_shell_inventory).
 ///
 /// Minstrels and Wanderers revive with Death Valley (WM_DEADHILLHERE), which does
 /// nothing to a living target. Curated as a heal, it was cast at every hurt ally for
@@ -527,7 +527,8 @@ static bool population_shell_try_party_resurrection(map_session_data *sd, t_tick
 	uint16 skill_id = 0, skill_lv = 0;
 	if (!sd || !pop_party_revive_skill(sd, skill_id, skill_lv) ||
 		sd->status.party_id <= 0 || sd->status.party_id >= 0x70000000 ||
-		current_tick < sd->pop.skill_cd || skill_isNotOk(skill_id, *sd))
+		current_tick < sd->pop.skill_cd || skill_isNotOk(skill_id, *sd)
+		|| !population_shell_inventory_can_pay_skill(sd, skill_id, skill_lv)) // a companion's Blue Gemstone
 		return false;
 
 	const int16 range = static_cast<int16>(
@@ -1139,6 +1140,10 @@ static bool pop_skill_state_ok(map_session_data *sd, uint16 skill_id, uint16 ski
 	// and Increase AGI 52 times. Without a target this is the caster's half of the check every
 	// cast makes (unit_skilluse_id2), so it covers Silence, Berserk and the rest too.
 	if (!status_check_skilluse(sd, nullptr, skill_id, 0))
+		return false;
+	// RAGNAROKMAC (companion inventory): a companion pays its catalysts, so a skill whose items
+	// are not in its bag is passed over rather than refused on every try.
+	if (!population_shell_inventory_can_pay_skill(sd, skill_id, skill_lv))
 		return false;
 	const status_change *sc = &sd->sc;
 	switch (skill->require.state) {

@@ -114,8 +114,38 @@ with each of them.
 
 Other fake players rest the same way, at a fixed 30% and 95%.
 
-Every companion carries a few potions of the kind a player of its level buys
-from a Tool Dealer: 10 for HP and 5 for SP.
+## Its bag
+
+By default a companion carries a free supply that never runs out: 10 HP and 5
+SP potions of its level's kind (the table below), topped up after each full
+rest, and whatever arrows and gemstones its skills ask for.
+
+With **Settings → Population → Companion inventory** on, a companion owns what
+is in its bag instead, and nothing refills it. It drinks the potions, fires the
+arrows and pays the catalysts you give it, and when they run out it does
+without:
+
+- Trade it what it should carry. Equipment is put on, as before; everything
+  else (potions, arrows, gemstones, traps) stays in its bag.
+- It drinks a potion, at most one a second, while it is needed and below 40% HP
+  or 20% SP; out of a fight it rests instead. It takes the potion a player of its
+  level would buy (the table below) and, without one, the strongest other it
+  carries: Condensed, White, Yellow, Orange and Red Potions and the herbs for HP,
+  Blue Potion, Grape Juice and Blue Herb for SP.
+- A skill that costs an item, such as a Blue Gemstone for Resurrection or
+  Sanctuary, is cast only while the item is in its bag, and uses it up as it
+  would for you.
+- An archer or a gunslinger fires the ammunition it carries, any kind it can
+  use, preferring an element that hurts its target; with none it stops
+  attacking. A Ninja's shuriken and kunai, a Mechanic's cannonballs and a
+  Genetic's throwing items come from its bag the same way.
+- Its bag counts towards its weight, with rAthena's usual limits: above 50% (70%
+  in renewal) it stops recovering on its own, and above 90% it can't attack.
+
+The bag is saved with the companion and comes back with it. A companion saved
+before the setting was on comes back once more with what it is spawned with, and
+from then on that is its own. Turning the setting off again keeps the saved bag
+for when it is back on. There is no window to look into the bag yet.
 
 | Base level | HP | SP |
 |---|---|---|
@@ -124,11 +154,7 @@ from a Tool Dealer: 10 for HP and 5 for SP.
 | 55-79 | Yellow Potion | Blue Potion |
 | 80 and up | White Potion | Blue Potion |
 
-It drinks one, at most one a second, while it is needed and below 40% HP or
-20% SP; out of a fight it rests instead. A rest that ends with both back to the
-second percentage refills the potions, to the new kind if it has levelled since.
-They are not saved: a companion has a full stock again at each login. Other fake
-players carry and drink potions the same way.
+Other fake players, which are not companions, always carry the free supply.
 
 ## Death and resurrection
 
@@ -136,9 +162,8 @@ A defeated companion stays in the party as a corpse while its owner remains on
 the same map. It can be revived in either of two ways:
 
 - Priest class companions automatically cast level 3 Resurrection on dead party
-  members, including real players and other companions. Their virtual Blue
-  Gemstone supply is unlimited because shells have no player-accessible
-  inventory.
+  members, including real players and other companions. With Companion
+  inventory on, only while they carry a Blue Gemstone.
 - Minstrel, Wanderer, Troubadour and Trouvere companions revive dead party
   members with Death Valley, at the level they have learned.
 - A real player can use a Yggdrasil Leaf on the dead companion.
@@ -189,8 +214,8 @@ player has. With it on, a skill the companion's weapon can't use is skipped
 until you trade it a weapon that can. Some jobs start with gear that doesn't fit
 all their skills: Clowns, Minstrels and Troubadours start with a bow and need an
 instrument to sing, and Gypsies, Wanderers and Trouveres need a whip to dance.
-Arrows, gemstones and other item costs are never needed either way, since a
-companion has no inventory to manage.
+Item costs are a separate setting, **Companion inventory**: off, arrows and
+gemstones are never needed; on, they come from its bag (see [Its bag](#its-bag)).
 
 ## Free or hired
 

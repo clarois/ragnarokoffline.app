@@ -70,8 +70,8 @@ test('it never sits where a player could not', () => {
 
 test('the follow leaves a resting companion down, and stands it before it moves', () => {
 	const follow = body('static bool pop_companion_follow_owner(');
-	assert.match(follow, /pc_issit\(sd\) && !\(sd->pop\.resting && !unit_is_walking\(owner\)\)/,
-		'the follow stood every companion up on every tick, which would undo the rest at once');
+	assert.match(follow, /pc_issit\(sd\) && !\(\(sd->pop\.resting \|\| population_strategy_keeps_seated\(sd\)\) && !unit_is_walking\(owner\)\)/,
+		'the follow stood every companion up on every tick, which would undo the rest (and a Sit rule) at once');
 	assert.match(follow, /warp_near_owner = \[&\]\(\) -> bool \{\s*pop_shell_stand\(sd\);/,
 		'a sitting shell cannot be placed and walk on; stand it before a warp');
 	assert.match(follow, /if \(owner_distance > leash\) \{\s*pop_shell_stand\(sd\);/,

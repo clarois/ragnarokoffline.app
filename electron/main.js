@@ -1085,6 +1085,11 @@ const SETTINGS_DEFAULTS = {
 	// a companion whose gear does not fit a skill (a performer's default bow
 	// and its songs) skips it until it is given the right weapon.
 	population_skill_weapon_check: false,
+	// Whether a recruited companion lives on its own bag, as a player does:
+	// nothing refills it, skills cost their items and ammunition, and the bag
+	// is saved with it. Off keeps the historic free supply of potions, arrows
+	// and gemstones.
+	population_companion_inventory: false,
 	// Whether ambient shells pick up the drops of their own kills, the way a
 	// player would, and how (see population-conf.js shellLoot). Off keeps the
 	// historic behaviour: every drop stays on the ground until it expires.
@@ -1128,6 +1133,10 @@ const SETTINGS_DEFAULTS = {
 	// see electron/packetvers.js. null follows the app's default rather than
 	// pinning today's, so a later app that moves the default moves this too.
 	packetver: null,
+	// The time zone the game servers' clock reads (WoE, OnClock events, daily
+	// resets) -- see stack/src/timezone.rs. null follows this computer, which
+	// stackEnv() hands the supervisor; otherwise an IANA name, 'UTC' included.
+	server_timezone: null,
 };
 
 function getSettings() {
@@ -3602,8 +3611,16 @@ function stackEnv() {
 			NEBULA_BIN: path.join(root, `bin/nebula${EXE}`),
 			RAGNAROKMAC_DOCKER: path.join(root, `bin/docker-slim${EXE}`),
 			RAGNAROKMAC_STATE: stateDir(),
+			// This computer's time zone, for server_timezone: null. Intl names
+			// it the same way on every platform, which the supervisor cannot.
+			RAGNAROK_HOST_TIMEZONE: hostTimeZone(),
 		},
 	};
+}
+
+function hostTimeZone() {
+	try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+	catch { return 'UTC'; }
 }
 
 // Asynchronous, because this runs while the app is still alive and `stack.sh

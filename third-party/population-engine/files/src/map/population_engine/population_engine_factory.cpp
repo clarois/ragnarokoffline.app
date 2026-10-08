@@ -15,6 +15,7 @@
 #include "runtime/population_shell_ammo.cpp"
 #include "runtime/population_shell_loot.cpp"
 #include "runtime/population_shell_runtime.cpp"
+#include "runtime/population_shell_inventory.cpp" // RAGNAROKMAC (companion inventory)
 // Expanded conditions parser MUST come after combat.cpp so the LegacyPredicate
 // forward declaration in predicates.hpp can resolve population_shell_skill_condition_ok.
 #include "expanded_ai/expanded_parser.cpp"

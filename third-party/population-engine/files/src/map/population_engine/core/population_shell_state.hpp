@@ -231,6 +231,9 @@ struct s_population {
 	std::vector<t_itemid> vendor_mistakes;
 	// RAGNAROKMAC: this mod vendor runs a buying store, not a vending stall.
 	bool vendor_buying = false;
+	/// RAGNAROKMAC: its mod's supply left its pool empty, so it opened no stall: the rotation
+	/// pass releases it for the mod pass to roll the spot again (pop_mod_vendor_done).
+	bool vendor_supply_empty = false;
 
 	s_pop_hold hold; ///< RAGNAROKMAC: a script's hold on the shell (shell control API)
 	// --- Party invite auto-accept flag ---

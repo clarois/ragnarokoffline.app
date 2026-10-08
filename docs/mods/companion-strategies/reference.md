@@ -46,10 +46,12 @@ each one does. New to it? Start with the [guide](guide.md). For party play see
 | `Field` | ground units nearby | `MoveTo` | to an event, a cell, a field, a reachable cell |
 | `Count` | monsters nearby | `Leave` | off hostile ground |
 | `Present` / `Absent` | a selector finds someone / nobody | `Hold` | stand still |
-| `Reach` | the monster could fight back here | | |
+| `Reach` | the monster could fight back here | `Sit` | sit down, regenerating faster |
 | `Enemy` | the monster's element, race, size, boss | **Also, with or without an action:** | |
 | `Cooldown` | not fired for so long | `Say` (+ `Channel`) | speak |
 | `OnePerParty` | no other companion just did it | `Switch` | change strategy |
+| `Claim` | pass over targets another companion claimed | | |
+| `InStrategy`, `InFight` | how long in this strategy, in this fight | | |
 | | | `Signal` | tell the other companions |
 | | | `SetTarget` | make the rule's monster the target |
 
@@ -233,7 +235,7 @@ A rule applies when all of the following hold:
 
 | Key | The rule applies only... |
 |---|---|
-| `Requires: { Skills, Lacks, Items, BaseLevel, Role }` | to a companion that has (and lacks) these. `Role` is the party role set in chat (`tank`, `support`, `attacker`, `none`), or a list of them for any of those. A `Cast` rule also requires the skill itself, so a rule for a skill the companion never learned does not exist for it. |
+| `Requires: { Skills, Lacks, Items, BaseLevel, Role }` | to a companion that has (and lacks) these. `Role` is the party role set in chat (`tank`, `support`, `attacker`, `none`), or a list of them for any of those. A `Cast` rule also requires the skill itself, so a rule for a skill the companion doesn't have does not exist for it. Neither does one for a skill its owner unticked in the companion's skill selection: that choice stands over any plan. (Shells get their job's whole skill tree at spawn, so "has the skill" mostly means "the class has it".) |
 | `On:` | within `Within` ms (default 3000) of an event, and once per event. See [Events](#events). |
 | `When:` | while a condition holds: `enemy_hp_pct_lt30`, `self_spheres_ge1`, `not_enemy_aeterna`, `[a, b]` for AND, `{ OR: [a, b] }`. See [`When:` conditions](#when-conditions). |
 | `Charges: { Status, Below \| AtLeast, Value }` | while a status's counter is in range. Cicada Skin Shed keeps its blocks left in its second value (the default), so `{ Status: SC_UTSUSEMI, Below: 2 }` is "1 or 0 left". No status counts as 0. |
@@ -243,8 +245,11 @@ A rule applies when all of the following hold:
 | `Absent: { Ally \| Enemy: ..., ... }` | while a [selector](#choosing-who-selectors) finds **nobody**: `Absent: { Ally: nearest, Job: Priest }` is "no living Priest within sight", the moment to fall back. |
 | `Reach: false` / `true` | while the monster the rule is about could not (or could) fight back against the companion where it stands. rAthena teleports a boss hit by someone it can neither hit back from where it stands nor walk to within its chase range; a monster held in place (Ankle Snare, Spider Web) cannot walk at all. `Reach` asks the same question. |
 | `Enemy: { Element, Race, Size, Boss }` | while the monster the rule is about (its selector's, or the current target) is one of those: `Element: [Holy, Ghost]`, `Race: Demon`, `Size: Large`, `Boss: true`. Names as rAthena writes them without `ELE_` / `RC_`. For a boss that changes element. |
-| `Cooldown:` | when it has not fired in that many ms. |
+| `Cooldown:` | when it has not fired in that many ms. "Every 30 s" is `Cooldown: 30000`. |
+| `InStrategy: { Below \| AtLeast }` | while the plan's active strategy has been active for that long (ms): `InStrategy: { AtLeast: 60000 }` is "this phase has dragged on for a minute". |
+| `InFight: { Below \| AtLeast }` | while the companion's current fight has lasted that long (ms): `InFight: { Below: 5000 }` is "the first 5 s". A fight begins when it has a target or a plan about a monster applies, after 5 s without either, and ends 5 s after the last. Out of a fight it counts as 0. Both are measured from timestamps, so a companion that took no turns in between (resting, frozen) still sees the time pass. |
 | `OnePerParty: true` | when no other companion of the party has just fired it at the same target. |
+| `Claim: name`, or `Claim: { Name, For }` | on a target no other companion of the party has claimed under that name. Acting puts the claim on the rule's target for `For` ms (default 5000), renewed each time it acts again. A selector passes claimed targets over and picks the next, so `Claim: frozen` on a Frost Diver rule spreads two Wizards over two monsters, and `Claim: { Name: lex, For: 10000 }` keeps a second Priest from a second Lex Aeterna on the boss. Unlike `OnePerParty`, it works across different rules: any rule with the same claim name respects it. When a rule finds no target because others hold the claims, the trace says so: `rule frost_spread: Poring is claimed (frozen) by Kira`. |
 
 And then does one thing:
 
@@ -262,6 +267,7 @@ And then does one thing:
 | `KeepDistance: { Min, Max }` | A band: closer than `Min`, step out; further than `Max`, come back in (to stay within a spell's range). Within it, the rule passes. Measured from the rule's selector pick when it has one: `Target: { Ally: attacked }` keeps a healer within reach of whoever is hit, `Target: { Enemy: boss }` keeps it out of the boss's. |
 | `KeepDistance: n` | Closer than `n` cells to the monster: walks to the nearest open cell at least `n` away. Already that far: the rule passes, and the next rule (a cast) runs. |
 | `Hold: true` | Stands still, without chasing or walking to the target. Without it, a turn no rule took is an ordinary turn, and an ordinary turn walks up to the target. |
+| `Sit: true` | Sits down while the rule applies, as a player does: faster regeneration, and the effects tied to sitting (Gangster's Paradise, Peaceful and Happy Break). Not while its owner is walking, nor while casting, dancing or under a status that forbids it. It stands up again as soon as no `Sit` rule applies, and before any other rule acts: a sitting character can neither move nor cast. For "sit until 80 %", put the `Sit` rule in a strategy and switch out of it at 80 %. The engine's own rest (below a companion's rest threshold) is separate, and takes the turn while it lasts. |
 | `Say:` text, `Channel: party` / `area` | Speaks. `{name}` `{owner}` `{target}` `{ally}` `{skill}` `{hp}` are filled in. A `Say` rule without an event waits 10 s between lines, and one with an event 2 s, unless it has a `Cooldown`. |
 | `SetTarget: true` | Makes the rule's monster (a selector's, or `source`) the companion's combat target, held for 3 s and renewed while the rule applies. Alone, it does not end the turn. |
 | `Switch:` strategy | Makes another strategy of the same plan active. |
@@ -271,7 +277,7 @@ A companion that cannot move (petrified, frozen, stunned: whatever rAthena's
 `unit_can_move` refuses) skips every movement rule; it does not walk away while
 turned to stone.
 
-`Cast`, `Retreat`, `KeepDistance`, `MoveTo`, `Leave` and `Hold` end the companion's turn; only one
+`Cast`, `Retreat`, `KeepDistance`, `MoveTo`, `Leave`, `Hold` and `Sit` end the companion's turn; only one
 of them is allowed per rule. `Say`, `Switch` and `Signal` do not end it and can
 come with any of them, after it has succeeded. When no rule acts, the companion takes its
 ordinary turn: heals, buffs and the skill rotation (minus anything `Ban` or
@@ -429,7 +435,7 @@ whose selector finds nobody does not apply.
 | `{ Enemy: target_of, Who, Job }` | the monster `Who` is fighting (`owner` by default): assisting. |
 | `{ Enemy: nearest \| lowest_hp \| boss \| slaves \| casting \| hidden }` | the nearest, the most hurt, a boss, a summoned slave, one that is casting, one that is hidden (Hiding, Cloaking, a Hode's burrow). `Boss: true` on any Enemy selector or `Count` keeps to bosses; `Race` and `Element` to that race or element (the element it has now). |
 | `{ Ally: dead }` | the nearest fallen party member. |
-| `{ Ally: lowest_hp \| nearest \| missing \| having \| attacked, Role, Job, Status, NotSelf }` | a party member (the companion included unless `NotSelf`): the most hurt below 100 %, the nearest, the nearest lacking `Status`, the nearest with it (Status Recovery on the petrified), or the one the monsters in sight are on (a boss counts three times); only those with that `Role` or `Job` (a [family](#jobs-and-families), or a list). |
+| `{ Ally: lowest_hp \| nearest \| missing \| having \| attacked, Role, Job, Status, NotSelf, Expiring }` | a party member (the companion included unless `NotSelf`): the most hurt below 100 %, the nearest, the nearest lacking `Status`, the nearest with it (Status Recovery on the petrified), or the one the monsters in sight are on (a boss counts three times); only those with that `Role` or `Job` (a [family](#jobs-and-families), or a list). `Expiring: ms` widens `missing` to members whose status has less than that left, so a buff is renewed before it lapses; a status without a timer never expires. |
 
 With an `Enemy` selector, `When`'s `enemy_*` tokens ask about the chosen monster,
 so `not_enemy_provoke` means "that one is not provoked yet". With an `Ally`
@@ -688,7 +694,13 @@ adds to what an earlier one said:
 | with `Reset: true` | starts that monster/job/build over |
 | with `Remove: true` | deletes that monster/job/build |
 
-Give rules a `Name` so another mod can replace or remove them.
+Give rules a `Name` so another mod can replace or remove them. Mind that a
+same-named rule from an unrelated mod replaces yours silently. **Prefix the
+names** of rules, strategies, signals and claims with your mod's
+(`golem_tactics.dodge_stun`, `Signal: golem_tactics.kyrie_me`) unless you mean
+to replace or answer another mod's. A later `Allow` replaces
+an earlier one in the same plan, while `Ban` lists add up. Both points are open
+in the [roadmap](../../COMPANION_STRATEGY_ROADMAP.md#combining-plans-across-mods-name-clashes-and-allow).
 
 ## Writing plans that hold up in a fight
 

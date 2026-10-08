@@ -41,6 +41,8 @@ bool population_strategy_handles_resurrection(map_session_data *sd);
 /// Whether a rule is positioning the companion right now (Hold, MoveTo, KeepDistance,
 /// Retreat, Leave): owner-follow's leash and the idle formation step leave it where it is.
 /// The warps (another map, out of sight) are not affected.
+/// A Sit rule has the companion seated: the follow code leaves it down while its owner stands still.
+bool population_strategy_keeps_seated(const map_session_data *sd);
 bool population_strategy_holds_position(const map_session_data *sd, t_tick tick);
 
 /// Whether the skill rotation may use `skill_id` against `target`: false when a rule

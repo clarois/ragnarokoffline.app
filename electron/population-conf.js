@@ -70,6 +70,17 @@ function skillWeaponCheck(s) {
 }
 
 /**
+ * Whether a recruited companion lives on its own bag, as a player does (1):
+ * nothing refills it, its skills cost their items and ammunition, and the bag
+ * is saved with it. Off (0, as before), companions have the free supply every
+ * other fake player has. Off unless the player turns it on: a companion then
+ * depends on its owner for potions, arrows and gemstones.
+ */
+function companionInventory(s) {
+	return s.population_companion_inventory === true ? 1 : 0;
+}
+
+/**
  * How ambient shells deal with the drops of their own kills. Off by default:
  * every drop stays on the ground until it expires, as before. On, a shell
  * decides once per drop whether it means to take it: a rare drop (any card,
@@ -125,6 +136,7 @@ function lines(settings) {
 		`population_engine_companion_hire_item: ${companionFee(settings).item}\n` +
 		`population_engine_companion_hire_item_amount: ${companionFee(settings).amount}\n` +
 		`population_engine_skill_weapon_check: ${skillWeaponCheck(settings)}\n` +
+		`population_engine_companion_inventory: ${companionInventory(settings)}\n` +
 		// Written even while the engine is off, so the choices stick.
 		`population_engine_loot_enable: ${loot.enable}\n` +
 		`population_engine_loot_rare_rate: ${Math.round(loot.rarePct * 100)}\n` +
@@ -142,4 +154,4 @@ function lines(settings) {
 	);
 }
 
-module.exports = { lines, companionLimit, areaShare, companionHire, companionFee, skillWeaponCheck, shellLoot, LOOT_DEFAULTS, HIRE_MODES, AREAS, COMPANION_LIMIT_MIN, COMPANION_LIMIT_MAX };
+module.exports = { lines, companionLimit, areaShare, companionHire, companionFee, skillWeaponCheck, companionInventory, shellLoot, LOOT_DEFAULTS, HIRE_MODES, AREAS, COMPANION_LIMIT_MIN, COMPANION_LIMIT_MAX };

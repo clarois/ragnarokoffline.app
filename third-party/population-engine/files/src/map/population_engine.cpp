@@ -10,6 +10,7 @@
 
 #include "population_engine/runtime/population_engine_combat.hpp"
 #include "population_engine/runtime/population_shell_ammo.hpp"
+#include "population_engine/runtime/population_shell_inventory.hpp" // RAGNAROKMAC
 #include "population_engine/runtime/population_shell_loot.hpp"
 #include "population_engine/runtime/population_shell_selling.hpp"
 #include "population_engine/runtime/population_shell_runtime.hpp"
@@ -2215,7 +2216,10 @@ static bool pop_companion_follow_owner(map_session_data *sd, map_session_data *o
 		return false;
 	// A resting companion stays down while its owner stands still; pop_companion_rest decides
 	// when it gets up, and anything below that moves it stands it first.
-	if (pc_issit(sd) && !(sd->pop.resting && !unit_is_walking(owner)))
+	// RAGNAROKMAC (companion strategies): so does one a Sit rule sat down. Standing it here sat
+	// it again on the same tick's strategy turn: it bobbed up and down, and the sitting skills
+	// (Gangster's Paradise, the Taekwon ones) toggled with it.
+	if (pc_issit(sd) && !((sd->pop.resting || population_strategy_keeps_seated(sd)) && !unit_is_walking(owner)))
 		pop_shell_stand(sd);
 	if (sd->pop.companion_formation_active &&
 		(unit_is_walking(owner) || sd->pop.target_id != 0)) {
@@ -2374,6 +2378,9 @@ static t_itemid pop_shell_sp_potion(const map_session_data *sd)
 static void pop_shell_stock_potions(map_session_data *sd)
 {
 	sd->pop.potions_stocked = true;
+	// A companion drinks what its owner gave it (population_shell_inventory).
+	if (population_shell_has_own_inventory(sd))
+		return;
 	const t_itemid hp = pop_shell_hp_potion(sd), sp = pop_shell_sp_potion(sd);
 	for (const t_itemid nameid : POP_POTIONS) {
 		if (nameid == hp || nameid == sp)
@@ -2401,9 +2408,9 @@ static void pop_shell_drink(map_session_data *sd, int hp_pct, int sp_pct, t_tick
 		return;
 	int16 idx = -1;
 	if (hp_pct < POP_POTION_HP_PCT)
-		idx = pc_search_inventory(sd, pop_shell_hp_potion(sd));
+		idx = population_shell_inventory_find_potion(sd, pop_shell_hp_potion(sd), true);
 	if (idx < 0 && sp_pct < POP_POTION_SP_PCT)
-		idx = pc_search_inventory(sd, pop_shell_sp_potion(sd));
+		idx = population_shell_inventory_find_potion(sd, pop_shell_sp_potion(sd), false);
 	if (idx < 0)
 		return;
 	// The player's own path: item delay, the heal script.
@@ -2831,6 +2838,22 @@ static int pop_item_price_pct(t_itemid id) {
 		return 100;
 	const int64 v = mapreg_readreg(reference_uid(key, id));
 	return v > 0 ? static_cast<int>(std::min<int64>(v, 1000)) : 100;
+}
+
+/// RAGNAROKMAC: how many of an item a mod's stalls may list between them, as
+/// a mod sets it in $@pop_item_supply[<item id>]: unset or 0 = no limit, 1 =
+/// none, n = n - 1 (0 reads as unset, hence the offset). Only plain lines
+/// count (no refine, forge or cards), so a mod can tie them to a supply it
+/// keeps (what its world's hunters found) and leave crafted goods alone.
+/// Returns -1 for no limit.
+static int64 pop_item_supply_cap(t_itemid id) {
+	static int32 key = 0;
+	if (key == 0)
+		key = add_str("$@pop_item_supply");
+	if (id == 0)
+		return -1;
+	const int64 v = mapreg_readreg(reference_uid(key, id));
+	return v > 0 ? v - 1 : -1;
 }
 
 /// The price level a mod vendor's mod set, in percent (100 = as listed).
@@ -5009,6 +5032,8 @@ TIMER_FUNC(population_engine_global_combat_timer)
 					}
 				}
 			}
+			// RAGNAROKMAC (companion inventory): arrows, potions and catalysts used up since.
+			population_shell_inventory_save(sd, false);
 			const uint64_t h = pop_companion_gear_hash(sd);
 			auto it = g_pop_companion_gear_hash.find(sd->id);
 			if (it == g_pop_companion_gear_hash.end()) {
@@ -5293,6 +5318,21 @@ void population_engine_on_shell_kills_player(map_session_data *killer_sd, map_se
 // through a hundred teardowns.
 static constexpr size_t POP_VENDOR_ROTATION_MAX_PER_TICK = 8;
 
+/// RAGNAROKMAC: a mod vendor with nothing left to do: a stall sold out, a
+/// buyer that bought all it wanted (or ran out of zeny), or a stall that never
+/// opened because its mod's supply left its pool empty (pop_item_supply_cap).
+static bool pop_mod_vendor_done(const map_session_data* sd) {
+	if (sd->pop.vendor_spawn_id.empty())
+		return false;
+	if (sd->pop.vendor_buying)
+		return !sd->state.buyingstore;
+	if (sd->state.vending)
+		return sd->vend_num <= 0;
+	// Only a stall its supply kept shut: one that failed to open for any other reason stands
+	// idle as before, rather than being re-rolled every rotation tick.
+	return battle_config.population_engine_vending_enable != 0 && sd->pop.vendor_supply_empty;
+}
+
 TIMER_FUNC(population_engine_vendor_rotation_timer)
 {
 	const t_tick now = gettick();
@@ -5307,15 +5347,12 @@ TIMER_FUNC(population_engine_vendor_rotation_timer)
 	// Checked first and outside the per-tick cap, so a busy rotation can't keep
 	// an empty stall standing. Base vendors keep upstream's behaviour.
 	for (map_session_data *sd : g_population_engine_pcs)
-		if (sd && !sd->pop.vendor_spawn_id.empty() &&
-		    ((sd->state.vending && sd->vend_num <= 0) ||
-		     (sd->pop.vendor_buying && !sd->state.buyingstore))) // bought all it wanted, or out of zeny
+		if (sd && pop_mod_vendor_done(sd))
 			due.push_back(sd);
 	const size_t cap = due.size() + POP_VENDOR_ROTATION_MAX_PER_TICK;
 	for (map_session_data *sd : g_population_engine_pcs) {
 		if (!sd) continue;
-		if (!sd->pop.vendor_spawn_id.empty() &&
-		    ((sd->state.vending && sd->vend_num <= 0) || (sd->pop.vendor_buying && !sd->state.buyingstore)))
+		if (pop_mod_vendor_done(sd))
 			continue; // already taken above
 		if (sd->pop.vendor_rotation_at == 0) continue; // not a rotating vendor
 		if (now < sd->pop.vendor_rotation_at) continue;
@@ -6686,6 +6723,7 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 			struct TmpStock { t_itemid nameid; int16 amount; uint32_t price_override; const PopulationVendorStock* src = nullptr; };
 			std::vector<TmpStock> stock;
 			const int max_slots = vendor_cfg ? vendor_cfg->max_slots : 12;
+			bool supply_short = false; // RAGNAROKMAC: a mod's supply kept a Pool line out
 
 			if (vendor_cfg && vendor_cfg->type == PopulationVendorType::Static && !vendor_cfg->stock.empty()) {
 				// Static vending: use exactly the YAML-defined stock.
@@ -6800,14 +6838,51 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 					if (p > MAX_ZENY) p = MAX_ZENY;
 					return static_cast<uint32_t>(p);
 				};
-				for (int i = 0; i < want; ++i) {
+				// RAGNAROKMAC: a mod's supply limit (pop_item_supply_cap). What
+				// every shell stall already lists counts against it, so the stalls
+				// share one supply; a line with none left is passed over and the
+				// next one in the shuffle taken. Without a limit this takes the
+				// first `want` lines, as it always has.
+				std::unordered_map<t_itemid, int64> listed;
+				bool listed_built = false;
+				for (int i = 0; i < pool_n && static_cast<int>(stock.size()) < want; ++i) {
 					const auto &vs = vendor_cfg->pool[idx[i]];
-					stock.push_back({ vs.nameid, vs.amount, roll_price(vs), &vs });
+					int16 amount = vs.amount;
+					const bool plain = vs.refine_max == 0 && vs.element == 0 && vs.stars == 0 && vs.cards.empty();
+					const int64 cap = mod_entry != nullptr && plain ? pop_item_supply_cap(vs.nameid) : -1;
+					if (cap >= 0) {
+						if (!listed_built) {
+							for (map_session_data* osd : g_population_engine_pcs) {
+								if (!osd || osd == sd || !osd->state.vending) continue;
+								for (int vi = 0; vi < osd->vend_num; ++vi) {
+									const int16 ci = osd->vending[vi].index;
+									if (ci < 0 || ci >= MAX_CART) continue;
+									const struct item& ct = osd->cart.u.items_cart[ci];
+									if (ct.nameid != 0 && ct.refine == 0 && ct.card[0] == 0)
+										listed[ct.nameid] += osd->vending[vi].amount;
+								}
+							}
+							listed_built = true;
+						}
+						int64& used = listed[vs.nameid];
+						if (used >= cap) {
+							supply_short = true;
+							continue;
+						}
+						if (amount > cap - used)
+							amount = static_cast<int16>(cap - used);
+						std::shared_ptr<item_data> sid = item_db.find(vs.nameid);
+						used += sid && sid->equip != 0 ? 1 : amount; // equipment lists one a slot
+					}
+					stock.push_back({ vs.nameid, amount, roll_price(vs), &vs });
 				}
 
 				// Fallthrough to built-in defaults is undesirable for Pool: an
 				// empty pool is a config error, not a reason to serve potions.
-				if (stock.empty())
+				// RAGNAROKMAC: and a pool its mod's supply has emptied opens no
+				// stall at all; the rotation pass releases the shell and the mod
+				// pass rolls the spot again.
+				if (stock.empty() && !supply_short)
 					vendor_cfg = nullptr;
 
 			} else if (vendor_cfg && vendor_cfg->type == PopulationVendorType::Dynamic) {
@@ -6970,7 +7045,7 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 
 			}
 
-			if (!vendor_cfg || stock.empty()) {
+			if ((!vendor_cfg || stock.empty()) && !supply_short) {
 				// Built-in default consumable stock.
 				static const TmpStock kDefaultStock[] = {
 					{ 501, 100, 0 },  // Red Potion
@@ -6988,6 +7063,9 @@ static map_session_data* population_engine_spawn_shell(int16_t map_id, int x, in
 				for (const auto &s : kDefaultStock)
 					stock.push_back(s);
 			}
+
+			// RAGNAROKMAC: shut by its mod's supply, not by a failure (pop_mod_vendor_done).
+			sd->pop.vendor_supply_empty = supply_short && stock.empty();
 
 			// Grant MC_VENDING and cart.
 			pc_skill(sd, MC_VENDING, 10, ADDSKILL_PERMANENT_GRANTED);
@@ -7341,8 +7419,8 @@ static bool pop_companion_hand_back(map_session_data *owner, map_session_data *s
 
 // Goal 2 (trade): after traded equipment lands in the companion's inventory,
 // equip every equip-flagged item immediately (the owner gave it to be worn).
-// Items without equip flags (consumables etc) are returned to the owner —
-// companions are gear carriers, not mules.
+// Items without equip flags (consumables etc) stay in a companion's bag, which is
+// saved with it (population_shell_inventory).
 void population_engine_companion_trade_snapshot(map_session_data *shell)
 {
 	if (!shell || !population_engine_is_population_pc(shell->id)) return;
@@ -7378,9 +7456,12 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 		if (!traded(i)) continue;
 		struct item_data *id = itemdb_search(slot.nameid);
 		if (!id) continue;
-		if (id->equip) {
-			// Player gear this piece pushes off goes back to the player: the companion's
-			// inventory is not persisted, so an item left there is gone at the next restart.
+		// A companion's ammunition stays in the bag: the ammo code picks the stack per target,
+		// and equipping each traded stack handed the one before it back to the owner.
+		if (id->equip && !((id->equip & EQP_AMMO) && population_shell_has_own_inventory(shell))) {
+			// Player gear this piece pushes off goes back to the player: without Companion
+			// inventory the companion's bag is not saved, so an item left there would be gone at
+			// the next restart; with it, the bag is saved, but the gear is still the player's.
 			std::vector<int16> given_before;
 			for (int16 j = 0; j < MAX_INVENTORY; ++j) {
 				const struct item &w = shell->inventory.u.items_inventory[j];
@@ -7401,7 +7482,9 @@ void population_engine_companion_equip_traded(map_session_data *owner, map_sessi
 					(void)pop_companion_hand_back(owner, shell, j, LOG_TYPE_TRADE);
 			}
 			shell->pop.companion_given_mask = pop_companion_given_worn(shell);
-		} else {
+		} else if (!population_shell_has_own_inventory(shell)) {
+			// A companion keeps it: potions, catalysts and the like are what it lives on
+			// (population_shell_inventory). Anyone else hands it back.
 			// Non-equipment goes back: into the owner's bag, or at their feet when it is full.
 			// Only what the trade added: a potion of the kind the companion carries stacks
 			// onto its own, and handing back the whole stack gave the player those too.
@@ -7768,6 +7851,8 @@ void population_engine_persist_companion_gear(map_session_data *sd)
 		return;
 	}
 	ShowInfo("population_engine: gear re-snapshotted for companion %u (owner %u)\n", index_, owner);
+	// And the rest of the bag, which the trade, recall and logout paths that call this change too.
+	population_shell_inventory_save(sd, true);
 }
 
 void population_engine_persist_recruited_companion(map_session_data *sd, map_session_data *peer)
@@ -8658,6 +8743,8 @@ static void population_engine_recall_one_companion(map_session_data *owner, int1
 	pop_companion_reequip_own(shell, (EQP_HAND_R | EQP_HAND_L | EQP_ARMOR | EQP_SHOES | EQP_GARMENT
 		| EQP_HEAD_TOP | EQP_HEAD_MID | EQP_HEAD_LOW | EQP_ACC_L | EQP_ACC_R)
 		& ~pop_companion_worn_positions(shell));
+	// RAGNAROKMAC (companion inventory): its own bag, not what the spawn stocked.
+	population_shell_inventory_restore(shell);
 	status_calc_pc(shell, SCO_NONE);
 
 	// Mark as the owner's companion and align membership with the owner.
