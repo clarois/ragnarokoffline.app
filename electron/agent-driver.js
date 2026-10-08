@@ -805,6 +805,11 @@ class AgentDriver {
 			key: async ([key]) => { await this.press(key); await sleep(300); return { ok: true, errors: this.newErrors() }; },
 			wait: async ([ms = '1000']) => { await sleep(Math.min(Number(ms) || 0, 60000)); return { ok: true }; },
 			errors: async () => ({ errors: this.errors.slice(-200) }),
+			// Run arbitrary JS in the game page (DOM reads, window.roAgent, etc).
+			js: async ([expr]) => {
+				const result = await this.eval(expr);
+				return { ok: true, result };
+			},
 		};
 		return c;
 	}
@@ -848,6 +853,7 @@ const COMMANDS = {
 	key: { description: 'Press a key: Enter, Escape, F1, Alt+E ...', args: [['key', 'string', 'Key name']] },
 	wait: { description: 'Wait up to 60 seconds.', args: [['ms', 'number', 'Milliseconds']] },
 	errors: { description: 'Client errors and warnings seen so far.', args: [] },
+	js: { description: 'Run JS in the game page and return its value.', args: [['expr', 'string', 'JS statement/expression to evaluate']] },
 };
 
 module.exports = { AgentDriver, COMMANDS, parseKey };
