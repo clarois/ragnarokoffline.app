@@ -796,6 +796,16 @@ class AgentDriver {
 			},
 			shot: async ([name]) => this.shot(name),
 			click: async ([x, y, button]) => { await this.click(Number(x), Number(y), button === 'right' ? 'right' : 'left'); await sleep(300); return { ok: true, errors: this.newErrors() }; },
+		// Click an element found by CSS selector (walks shadow DOM) — opens player
+		// shop signs, menu items, etc. `--double` double-clicks (shop signs need it).
+		clicksel: async ([selector, flag]) => {
+			const double = flag === '--double';
+			const at = await this.eval(`const el = __deep(arg).find(__visible); return el ? __rect(el) : null;`, selector);
+			if (!at) return { ok: false, reason: 'no visible element for ' + selector };
+			if (double) await this.dblclick(at.x, at.y); else await this.click(at.x, at.y);
+			await sleep(double ? 800 : 400);
+			return { ok: true, at, double, errors: this.newErrors() };
+		},
 			hover: async ([x, y, flag]) => {
 				const point = flag === '--px' ? { x: Number(x), y: Number(y) } : await this.agent('project', [Number(x), Number(y)]);
 				await this.move(point.x, point.y);
@@ -806,8 +816,12 @@ class AgentDriver {
 			wait: async ([ms = '1000']) => { await sleep(Math.min(Number(ms) || 0, 60000)); return { ok: true }; },
 			errors: async () => ({ errors: this.errors.slice(-200) }),
 			// Run arbitrary JS in the game page (DOM reads, window.roAgent, etc).
-			js: async ([expr]) => {
-				const result = await this.eval(expr);
+			// Second arg (JSON) is bound to `arg` inside the body, like other evals.
+			js: async (args) => {
+				const [expr, argJson] = args || [];
+				let arg;
+				try { arg = argJson ? JSON.parse(argJson) : undefined; } catch (e) { arg = argJson; }
+				const result = await this.eval(expr, arg);
 				return { ok: true, result };
 			},
 		};
@@ -850,10 +864,11 @@ const COMMANDS = {
 	shot: { description: 'Screenshot of the agent\'s game window.', args: [['name', 'string', 'Label for the file', true]] },
 	hover: { description: 'Put the cursor on a cell (or pixels with --px) and report what the client sees there.', args: [['x', 'number', 'Cell x'], ['y', 'number', 'Cell y'], ['flag', 'string', '--px for page pixels', true]] },
 	click: { description: 'A raw mouse click at page pixels.', args: [['x', 'number', 'Pixel x'], ['y', 'number', 'Pixel y'], ['button', 'string', 'left or right', true]] },
+	clicksel: { description: 'Click an element by CSS selector (shadow-DOM aware); --double to double-click (opens shop signs).', args: [['selector', 'string', 'CSS selector'], ['flag', 'string', '--double for double-click', true]] },
 	key: { description: 'Press a key: Enter, Escape, F1, Alt+E ...', args: [['key', 'string', 'Key name']] },
 	wait: { description: 'Wait up to 60 seconds.', args: [['ms', 'number', 'Milliseconds']] },
 	errors: { description: 'Client errors and warnings seen so far.', args: [] },
-	js: { description: 'Run JS in the game page and return its value.', args: [['expr', 'string', 'JS statement/expression to evaluate']] },
+	js: { description: 'Run JS in the game page and return its value.', args: [['expr', 'string', 'JS statements (use return to output)'], ['arg', 'string', 'Optional JSON bound to `arg` in the body', true]] },
 };
 
 module.exports = { AgentDriver, COMMANDS, parseKey };
